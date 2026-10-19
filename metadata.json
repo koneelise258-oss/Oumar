@@ -1,0 +1,6 @@
+{
+  "name": "OUMAR IPHONE | Boutique Apple Abidjan",
+  "description": "Boutique de référence d'iPhone neufs et reconditionnés certifiés à Abidjan. Expérience Liquid Glass exclusive, garantie officielle et livraison en Côte d'Ivoire.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

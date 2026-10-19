@@ -1,0 +1,355 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --hero-white: #FFFFFF;
+  --hero-platinum: #F4F5F7;
+  --hero-silver: #DCE0E6;
+  --hero-ink: #17181A;
+  --hero-glass-edge: rgba(255, 255, 255, 0.9);
+}
+
+html.dark {
+  --hero-white: #0B0F17;
+  --hero-platinum: #111827;
+  --hero-silver: #1E293B;
+  --hero-ink: #F8FAFC;
+  --hero-glass-edge: rgba(255, 255, 255, 0.15);
+}
+
+@layer base {
+  html {
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--hero-ink);
+    background-color: var(--hero-white);
+    overflow-x: hidden;
+  }
+}
+
+html.dark body {
+  color: #f8fafc;
+  background-color: #0b0f17;
+}
+
+/* Apple Liquid Glass Optical Materials System — Light Mode */
+.liquid-glass-surface {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.84) 0%,
+    rgba(248, 250, 252, 0.6) 50%,
+    rgba(255, 255, 255, 0.76) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 24px 48px -12px rgba(15, 23, 42, 0.07),
+    0 8px 16px -6px rgba(15, 23, 42, 0.04),
+    inset 0 1px 1px rgba(255, 255, 255, 1),
+    inset 0 -1px 1px rgba(203, 213, 225, 0.25);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+}
+
+.liquid-glass-card {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.86) 0%,
+    rgba(248, 250, 252, 0.62) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 16px 36px -10px rgba(15, 23, 42, 0.06),
+    0 2px 8px rgba(15, 23, 42, 0.02),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(203, 213, 225, 0.2);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+}
+
+.liquid-glass-pill {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(241, 245, 249, 0.7) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 8px 20px -6px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0.5px rgba(255, 255, 255, 1),
+    inset 0 -1px 0.5px rgba(203, 213, 225, 0.3);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  backdrop-filter: blur(14px) saturate(130%);
+}
+
+/* Apple Liquid Glass Optical Materials System — Dark Mode (Smoked Obsidian Titanium) */
+html.dark .liquid-glass-surface {
+  background: linear-gradient(
+    135deg,
+    rgba(30, 41, 59, 0.75) 0%,
+    rgba(15, 23, 42, 0.65) 50%,
+    rgba(30, 41, 59, 0.7) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 24px 48px -12px rgba(0, 0, 0, 0.5),
+    0 8px 16px -6px rgba(0, 0, 0, 0.3),
+    inset 0 1px 1px rgba(255, 255, 255, 0.24),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+}
+
+html.dark .liquid-glass-card {
+  background: linear-gradient(
+    135deg,
+    rgba(30, 41, 59, 0.65) 0%,
+    rgba(15, 23, 42, 0.58) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 16px 36px -10px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+}
+
+html.dark .liquid-glass-pill {
+  background: linear-gradient(
+    135deg,
+    rgba(30, 41, 59, 0.82) 0%,
+    rgba(15, 23, 42, 0.72) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 8px 20px -6px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0.5px rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0.5px rgba(0, 0, 0, 0.4);
+}
+
+/* Glass Edge Refraction & Specular Highlights */
+.liquid-specular-edge {
+  position: relative;
+}
+.liquid-specular-edge::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.25) 40%,
+    rgba(255, 255, 255, 0.08) 60%,
+    rgba(255, 255, 255, 0.65) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+html.dark .liquid-specular-edge::before {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.4) 0%,
+    rgba(255, 255, 255, 0.1) 40%,
+    rgba(255, 255, 255, 0.02) 60%,
+    rgba(255, 255, 255, 0.2) 100%
+  );
+}
+
+/* Hero section container */
+.hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: #f5f5f2;
+}
+
+html.dark .hero {
+  background: #0b0f17;
+}
+
+/* Full Hero Photo-Driven Ambient Background System */
+.hero__photo-background {
+  position: absolute;
+  inset: -8%;
+  z-index: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(44px);
+  opacity: 0.24;
+  transform: scale(1.08);
+  pointer-events: none;
+  transition: opacity 0.6s ease, filter 0.6s ease;
+  will-change: transform, opacity;
+}
+
+html.dark .hero__photo-background {
+  opacity: 0.20;
+  filter: blur(48px) brightness(0.9);
+}
+
+.hero__background-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(248, 248, 246, 0.96) 0%,
+    rgba(248, 248, 246, 0.78) 38%,
+    rgba(248, 248, 246, 0.38) 70%,
+    rgba(248, 248, 246, 0.18) 100%
+  );
+  transition: background 0.5s ease;
+}
+
+html.dark .hero__background-overlay {
+  background: linear-gradient(
+    90deg,
+    rgba(11, 15, 23, 0.96) 0%,
+    rgba(11, 15, 23, 0.82) 38%,
+    rgba(11, 15, 23, 0.45) 70%,
+    rgba(11, 15, 23, 0.20) 100%
+  );
+}
+
+@media (max-width: 1023px) {
+  .hero__background-overlay {
+    background: linear-gradient(
+      180deg,
+      rgba(248, 248, 246, 0.96) 0%,
+      rgba(248, 248, 246, 0.82) 42%,
+      rgba(248, 248, 246, 0.45) 70%,
+      rgba(248, 248, 246, 0.18) 100%
+    );
+  }
+  html.dark .hero__background-overlay {
+    background: linear-gradient(
+      180deg,
+      rgba(11, 15, 23, 0.96) 0%,
+      rgba(11, 15, 23, 0.84) 42%,
+      rgba(11, 15, 23, 0.48) 70%,
+      rgba(11, 15, 23, 0.22) 100%
+    );
+  }
+}
+
+.hero__bottom-overlay {
+  position: absolute;
+  inset-x: 0;
+  bottom: 0;
+  height: 120px;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(248, 248, 246, 0.75) 60%,
+    #fafbfc 100%
+  );
+}
+
+html.dark .hero__bottom-overlay {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(11, 15, 23, 0.75) 60%,
+    #0b0f17 100%
+  );
+}
+
+/* Editorial Portrait Integration */
+.hero__visual {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.hero__photo {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 580px;
+  height: auto;
+  object-fit: contain;
+  object-position: center bottom;
+  -webkit-mask-image: radial-gradient(
+    ellipse 90% 92% at 50% 50%,
+    black 65%,
+    rgba(0, 0, 0, 0.9) 80%,
+    rgba(0, 0, 0, 0.35) 92%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 90% 92% at 50% 50%,
+    black 65%,
+    rgba(0, 0, 0, 0.9) 80%,
+    rgba(0, 0, 0, 0.35) 92%,
+    transparent 100%
+  );
+  filter: drop-shadow(0 16px 32px rgba(15, 23, 42, 0.06));
+}
+
+html.dark .hero__photo {
+  filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.4));
+}
+
+/* Fallback for browsers without backdrop-filter */
+@supports not (backdrop-filter: blur(1px)) {
+  .liquid-glass-surface,
+  .liquid-glass-card,
+  .liquid-glass-pill {
+    background-color: rgba(255, 255, 255, 0.95);
+  }
+  html.dark .liquid-glass-surface,
+  html.dark .liquid-glass-card,
+  html.dark .liquid-glass-pill {
+    background-color: rgba(15, 23, 42, 0.95);
+  }
+}
+
+/* Ambient liquid glow mesh */
+.ambient-platinum-mesh {
+  background:
+    radial-gradient(ellipse 70% 60% at 80% 35%, rgba(226, 232, 240, 0.65) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 50% at 15% 25%, rgba(241, 245, 249, 0.85) 0%, transparent 60%),
+    radial-gradient(circle 380px at 65% 60%, rgba(203, 213, 225, 0.4) 0%, transparent 75%),
+    var(--hero-white);
+}
+
+html.dark .ambient-platinum-mesh {
+  background:
+    radial-gradient(ellipse 70% 60% at 80% 35%, rgba(30, 41, 59, 0.6) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 50% at 15% 25%, rgba(15, 23, 42, 0.85) 0%, transparent 60%),
+    radial-gradient(circle 380px at 65% 60%, rgba(51, 65, 85, 0.35) 0%, transparent 75%),
+    #0b0f17;
+}
+
+/* Accessibility: Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
