@@ -271,44 +271,58 @@ html.dark .hero__bottom-overlay {
   );
 }
 
-/* Editorial Portrait Integration */
-.hero__visual {
-  position: relative;
-  isolation: isolate;
-  background: transparent;
+/* Layout: Two-column grid with perfect vertical alignment */
+.hero__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(24px, 4vw, 56px);
   width: 100%;
+  max-width: 80rem;
+  margin-left: auto;
+  margin-right: auto;
+  position: relative;
+  z-index: 10;
+}
+
+@media (max-width: 720px) {
+  .hero__inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Right Column: Visual Stage with fully uncropped image */
+.hero__visual {
   display: flex;
   justify-content: center;
   align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+  position: relative;
 }
 
+/* Sharp main photo: preserved original ratio, contain, no mask clipping */
 .hero__photo {
   display: block;
-  width: auto;
-  max-width: 100%;
-  max-height: 580px;
+  width: 100%;
   height: auto;
+  max-width: 100%;
+  max-height: 70vh;
   object-fit: contain;
-  object-position: center bottom;
-  -webkit-mask-image: radial-gradient(
-    ellipse 90% 92% at 50% 50%,
-    black 65%,
-    rgba(0, 0, 0, 0.9) 80%,
-    rgba(0, 0, 0, 0.35) 92%,
-    transparent 100%
-  );
-  mask-image: radial-gradient(
-    ellipse 90% 92% at 50% 50%,
-    black 65%,
-    rgba(0, 0, 0, 0.9) 80%,
-    rgba(0, 0, 0, 0.35) 92%,
-    transparent 100%
-  );
-  filter: drop-shadow(0 16px 32px rgba(15, 23, 42, 0.06));
+  object-position: center center;
+  filter: drop-shadow(0 16px 36px rgba(15, 23, 42, 0.08));
 }
 
 html.dark .hero__photo {
-  filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.4));
+  filter: drop-shadow(0 16px 36px rgba(0, 0, 0, 0.45));
+}
+
+@media (max-width: 720px) {
+  .hero__photo {
+    max-height: 60vh;
+  }
 }
 
 /* Fallback for browsers without backdrop-filter */

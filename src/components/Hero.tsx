@@ -136,14 +136,14 @@ export const Hero: React.FC<HeroProps> = () => {
       // Phase C: Coordinated Portrait Stage Revelation from Right
       tl.fromTo(
         '.hero-portrait-stage',
-        { x: 45, y: 15, opacity: 0, scale: 0.96 },
-        { x: 0, y: 0, opacity: 1, scale: 1, duration: 1.05, ease: 'power3.out' },
-        '-=0.75'
+        { x: 30, opacity: 0, scale: 0.98 },
+        { x: 0, opacity: 1, scale: 1, duration: 0.95, ease: 'power3.out' },
+        '-=0.7'
       )
       .fromTo(
         '.hero-portrait-img',
-        { scale: 1.06 },
-        { scale: 1, duration: 1.15, ease: 'power3.out' },
+        { scale: 1.04 },
+        { scale: 1, duration: 1.05, ease: 'power3.out' },
         '<'
       );
 
@@ -163,7 +163,7 @@ export const Hero: React.FC<HeroProps> = () => {
 
       // Scroll-Driven Motion via ScrollTrigger (scrubbed, non-blocking parallax)
       gsap.to('.hero-portrait-stage', {
-        y: -44,
+        y: -24,
         ease: 'none',
         scrollTrigger: {
           trigger: heroRef.current,
@@ -174,7 +174,7 @@ export const Hero: React.FC<HeroProps> = () => {
       });
 
       gsap.to('.hero__photo-background', {
-        y: 30,
+        y: 25,
         ease: 'none',
         scrollTrigger: {
           trigger: heroRef.current,
@@ -272,192 +272,186 @@ export const Hero: React.FC<HeroProps> = () => {
          ======================================================== */}
       <div className="hero__bottom-overlay" aria-hidden="true" />
 
-      <div className="hero__inner relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-14 items-center w-full">
+      {/* ========================================================
+          4. CONTENU PRINCIPAL : Grille 2 colonnes alignée verticalement
+         ======================================================== */}
+      <div className="hero__inner px-4 sm:px-6 lg:px-8">
+        
+        {/* ========================================================
+            COLONNE GAUCHE : Typographie & Actions
+           ======================================================== */}
+        <div className="hero__content hero-copy-column w-full flex flex-col justify-center text-left min-w-0">
           
-          {/* ========================================================
-              ZONE GAUCHE : Typographie & Actions
-             ======================================================== */}
-          <div className="hero__content hero-copy-column w-full flex flex-col justify-center text-left min-w-0">
-            
-            {/* Identity Kicker */}
-            <div className="hero-kicker flex items-center gap-2 text-xs font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-5">
-              <span className="font-['Outfit'] tracking-[0.2em] text-slate-900 dark:text-white font-bold">OUMAR IPHONE</span>
-              <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">/</span>
-              <span>BOUTIQUE OFFICIELLE · ABIDJAN</span>
-            </div>
-
-            {/* Phase B: Main Headline with Clean Masked Line Reveals (No accent clipping) */}
-            <h1 className="text-4xl sm:text-5xl lg:text-[3.75rem] font-bold tracking-tight text-slate-950 dark:text-white font-['Outfit'] leading-[1.08] mb-6 [text-wrap:balance]">
-              <div className="overflow-hidden pb-1 pt-0.5">
-                <span className="hero-masked-line block">
-                  L'art du titane.
-                </span>
-              </div>
-              <div className="overflow-hidden pb-2.5 pt-0.5">
-                <span className="hero-masked-line block text-slate-500 dark:text-slate-400 font-light">
-                  La pureté du verre.
-                </span>
-              </div>
-            </h1>
-
-            {/* Phase B bis: Concise Supporting Description */}
-            <p className="hero-desc text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl mb-9">
-              La référence des iPhone neufs scellés et reconditionnés certifiés en Côte d'Ivoire. Sous la direction d'Oumar, profitez d'une sélection rigoureusement inspectée, garantie 12 mois et livrée en 2 heures à Abidjan.
-            </p>
-
-            {/* Phase E: Action Buttons avec Interactions Élastiques */}
-            <div className="hero-actions flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mb-11">
-              {/* Primary CTA: EXPLORER LE CATALOGUE */}
-              <LiquidGlassSurface
-                as="a"
-                href="#catalogue"
-                elastic={true}
-                maxStretch={8}
-                chromaticDispersion={true}
-                dispersionIntensity={0.5}
-                blurIntensity={14}
-                tint="rgba(15, 23, 42, 0.94)"
-                darkTint="rgba(248, 250, 252, 0.95)"
-                borderRadius="14px"
-                className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-semibold text-white dark:text-slate-950 shadow-md transition-all whitespace-nowrap shrink-0 group focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
-                style={{
-                  background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-                  boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.4)'
-                }}
-              >
-                <span>EXPLORER LE CATALOGUE</span>
-                <ArrowDown className="w-4 h-4 text-slate-300 dark:text-slate-700 group-hover:translate-y-0.5 transition-transform" />
-              </LiquidGlassSurface>
-
-              {/* Secondary CTA: CONTACTER SUR WHATSAPP */}
-              <LiquidGlassSurface
-                as="a"
-                href={WHATSAPP_URL("Bonjour Oumar, je vous contacte depuis votre site officiel pour échanger sur vos disponibilités d'iPhone.")}
-                target="_blank"
-                rel="noopener noreferrer"
-                elastic={true}
-                maxStretch={12}
-                refractionIntensity={14}
-                chromaticDispersion={true}
-                dispersionIntensity={0.8}
-                blurIntensity={18}
-                borderRadius="14px"
-                className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:text-emerald-950 dark:hover:text-emerald-400 transition-all whitespace-nowrap shrink-0 group focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
-              >
-                <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
-                <span>CONTACTER SUR WHATSAPP</span>
-              </LiquidGlassSurface>
-            </div>
-
-            {/* Phase E bis: Unboxed Proof Indicators with Glass Icon Lenses */}
-            <div className="pt-6 border-t border-slate-200/80 dark:border-slate-800/80 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs font-medium text-slate-600 dark:text-slate-400">
-              <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
-                <LiquidGlassIcon size="sm">
-                  <ShieldCheck className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
-                </LiquidGlassIcon>
-                <span>Garantie 12 Mois Oumar</span>
-              </div>
-              <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
-              <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
-                <LiquidGlassIcon size="sm">
-                  <Zap className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
-                </LiquidGlassIcon>
-                <span>Livraison 2h à Abidjan</span>
-              </div>
-              <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
-              <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
-                <LiquidGlassIcon size="sm">
-                  <Sparkles className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
-                </LiquidGlassIcon>
-                <span>Paiement à la Réception</span>
-              </div>
-            </div>
-
+          {/* Identity Kicker */}
+          <div className="hero-kicker flex items-center gap-2 text-xs font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-5">
+            <span className="font-['Outfit'] tracking-[0.2em] text-slate-900 dark:text-white font-bold">OUMAR IPHONE</span>
+            <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">/</span>
+            <span>BOUTIQUE OFFICIELLE · ABIDJAN</span>
           </div>
 
-          {/* ========================================================
-              ZONE DROITE : Photographie d'Oumar intégrée naturellement
-             ======================================================== */}
-          <div className="hero__visual w-full flex items-center justify-center min-w-0">
-            
-            {/* Phase C: Photographic Stage with Optical Depth */}
-            <div className="hero-portrait-stage relative w-full max-w-[500px] flex flex-col items-center justify-center">
-              
-              {/* Seamless Photo Container - Fused with the blurred background */}
-              <div className="relative w-full aspect-[4/5] max-h-[580px] flex items-end justify-center">
-                {!imageError ? (
-                  <div className="relative w-full h-full flex items-end justify-center">
-                    <img
-                      src={oumarPhotoSrc}
-                      alt="Oumar — Fondateur OUMAR IPHONE Abidjan"
-                      onError={() => setImageError(true)}
-                      className="hero__photo hero-portrait-img select-none transition-transform duration-700 ease-out"
-                      loading="eager"
-                      fetchPriority="high"
-                    />
-
-                    {/* Quick Trigger to replace/update photo */}
-                    <button
-                      onClick={handleTriggerUpload}
-                      title="Remplacer ou tester une autre photo d'Oumar"
-                      className="absolute top-2 right-2 z-30 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 backdrop-blur-md text-xs font-medium text-slate-700 dark:text-slate-200 hover:text-slate-950 dark:hover:text-white shadow-xs border border-white/80 dark:border-slate-700 transition-all opacity-75 hover:opacity-100 focus:opacity-100 cursor-pointer"
-                      aria-label="Charger ou modifier la photo d'Oumar"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Changer de photo</span>
-                    </button>
-                  </div>
-                ) : (
-                  /* Elegant, unboxed placeholder blending into the background */
-                  <div className="w-full aspect-[4/5] max-h-[540px] rounded-3xl p-8 flex flex-col items-center justify-center text-center relative border border-dashed border-slate-300/80 dark:border-slate-700/80 bg-white/20 dark:bg-slate-900/20 backdrop-blur-xs">
-                    <div className="w-20 h-20 rounded-full bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-center mb-5 text-slate-700 dark:text-slate-200">
-                      <User className="w-10 h-10 text-slate-400 dark:text-slate-500" />
-                    </div>
-
-                    <div className="relative z-10 max-w-xs flex flex-col items-center">
-                      <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 tracking-wider uppercase mb-1">
-                        Intégration Photographiée
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-900 dark:text-white font-['Outfit'] mb-2">
-                        Photo d'Oumar
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-                        Importez la photo d'Oumar pour qu'elle définisse automatiquement l'ambiance et l'arrière-plan du Hero entier.
-                      </p>
-
-                      <div className="flex flex-col sm:flex-row gap-2.5 items-center justify-center">
-                        <LiquidGlassSurface
-                          as="button"
-                          onClick={handleTriggerUpload}
-                          elastic={true}
-                          maxStretch={8}
-                          chromaticDispersion={true}
-                          dispersionIntensity={0.6}
-                          borderRadius="12px"
-                          className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-slate-900 dark:text-white transition-all shadow-xs border border-slate-300/80 dark:border-slate-700 cursor-pointer"
-                        >
-                          <Upload className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
-                          <span>Choisir une photo</span>
-                        </LiquidGlassSurface>
-
-                        <button
-                          type="button"
-                          onClick={handleUseSamplePhoto}
-                          className="text-[11px] font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 underline underline-offset-4 transition-colors py-1 px-2 cursor-pointer"
-                        >
-                          Tester avec une photo d'exemple
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+          {/* Phase B: Main Headline with Clean Masked Line Reveals (No accent clipping) */}
+          <h1 className="text-4xl sm:text-5xl lg:text-[3.75rem] font-bold tracking-tight text-slate-950 dark:text-white font-['Outfit'] leading-[1.08] mb-6 [text-wrap:balance]">
+            <div className="overflow-hidden pb-1 pt-0.5">
+              <span className="hero-masked-line block">
+                L'art du titane.
+              </span>
             </div>
+            <div className="overflow-hidden pb-2.5 pt-0.5">
+              <span className="hero-masked-line block text-slate-500 dark:text-slate-400 font-light">
+                La pureté du verre.
+              </span>
+            </div>
+          </h1>
 
+          {/* Phase B bis: Concise Supporting Description */}
+          <p className="hero-desc text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl mb-9">
+            La référence des iPhone neufs scellés et reconditionnés certifiés en Côte d'Ivoire. Sous la direction d'Oumar, profitez d'une sélection rigoureusement inspectée, garantie 12 mois et livrée en 2 heures à Abidjan.
+          </p>
+
+          {/* Phase E: Action Buttons avec Interactions Élastiques */}
+          <div className="hero-actions flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mb-11">
+            {/* Primary CTA: EXPLORER LE CATALOGUE */}
+            <LiquidGlassSurface
+              as="a"
+              href="#catalogue"
+              elastic={true}
+              maxStretch={8}
+              chromaticDispersion={true}
+              dispersionIntensity={0.5}
+              blurIntensity={14}
+              tint="rgba(15, 23, 42, 0.94)"
+              darkTint="rgba(248, 250, 252, 0.95)"
+              borderRadius="14px"
+              className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-semibold text-white dark:text-slate-950 shadow-md transition-all whitespace-nowrap shrink-0 group focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
+              style={{
+                background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.4)'
+              }}
+            >
+              <span>EXPLORER LE CATALOGUE</span>
+              <ArrowDown className="w-4 h-4 text-slate-300 dark:text-slate-700 group-hover:translate-y-0.5 transition-transform" />
+            </LiquidGlassSurface>
+
+            {/* Secondary CTA: CONTACTER SUR WHATSAPP */}
+            <LiquidGlassSurface
+              as="a"
+              href={WHATSAPP_URL("Bonjour Oumar, je vous contacte depuis votre site officiel pour échanger sur vos disponibilités d'iPhone.")}
+              target="_blank"
+              rel="noopener noreferrer"
+              elastic={true}
+              maxStretch={12}
+              refractionIntensity={14}
+              chromaticDispersion={true}
+              dispersionIntensity={0.8}
+              blurIntensity={18}
+              borderRadius="14px"
+              className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:text-emerald-950 dark:hover:text-emerald-400 transition-all whitespace-nowrap shrink-0 group focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+            >
+              <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
+              <span>CONTACTER SUR WHATSAPP</span>
+            </LiquidGlassSurface>
+          </div>
+
+          {/* Phase E bis: Unboxed Proof Indicators with Glass Icon Lenses */}
+          <div className="pt-6 border-t border-slate-200/80 dark:border-slate-800/80 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs font-medium text-slate-600 dark:text-slate-400">
+            <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
+              <LiquidGlassIcon size="sm">
+                <ShieldCheck className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
+              </LiquidGlassIcon>
+              <span>Garantie 12 Mois Oumar</span>
+            </div>
+            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
+            <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
+              <LiquidGlassIcon size="sm">
+                <Zap className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
+              </LiquidGlassIcon>
+              <span>Livraison 2h à Abidjan</span>
+            </div>
+            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
+            <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
+              <LiquidGlassIcon size="sm">
+                <Sparkles className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
+              </LiquidGlassIcon>
+              <span>Paiement à la Réception</span>
+            </div>
           </div>
 
         </div>
+
+        {/* ========================================================
+            COLONNE DROITE : Photographie principale visible en entier
+           ======================================================== */}
+        <div className="hero__visual">
+          <div className="hero-portrait-stage relative w-full flex items-center justify-center">
+            {!imageError ? (
+              <div className="relative flex items-center justify-center w-full">
+                <img
+                  src={oumarPhotoSrc}
+                  alt="Oumar — Fondateur OUMAR IPHONE Abidjan"
+                  onError={() => setImageError(true)}
+                  className="hero__photo hero-portrait-img select-none transition-transform duration-700 ease-out"
+                  loading="eager"
+                  fetchPriority="high"
+                />
+
+                {/* Quick Trigger to replace/update photo */}
+                <button
+                  onClick={handleTriggerUpload}
+                  title="Remplacer ou tester une autre photo d'Oumar"
+                  className="absolute top-2 right-2 z-30 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 backdrop-blur-md text-xs font-semibold text-slate-800 dark:text-slate-100 hover:text-slate-950 dark:hover:text-white shadow-md border border-white/90 dark:border-slate-700 transition-all opacity-80 hover:opacity-100 focus:opacity-100 cursor-pointer"
+                  aria-label="Charger ou modifier la photo d'Oumar"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Changer de photo</span>
+                </button>
+              </div>
+            ) : (
+              /* Elegant, unboxed placeholder with natural sizing */
+              <div className="w-full max-w-md min-h-[360px] rounded-3xl p-8 flex flex-col items-center justify-center text-center relative border border-dashed border-slate-300/80 dark:border-slate-700/80 bg-white/20 dark:bg-slate-900/20 backdrop-blur-xs">
+                <div className="w-20 h-20 rounded-full bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-center mb-5 text-slate-700 dark:text-slate-200">
+                  <User className="w-10 h-10 text-slate-400 dark:text-slate-500" />
+                </div>
+
+                <div className="relative z-10 max-w-xs flex flex-col items-center">
+                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 tracking-wider uppercase mb-1">
+                    Intégration Photographiée
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white font-['Outfit'] mb-2">
+                    Photo d'Oumar
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+                    Importez la photo d'Oumar pour qu'elle définisse automatiquement l'ambiance et l'arrière-plan du Hero entier.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-2.5 items-center justify-center">
+                    <LiquidGlassSurface
+                      as="button"
+                      onClick={handleTriggerUpload}
+                      elastic={true}
+                      maxStretch={8}
+                      chromaticDispersion={true}
+                      dispersionIntensity={0.6}
+                      borderRadius="12px"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-slate-900 dark:text-white transition-all shadow-xs border border-slate-300/80 dark:border-slate-700 cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
+                      <span>Choisir une photo</span>
+                    </LiquidGlassSurface>
+
+                    <button
+                      type="button"
+                      onClick={handleUseSamplePhoto}
+                      className="text-[11px] font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 underline underline-offset-4 transition-colors py-1 px-2 cursor-pointer"
+                    >
+                      Tester avec une photo d'exemple
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
     </section>
   );
