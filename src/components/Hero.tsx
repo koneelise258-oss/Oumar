@@ -6,6 +6,7 @@ import { WHATSAPP_URL } from '../data/products';
 import { Product } from '../types';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { LiquidGlassIcon } from './LiquidGlassIcon';
+import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
 
 if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger);
@@ -17,11 +18,40 @@ interface HeroProps {
   onExploreCatalog?: () => void;
 }
 
-const DEFAULT_OUMAR_PHOTO_PATH = '/src/assets/images/oumar_portrait.jpg';
+const DEFAULT_OUMAR_PHOTO_PATH = heroTitaniumSample;
 
 export const Hero: React.FC<HeroProps> = () => {
   const heroRef = useRef<HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
+
+  // Synchronize visual height strictly from text top to action buttons bottom on desktop
+  useEffect(() => {
+    if (!contentRef.current || !actionsRef.current) return;
+    const updateHeight = () => {
+      if (window.innerWidth >= 1024 && contentRef.current && actionsRef.current) {
+        const contentTop = contentRef.current.getBoundingClientRect().top;
+        const actionsBottom = actionsRef.current.getBoundingClientRect().bottom;
+        const targetHeight = Math.round(actionsBottom - contentTop);
+        setContentHeight(targetHeight > 0 ? targetHeight : null);
+      } else {
+        setContentHeight(null);
+      }
+    };
+
+    updateHeight();
+    const ro = new ResizeObserver(() => updateHeight());
+    ro.observe(contentRef.current);
+    ro.observe(actionsRef.current);
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, []);
 
   // Editable image source for Oumar's portrait
   const [oumarPhotoSrc, setOumarPhotoSrc] = useState<string>(() => {
@@ -102,8 +132,14 @@ export const Hero: React.FC<HeroProps> = () => {
       // Photo-driven background and ambient veil reveal
       tl.fromTo(
         '.hero__photo-background',
-        { opacity: 0, scale: 1.15 },
-        { opacity: photoTone.isDark ? 0.20 : 0.25, scale: 1.08, duration: 1.2, ease: 'power2.out' },
+        { opacity: 0, scale: 1.18 },
+        { opacity: photoTone.isDark ? 0.38 : 0.48, scale: 1.12, duration: 1.2, ease: 'power2.out' },
+        0
+      )
+      .fromTo(
+        '.hero__ambient-glow',
+        { opacity: 0 },
+        { opacity: 1, duration: 1.4, ease: 'power2.out' },
         0
       )
       .fromTo(
@@ -174,7 +210,8 @@ export const Hero: React.FC<HeroProps> = () => {
       });
 
       gsap.to('.hero__photo-background', {
-        y: 25,
+        y: 35,
+        scale: 1.16,
         ease: 'none',
         scrollTrigger: {
           trigger: heroRef.current,
@@ -211,11 +248,25 @@ export const Hero: React.FC<HeroProps> = () => {
           try {
             localStorage.setItem('oumar_photo_custom', dataUrl);
           } catch {
-            // Storage limit catch
+            // Storage limit catch (retains in memory)
           }
         }
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleImageError = () => {
+    if (oumarPhotoSrc !== DEFAULT_OUMAR_PHOTO_PATH) {
+      try {
+        localStorage.removeItem('oumar_photo_custom');
+      } catch {
+        // Ignore
+      }
+      setOumarPhotoSrc(DEFAULT_OUMAR_PHOTO_PATH);
+      setImageError(false);
+    } else {
+      setImageError(true);
     }
   };
 
@@ -224,11 +275,10 @@ export const Hero: React.FC<HeroProps> = () => {
   };
 
   const handleUseSamplePhoto = () => {
-    const sample = '/src/assets/images/hero_iphone_titanium_1792367905192.jpg';
-    setOumarPhotoSrc(sample);
+    setOumarPhotoSrc(DEFAULT_OUMAR_PHOTO_PATH);
     setImageError(false);
     try {
-      localStorage.setItem('oumar_photo_custom', sample);
+      localStorage.removeItem('oumar_photo_custom');
     } catch {
       // Storage limit catch
     }
@@ -263,6 +313,19 @@ export const Hero: React.FC<HeroProps> = () => {
       )}
 
       {/* ========================================================
+          1b. HALO CHROMATIQUE AMBIANT : Diffusion des teintes de la photo
+         ======================================================== */}
+      {oumarPhotoSrc && !imageError && (
+        <div
+          className="hero__ambient-glow absolute inset-0 z-[1] pointer-events-none transition-opacity duration-700"
+          style={{
+            background: `radial-gradient(circle at 74% 44%, rgba(${photoTone.dominantRgb}, ${photoTone.isDark ? 0.35 : 0.40}) 0%, transparent 68%)`
+          }}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ========================================================
           2. VOILE DÉGRADÉ ADAPTATIF : Harmonie et lisibilité du texte
          ======================================================== */}
       <div className="hero__background-overlay" aria-hidden="true" />
@@ -280,7 +343,10 @@ export const Hero: React.FC<HeroProps> = () => {
         {/* ========================================================
             COLONNE GAUCHE : Typographie & Actions
            ======================================================== */}
-        <div className="hero__content hero-copy-column w-full flex flex-col justify-center text-left min-w-0">
+        <div 
+          ref={contentRef}
+          className="hero__content hero-copy-column w-full flex flex-col justify-start text-left min-w-0"
+        >
           
           {/* Identity Kicker */}
           <div className="hero-kicker flex items-center gap-2 text-xs font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-5">
@@ -309,7 +375,10 @@ export const Hero: React.FC<HeroProps> = () => {
           </p>
 
           {/* Phase E: Action Buttons avec Interactions Élastiques */}
-          <div className="hero-actions flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mb-11">
+          <div 
+            ref={actionsRef}
+            className="hero-actions flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mb-11"
+          >
             {/* Primary CTA: EXPLORER LE CATALOGUE */}
             <LiquidGlassSurface
               as="a"
@@ -381,29 +450,49 @@ export const Hero: React.FC<HeroProps> = () => {
         {/* ========================================================
             COLONNE DROITE : Photographie principale visible en entier
            ======================================================== */}
-        <div className="hero__visual">
-          <div className="hero-portrait-stage relative w-full flex items-center justify-center">
+        <div 
+          className="hero__visual w-full self-start"
+          style={{
+            height: contentHeight ? `${contentHeight}px` : undefined,
+            maxHeight: contentHeight ? `${contentHeight}px` : undefined
+          }}
+        >
+          <div className="hero-portrait-stage relative w-full h-full flex items-center justify-center">
             {!imageError ? (
-              <div className="relative flex items-center justify-center w-full">
+              <div className="relative flex items-center justify-center w-full h-full max-h-full">
                 <img
                   src={oumarPhotoSrc}
                   alt="Oumar — Fondateur OUMAR IPHONE Abidjan"
-                  onError={() => setImageError(true)}
+                  onError={handleImageError}
                   className="hero__photo hero-portrait-img select-none transition-transform duration-700 ease-out"
                   loading="eager"
                   fetchPriority="high"
                 />
 
                 {/* Quick Trigger to replace/update photo */}
-                <button
-                  onClick={handleTriggerUpload}
-                  title="Remplacer ou tester une autre photo d'Oumar"
-                  className="absolute top-2 right-2 z-30 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 backdrop-blur-md text-xs font-semibold text-slate-800 dark:text-slate-100 hover:text-slate-950 dark:hover:text-white shadow-md border border-white/90 dark:border-slate-700 transition-all opacity-80 hover:opacity-100 focus:opacity-100 cursor-pointer"
-                  aria-label="Charger ou modifier la photo d'Oumar"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Changer de photo</span>
-                </button>
+                <div className="absolute top-2 right-2 z-30 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTriggerUpload}
+                    title="Remplacer ou tester une autre photo d'Oumar"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 backdrop-blur-md text-xs font-semibold text-slate-800 dark:text-slate-100 hover:text-slate-950 dark:hover:text-white shadow-md border border-white/90 dark:border-slate-700 transition-all opacity-80 hover:opacity-100 focus:opacity-100 cursor-pointer"
+                    aria-label="Charger ou modifier la photo d'Oumar"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Changer de photo</span>
+                  </button>
+
+                  {oumarPhotoSrc !== DEFAULT_OUMAR_PHOTO_PATH && (
+                    <button
+                      type="button"
+                      onClick={handleUseSamplePhoto}
+                      title="Réinitialiser la photo"
+                      className="px-2.5 py-1.5 rounded-full bg-white/70 dark:bg-slate-800/70 hover:bg-white dark:hover:bg-slate-700 backdrop-blur-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white shadow-sm border border-white/90 dark:border-slate-700 transition-all opacity-80 hover:opacity-100 cursor-pointer"
+                    >
+                      Réinitialiser
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               /* Elegant, unboxed placeholder with natural sizing */

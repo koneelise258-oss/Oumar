@@ -183,35 +183,35 @@ html.dark .hero {
 /* Full Hero Photo-Driven Ambient Background System */
 .hero__photo-background {
   position: absolute;
-  inset: -8%;
+  inset: -12%;
   z-index: 0;
-  background-position: center;
+  background-position: center 32%;
   background-size: cover;
   background-repeat: no-repeat;
-  filter: blur(44px);
-  opacity: 0.24;
-  transform: scale(1.08);
+  filter: blur(52px) saturate(1.3);
+  opacity: 0.48;
+  transform: scale(1.12);
   pointer-events: none;
   transition: opacity 0.6s ease, filter 0.6s ease;
   will-change: transform, opacity;
 }
 
 html.dark .hero__photo-background {
-  opacity: 0.20;
-  filter: blur(48px) brightness(0.9);
+  opacity: 0.38;
+  filter: blur(56px) saturate(1.25) brightness(0.88);
 }
 
 .hero__background-overlay {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
   background: linear-gradient(
     90deg,
-    rgba(248, 248, 246, 0.96) 0%,
-    rgba(248, 248, 246, 0.78) 38%,
-    rgba(248, 248, 246, 0.38) 70%,
-    rgba(248, 248, 246, 0.18) 100%
+    rgba(245, 245, 242, 0.96) 0%,
+    rgba(245, 245, 242, 0.88) 35%,
+    rgba(245, 245, 242, 0.42) 65%,
+    rgba(245, 245, 242, 0.10) 100%
   );
   transition: background 0.5s ease;
 }
@@ -219,10 +219,10 @@ html.dark .hero__photo-background {
 html.dark .hero__background-overlay {
   background: linear-gradient(
     90deg,
-    rgba(11, 15, 23, 0.96) 0%,
-    rgba(11, 15, 23, 0.82) 38%,
-    rgba(11, 15, 23, 0.45) 70%,
-    rgba(11, 15, 23, 0.20) 100%
+    rgba(11, 15, 23, 0.97) 0%,
+    rgba(11, 15, 23, 0.90) 35%,
+    rgba(11, 15, 23, 0.48) 65%,
+    rgba(11, 15, 23, 0.12) 100%
   );
 }
 
@@ -230,19 +230,19 @@ html.dark .hero__background-overlay {
   .hero__background-overlay {
     background: linear-gradient(
       180deg,
-      rgba(248, 248, 246, 0.96) 0%,
-      rgba(248, 248, 246, 0.82) 42%,
-      rgba(248, 248, 246, 0.45) 70%,
-      rgba(248, 248, 246, 0.18) 100%
+      rgba(245, 245, 242, 0.96) 0%,
+      rgba(245, 245, 242, 0.88) 40%,
+      rgba(245, 245, 242, 0.40) 72%,
+      rgba(245, 245, 242, 0.10) 100%
     );
   }
   html.dark .hero__background-overlay {
     background: linear-gradient(
       180deg,
-      rgba(11, 15, 23, 0.96) 0%,
-      rgba(11, 15, 23, 0.84) 42%,
-      rgba(11, 15, 23, 0.48) 70%,
-      rgba(11, 15, 23, 0.22) 100%
+      rgba(11, 15, 23, 0.97) 0%,
+      rgba(11, 15, 23, 0.90) 40%,
+      rgba(11, 15, 23, 0.45) 72%,
+      rgba(11, 15, 23, 0.12) 100%
     );
   }
 }
@@ -251,13 +251,14 @@ html.dark .hero__background-overlay {
   position: absolute;
   inset-x: 0;
   bottom: 0;
-  height: 120px;
-  z-index: 1;
+  height: 140px;
+  z-index: 3;
   pointer-events: none;
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    rgba(248, 248, 246, 0.75) 60%,
+    rgba(250, 251, 252, 0.45) 35%,
+    rgba(250, 251, 252, 0.90) 75%,
     #fafbfc 100%
   );
 }
@@ -266,7 +267,8 @@ html.dark .hero__bottom-overlay {
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    rgba(11, 15, 23, 0.75) 60%,
+    rgba(11, 15, 23, 0.45) 35%,
+    rgba(11, 15, 23, 0.90) 75%,
     #0b0f17 100%
   );
 }
@@ -275,7 +277,7 @@ html.dark .hero__bottom-overlay {
 .hero__inner {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: center;
+  align-items: stretch;
   gap: clamp(24px, 4vw, 56px);
   width: 100%;
   max-width: 80rem;
@@ -285,17 +287,19 @@ html.dark .hero__bottom-overlay {
   z-index: 10;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 1023px) {
   .hero__inner {
     grid-template-columns: minmax(0, 1fr);
+    align-items: center;
   }
 }
 
-/* Right Column: Visual Stage with fully uncropped image */
+/* Right Column: Visual Stage strictly synchronized with text column */
 .hero__visual {
   display: flex;
   justify-content: center;
   align-items: center;
+  align-self: flex-start;
   width: 100%;
   min-width: 0;
   min-height: 0;
@@ -303,25 +307,43 @@ html.dark .hero__bottom-overlay {
   position: relative;
 }
 
-/* Sharp main photo: preserved original ratio, contain, no mask clipping */
+@media (max-width: 1023px) {
+  .hero__visual {
+    height: auto !important;
+    max-height: none !important;
+  }
+}
+
+.hero-portrait-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sharp main photo: preserved original ratio, contain, strictly bounded to writing height */
 .hero__photo {
   display: block;
-  width: 100%;
-  height: auto;
+  width: auto;
+  height: 100%;
   max-width: 100%;
-  max-height: 70vh;
+  max-height: 100%;
   object-fit: contain;
   object-position: center center;
-  filter: drop-shadow(0 16px 36px rgba(15, 23, 42, 0.08));
+  filter: contrast(1.02);
+  -webkit-mask-image: radial-gradient(ellipse 95% 92% at 50% 48%, black 72%, rgba(0, 0, 0, 0.85) 86%, transparent 100%);
+  mask-image: radial-gradient(ellipse 95% 92% at 50% 48%, black 72%, rgba(0, 0, 0, 0.85) 86%, transparent 100%);
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-html.dark .hero__photo {
-  filter: drop-shadow(0 16px 36px rgba(0, 0, 0, 0.45));
-}
-
-@media (max-width: 720px) {
+@media (max-width: 1023px) {
   .hero__photo {
-    max-height: 60vh;
+    width: 100%;
+    height: auto;
+    max-height: 55vh;
   }
 }
 

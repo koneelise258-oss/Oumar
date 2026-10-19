@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CartItem } from '../types';
 import { X, Plus, Minus, Trash2, MessageCircle, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
+import { recordNewOrder } from '../data/orders';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -27,34 +28,56 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   if (!isOpen) return null;
 
   const subtotal = items.reduce(
-    (acc, item) => acc + item.product.price * item.quantity,
+    (acc, item) => acc + (item.unitPrice || item.product.price) * item.quantity,
     0
   );
 
   const deliveryFee = 2000; // 2,000 FCFA standard delivery in Abidjan
   const total = subtotal > 0 ? subtotal + deliveryFee : 0;
 
-  const handleOrderWhatsApp = () => {
-    if (items.length === 0) return;
+  const itemListText = items
+    .map(
+      (it) =>
+        `• ${it.product.name} (${it.chosenStorage}, ${it.chosenColor}) x${it.quantity} - ${(
+          (it.unitPrice || it.product.price) * it.quantity
+        ).toLocaleString('fr-FR')} FCFA`
+    )
+    .join('\n');
 
-    const itemListText = items
-      .map(
-        (it) =>
-          `• ${it.product.name} (${it.chosenStorage}, ${it.chosenColor}) x${it.quantity} - ${(
-            it.product.price * it.quantity
-          ).toLocaleString('fr-FR')} FCFA`
-      )
-      .join('\n');
+  const orderMessage = `Bonjour OUMAR IPHONE, je souhaite valider ma commande :\n\n${itemListText}\n\nSous-total : ${subtotal.toLocaleString(
+    'fr-FR'
+  )} FCFA\nLivraison (${commune}) : ${deliveryFee.toLocaleString(
+    'fr-FR'
+  )} FCFA\nTotal : ${total.toLocaleString(
+    'fr-FR'
+  )} FCFA\n\nNom du client : ${customerName || 'Client Abidjan'}\nLieu de livraison : ${commune}\nMode de règlement : Paiement à la livraison`;
 
-    const message = `Bonjour OUMAR IPHONE, je souhaite valider ma commande :\n\n${itemListText}\n\nSous-total : ${subtotal.toLocaleString(
-      'fr-FR'
-    )} FCFA\nLivraison (${commune}) : ${deliveryFee.toLocaleString(
-      'fr-FR'
-    )} FCFA\nTotal : ${total.toLocaleString(
-      'fr-FR'
-    )} FCFA\n\nNom du client : ${customerName || 'Client Abidjan'}\nLieu de livraison : ${commune}\nMode de règlement : Paiement à la livraison`;
+  const handleOrderSubmitted = () => {
+    // Record order in store orders history
+    try {
+      recordNewOrder({
+        customerName: customerName.trim() || 'Client Abidjan',
+        commune,
+        items: items.map((it) => ({
+          productId: it.product.id,
+          productName: it.product.name,
+          productImage: it.product.image,
+          chosenStorage: it.chosenStorage,
+          chosenColor: it.chosenColor,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice || it.product.price
+        })),
+        subtotal,
+        deliveryFee,
+        total,
+        status: 'pending',
+        paymentMethod: 'Paiement à la livraison (Wave / Espèces)',
+        notes: `Commande passée via WhatsApp. Destination : ${commune}`
+      });
+    } catch (e) {
+      console.error('Failed to record order', e);
+    }
 
-    window.open(WHATSAPP_URL(message), '_blank');
     setOrderSent(true);
     setTimeout(() => {
       setOrderSent(false);
@@ -225,9 +248,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </div>
 
               {/* WhatsApp Checkout Button */}
-              <button
-                onClick={handleOrderWhatsApp}
-                className="w-full py-3 px-4 rounded-xl font-semibold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] shadow-md transition-all flex items-center justify-center gap-2"
+              <a
+                href={WHATSAPP_URL(orderMessage)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleOrderSubmitted}
+                className="w-full py-3.5 px-4 rounded-xl font-semibold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {orderSent ? (
                   <>
@@ -240,7 +266,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <span>Valider la commande sur WhatsApp</span>
                   </>
                 )}
-              </button>
+              </a>
 
               <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                 <ShieldCheck className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
