@@ -598,13 +598,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // ==========================================
-  // TAB 4: STORE SETTINGS, HERO PHOTO & PIN
+  // TAB 4: STORE SETTINGS & HERO PHOTO
   // ==========================================
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(settings);
-  const [pinChangeCurrent, setPinChangeCurrent] = useState('');
-  const [pinChangeNew, setPinChangeNew] = useState('');
-  const [pinChangeConfirm, setPinChangeConfirm] = useState('');
-  const [pinMessage, setPinMessage] = useState<{ text: string; error: boolean } | null>(null);
 
   // Hero Section Photo State
   const [heroPhotoSrc, setHeroPhotoSrc] = useState<string | null>(getHeroCustomPhoto);
@@ -664,31 +660,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     saveStoreSettings(settingsForm);
     saveStoreSettingsRemote(settingsForm);
     triggerNotification('Paramètres de la boutique enregistrés !');
-  };
-
-  const handleUpdatePin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pinChangeCurrent !== settings.adminPin) {
-      setPinMessage({ text: 'Le code PIN actuel est incorrect.', error: true });
-      return;
-    }
-    if (pinChangeNew.length < 4) {
-      setPinMessage({ text: 'Le nouveau code doit contenir au moins 4 caractères.', error: true });
-      return;
-    }
-    if (pinChangeNew !== pinChangeConfirm) {
-      setPinMessage({ text: 'La confirmation ne correspond pas au nouveau code.', error: true });
-      return;
-    }
-
-    const updated = { ...settingsForm, adminPin: pinChangeNew };
-    setSettingsForm(updated);
-    saveStoreSettings(updated);
-    setPinChangeCurrent('');
-    setPinChangeNew('');
-    setPinChangeConfirm('');
-    setPinMessage({ text: 'Code PIN administrateur modifié avec succès !', error: false });
-    setTimeout(() => setPinMessage(null), 4000);
   };
 
   // ==========================================
@@ -1807,67 +1778,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Admin Security PIN Change Form */}
+              {/* Admin Security Information Card */}
               <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
                 <h3 className="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-amber-500" />
-                  <span>Sécurité & Code Secret Administrateur</span>
+                  <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                  <span>Sécurité & Authentification Administrateur</span>
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Modifiez le code PIN requis pour déverrouiller l’espace administrateur sur ce navigateur.
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  L’accès administrateur est entièrement sécurisé par <strong>Supabase Auth</strong> et les contrôles de rôle dans la table <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-emerald-600 dark:text-emerald-400">store_admins</code>. Les anciens codes PIN locaux ont été définitivement supprimés pour garantir qu’aucun accès non autorisé ne puisse contourner la sécurité de la boutique OUMAR IPHONE.
                 </p>
-
-                <form onSubmit={handleUpdatePin} className="space-y-3 max-w-md text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Code PIN actuel
-                    </label>
-                    <input
-                      type="password"
-                      value={pinChangeCurrent}
-                      onChange={(e) => setPinChangeCurrent(e.target.value)}
-                      placeholder="••••"
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Nouveau code PIN
-                    </label>
-                    <input
-                      type="password"
-                      value={pinChangeNew}
-                      onChange={(e) => setPinChangeNew(e.target.value)}
-                      placeholder="Nouveau code"
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Confirmer le nouveau code
-                    </label>
-                    <input
-                      type="password"
-                      value={pinChangeConfirm}
-                      onChange={(e) => setPinChangeConfirm(e.target.value)}
-                      placeholder="Confirmer"
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none font-mono"
-                    />
-                  </div>
-
-                  {pinMessage && (
-                    <div className={`p-2.5 rounded-xl text-xs font-semibold ${
-                      pinMessage.error
-                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                        : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                    }`}>
-                      {pinMessage.text}
-                    </div>
-                  )}
-
-                </form>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                  <p className="font-semibold text-slate-950 dark:text-white flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-amber-500" /> Gestion des accès administrateurs :
+                  </p>
+                  <p>
+                    Pour ajouter ou modifier un administrateur, utilisez l’onglet <strong>"Équipe"</strong> ci-dessus. Seuls les comptes authentifiés avec une adresse e-mail enregistrée et active dans <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono">store_admins</code> disposent des droits de modification et de consultation des commandes.
+                  </p>
+                </div>
               </div>
 
               {/* Card 4: Supabase Cloud Database & Data Synchronization */}

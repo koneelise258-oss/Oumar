@@ -12,7 +12,6 @@ export interface StoreSettings {
   openingHours: string;
   warrantyText: string;
   deliveryFee: number;
-  adminPin: string; // Stored securely in localStorage
 }
 
 export const DEFAULT_SETTINGS: StoreSettings = {
@@ -30,8 +29,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   ],
   openingHours: 'Lundi au Samedi : 08h30 - 19h30 | Dimanche : Sur rendez-vous',
   warrantyText: 'Tous nos iPhone, iPad et MacBook sont vendus avec facture certifiée, numéro IMEI et garantie officielle.',
-  deliveryFee: 0, // Aucune livraison : retrait gratuit en boutique
-  adminPin: '2025' // Code de secours transitionnel
+  deliveryFee: 0 // Aucune livraison : retrait gratuit en boutique
 };
 
 export const SETTINGS_STORAGE_KEY = 'oumar_store_settings';
@@ -43,6 +41,7 @@ export function loadStoreSettings(): StoreSettings {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      delete parsed.adminPin; // Remove legacy PIN if cached in browser
       return { ...DEFAULT_SETTINGS, ...parsed };
     }
   } catch (err) {
@@ -54,8 +53,10 @@ export function loadStoreSettings(): StoreSettings {
 export function saveStoreSettings(settings: StoreSettings): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-    window.dispatchEvent(new CustomEvent('oumar_settings_updated', { detail: settings }));
+    const cleanSettings = { ...settings };
+    delete (cleanSettings as any).adminPin;
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(cleanSettings));
+    window.dispatchEvent(new CustomEvent('oumar_settings_updated', { detail: cleanSettings }));
   } catch (err) {
     console.error('Error saving store settings', err);
   }
@@ -69,12 +70,6 @@ export function getWhatsAppPhone(): string {
 export function getWhatsAppUrl(message: string): string {
   const phone = getWhatsAppPhone();
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-}
-
-export function verifyAdminPin(_enteredPin: string): boolean {
-  // Accès PIN local désactivé par mesure de sécurité.
-  // L'authentification administrateur doit obligatoirement passer par Supabase Auth.
-  return false;
 }
 
 export const ADMIN_EMAIL_STORAGE_KEY = 'oumar_admin_email';

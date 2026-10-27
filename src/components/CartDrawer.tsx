@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CartItem } from '../types';
-import { X, Plus, Minus, Trash2, MessageCircle, ShieldCheck, CheckCircle2, MapPin, Store } from 'lucide-react';
-import { WHATSAPP_URL } from '../data/products';
+import { X, Plus, Minus, Trash2, MessageCircle, ShieldCheck, CheckCircle2, Store, RefreshCw, AlertTriangle } from 'lucide-react';
+import { getWhatsAppUrl } from '../data/storeSettings';
 import { createOrderRemote } from '../services/storeService';
 
 interface CartDrawerProps {
@@ -23,6 +23,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 }) => {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSent, setOrderSent] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -37,31 +38,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const deliveryFee = 0;
   const total = subtotal;
 
-  const itemListText = items
-    .map(
-      (it) =>
-        `• ${it.product.name} (${it.chosenStorage}, ${it.chosenColor}) x${it.quantity} - ${(
-          (it.unitPrice || it.product.price) * it.quantity
-        ).toLocaleString('fr-FR')} FCFA`
-    )
-    .join('\n');
+  const handleOrderSubmitted = async (e: React.FormEvent | React.MouseEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
 
-  const orderMessage = `Bonjour OUMAR IPHONE, je souhaite réserver ma commande pour un retrait en boutique :\n\n${itemListText}\n\nTotal à régler au retrait : ${total.toLocaleString(
-    'fr-FR'
-  )} FCFA\n\nNom du client : ${customerName.trim() || 'Client OUMAR IPHONE'}${customerPhone.trim() ? `\nTéléphone : ${customerPhone.trim()}` : ''}\nMode : Retrait en Boutique OUMAR IPHONE (Abidjan)\nRèglement : Paiement au retrait (Espèces / Wave / Orange Money)`;
-
-  const handleOrderSubmitted = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!customerName.trim()) {
-      e.preventDefault();
       setFormError('Veuillez renseigner votre Nom et Prénom pour la réservation.');
       return;
     }
 
     setFormError(null);
+    setIsSubmitting(true);
 
-    // Record order in Supabase via secure RPC / service
     try {
-      createOrderRemote({
+      // 1. Transmettre la réservation au serveur Supabase et attendre la confirmation explicite (RPC)
+      const confirmedOrder = await createOrderRemote({
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim() || undefined,
         commune: 'Retrait en boutique OUMAR IPHONE',
@@ -81,16 +72,37 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         paymentMethod: 'Paiement au retrait en boutique',
         notes: 'Réservation passée en ligne pour retrait en boutique OUMAR IPHONE Abidjan'
       });
-    } catch (err) {
-      console.error('Failed to record order', err);
-    }
 
-    setOrderSent(true);
-    setTimeout(() => {
-      setOrderSent(false);
-      onClearCart();
-      onClose();
-    }, 2800);
+      // 2. Construire le message WhatsApp avec le numéro de commande et le total confirmés par le serveur
+      const itemListText = items
+        .map(
+          (it) =>
+            `• ${it.product.name} (${it.chosenStorage}, ${it.chosenColor}) x${it.quantity} - ${(
+              (it.unitPrice || it.product.price) * it.quantity
+            ).toLocaleString('fr-FR')} FCFA`
+        )
+        .join('\n');
+
+      const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite valider la réservation de ma commande N° ${confirmedOrder.orderNumber} :\n\n${itemListText}\n\nTotal confirmé : ${confirmedOrder.total.toLocaleString(
+        'fr-FR'
+      )} FCFA\n\nClient : ${confirmedOrder.customerName}${confirmedOrder.customerPhone ? `\nTéléphone : ${confirmedOrder.customerPhone}` : ''}\nMode : Retrait en Boutique OUMAR IPHONE Abidjan\nRèglement : Paiement au retrait (Espèces / Wave / Orange Money)`;
+
+      // 3. Ouvrir WhatsApp
+      const whatsappUrl = getWhatsAppUrl(whatsappMessage);
+      window.open(whatsappUrl, '_blank');
+
+      setOrderSent(true);
+      setTimeout(() => {
+        setOrderSent(false);
+        setIsSubmitting(false);
+        onClearCart();
+        onClose();
+      }, 2000);
+    } catch (err: any) {
+      console.error('Échec de la réservation:', err);
+      setFormError(err?.message || "Impossible d'enregistrer votre commande sur le serveur. Veuillez vérifier votre connexion et réessayer.");
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -240,10 +252,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
               </div>
 
+              {/* Form Error Display */}
               {formError && (
-                <p className="text-xs text-rose-500 font-medium">
-                  {formError}
-                </p>
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                  <span>{formError}</span>
+                </div>
               )}
 
               {/* Price Calculation (No Delivery Fee) */}
@@ -267,17 +281,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </div>
 
               {/* WhatsApp Checkout Button */}
-              <a
-                href={WHATSAPP_URL(orderMessage)}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
                 onClick={handleOrderSubmitted}
-                className="w-full py-3.5 px-4 rounded-xl font-semibold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                disabled={isSubmitting}
+                className="w-full py-3.5 px-4 rounded-xl font-semibold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {orderSent ? (
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Enregistrement sécurisé...</span>
+                  </>
+                ) : orderSent ? (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Réservation transmise (En attente de validation)</span>
+                    <span>Réservation transmise (Validation en cours)</span>
                   </>
                 ) : (
                   <>
@@ -285,7 +303,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <span>Réserver & Valider sur WhatsApp</span>
                   </>
                 )}
-              </a>
+              </button>
 
               <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 text-center">
                 <ShieldCheck className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300 shrink-0" />

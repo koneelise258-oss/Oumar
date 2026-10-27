@@ -12,7 +12,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { loadProducts } from './data/products';
 import { loadVideos } from './data/videos';
 import { fetchProductsRemote, fetchVideosRemote } from './services/storeService';
-import { isAdminAuthenticated } from './data/storeSettings';
+import { checkIsUserAdmin } from './lib/supabase';
 import { CartItem, Product, VideoItem } from './types';
 import { ThemeProvider } from './context/ThemeContext';
 
@@ -154,8 +154,9 @@ function StoreApp() {
   };
 
   // Safe Admin Access Trigger
-  const handleTriggerAdmin = () => {
-    if (isAdminAuthenticated()) {
+  const handleTriggerAdmin = async () => {
+    const adminCheck = await checkIsUserAdmin();
+    if (adminCheck.isAdmin) {
       setIsAdminDashboardOpen(true);
       setIsAdminAuthOpen(false);
     } else {

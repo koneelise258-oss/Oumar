@@ -272,8 +272,7 @@ export async function fetchStoreSettingsRemote(): Promise<StoreSettings> {
         addresses: Array.isArray(data.addresses) ? data.addresses : [],
         openingHours: data.opening_hours,
         warrantyText: data.warranty_text,
-        deliveryFee: data.delivery_fee,
-        adminPin: data.admin_pin || '2025'
+        deliveryFee: data.delivery_fee
       };
       saveStoreSettings(mapped);
       return mapped;
@@ -301,7 +300,6 @@ export async function saveStoreSettingsRemote(settings: StoreSettings): Promise<
       opening_hours: settings.openingHours,
       warranty_text: settings.warrantyText,
       delivery_fee: settings.deliveryFee,
-      admin_pin: settings.adminPin,
       updated_at: new Date().toISOString()
     };
 
@@ -396,59 +394,56 @@ export async function fetchOrdersRemote(): Promise<StoreOrder[]> {
 }
 
 export async function createOrderRemote(orderData: Omit<StoreOrder, 'id' | 'orderNumber' | 'createdAt'>): Promise<StoreOrder> {
-  const currentOrders = loadOrders();
-  const nextNum = currentOrders.length + 1;
-  const tempId = `ord-${Date.now()}`;
-  const tempOrderNumber = `OMR-${String(nextNum).padStart(4, '0')}`;
-
-  let finalOrder: StoreOrder = {
-    ...orderData,
-    id: tempId,
-    orderNumber: tempOrderNumber,
-    createdAt: Date.now(),
-    deliveryFee: 0,
-    commune: orderData.commune || 'Retrait en boutique OUMAR IPHONE',
-    paymentMethod: 'Paiement au retrait en boutique',
-    total: orderData.subtotal // Retrait boutique sans frais
-  };
-
-  // 1. If Supabase configured, execute secure atomic server-side RPC validation
-  if (isSupabaseConfigured) {
-    try {
-      const rpcPayload = {
-        p_customer_name: finalOrder.customerName,
-        p_customer_phone: finalOrder.customerPhone || null,
-        p_notes: finalOrder.notes || null,
-        p_items: finalOrder.items.map((it) => ({
-          product_id: it.productId,
-          chosen_storage: it.chosenStorage,
-          chosen_color: it.chosenColor,
-          quantity: it.quantity
-        }))
-      };
-
-      const { data: rpcData, error: rpcError } = await supabase.rpc('create_store_order', rpcPayload);
-
-      if (!rpcError && rpcData && rpcData.success) {
-        finalOrder = {
-          ...finalOrder,
-          id: rpcData.order_id,
-          orderNumber: rpcData.order_number,
-          total: Number(rpcData.total)
-        };
-      } else if (rpcError) {
-        console.error('Erreur lors de la création de la commande via la fonction RPC create_store_order:', rpcError.message);
-      }
-    } catch (err) {
-      console.error('Erreur réseau lors de la création de la commande Supabase:', err);
-    }
+  if (!isSupabaseConfigured) {
+    throw new Error("Supabase n'est pas configuré. Impossible d'enregistrer la réservation sur le serveur.");
   }
 
-  // 2. Save locally immediately for fast UI feedback
-  const updatedOrders = [finalOrder, ...currentOrders];
-  saveOrders(updatedOrders);
+  const rpcPayload = {
+    p_customer_name: orderData.customerName,
+    p_customer_phone: orderData.customerPhone || null,
+    p_notes: orderData.notes || null,
+    p_items: orderData.items.map((it) => ({
+      product_id: it.productId,
+      chosen_storage: it.chosenStorage,
+      chosen_color: it.chosenColor,
+      quantity: it.quantity
+    }))
+  };
 
-  return finalOrder;
+  const { data: rpcData, error: rpcError } = await supabase.rpc('create_store_order', rpcPayload);
+
+  if (rpcError) {
+    console.error('Erreur lors de l’appel de la fonction RPC create_store_order:', rpcError);
+    throw new Error(rpcError.message || "Échec de l'enregistrement de la réservation sur le serveur.");
+  }
+
+  if (!rpcData || !rpcData.success) {
+    const errorMsg = rpcData?.message || "La réservation n'a pas pu être confirmée par la base de données.";
+    throw new Error(errorMsg);
+  }
+
+  // Construction de l'objet de commande à partir des données confirmées par le serveur (numéro OMR-xxxx et total réel)
+  const confirmedOrder: StoreOrder = {
+    id: rpcData.order_id,
+    orderNumber: rpcData.order_number,
+    createdAt: Date.now(),
+    customerName: orderData.customerName,
+    customerPhone: orderData.customerPhone,
+    commune: 'Retrait en boutique OUMAR IPHONE',
+    subtotal: Number(rpcData.total),
+    deliveryFee: 0,
+    total: Number(rpcData.total),
+    status: 'pending',
+    paymentMethod: 'Paiement au retrait en boutique',
+    notes: orderData.notes,
+    items: orderData.items
+  };
+
+  // Sauvegarde locale uniquement après confirmation serveur officielle
+  const currentOrders = loadOrders();
+  saveOrders([confirmedOrder, ...currentOrders]);
+
+  return confirmedOrder;
 }
 
 export async function updateOrderStatusRemote(orderId: string, status: OrderStatus): Promise<void> {
@@ -532,7 +527,6 @@ export async function syncLocalDataToSupabase(
       opening_hours: settings.openingHours,
       warranty_text: settings.warrantyText,
       delivery_fee: settings.deliveryFee,
-      admin_pin: settings.adminPin,
       updated_at: new Date().toISOString()
     };
 
