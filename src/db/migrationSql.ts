@@ -148,18 +148,53 @@ CREATE TABLE IF NOT EXISTS public.store_order_items (
 
 CREATE INDEX IF NOT EXISTS idx_store_order_items_order_id ON public.store_order_items (order_id);
 
--- 7. FONCTIONS DE SÉCURITÉ AUTHENTIFICATION ET CONTRÔLE DE RÔLE (RBAC)
+-- 7. SCHÉMA PRIVATE ET FONCTIONS SÉCURISÉES DE CONTRÔLE DE RÔLE (RBAC)
+CREATE SCHEMA IF NOT EXISTS private;
+
+CREATE OR REPLACE FUNCTION private.is_store_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public, private, pg_temp
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.store_admins
+    WHERE auth.uid() IS NOT NULL
+      AND (
+        user_id = auth.uid()
+        OR (user_id IS NULL AND LOWER(email) = LOWER(auth.jwt()->>'email'))
+      )
+      AND is_active = true
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION private.is_store_superadmin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public, private, pg_temp
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.store_admins
+    WHERE auth.uid() IS NOT NULL
+      AND (
+        user_id = auth.uid()
+        OR (user_id IS NULL AND LOWER(email) = LOWER(auth.jwt()->>'email'))
+      )
+      AND role = 'superadmin'
+      AND is_active = true
+  );
+$$;
+
 CREATE OR REPLACE FUNCTION public.is_store_admin()
 RETURNS BOOLEAN
 LANGUAGE sql
 SECURITY DEFINER
 STABLE
 AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.store_admins
-    WHERE (user_id = auth.uid() OR LOWER(email) = LOWER(auth.jwt()->>'email'))
-      AND is_active = true
-  );
+  SELECT private.is_store_admin();
 $$;
 
 CREATE OR REPLACE FUNCTION public.is_store_superadmin()
@@ -168,12 +203,7 @@ LANGUAGE sql
 SECURITY DEFINER
 STABLE
 AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.store_admins
-    WHERE (user_id = auth.uid() OR LOWER(email) = LOWER(auth.jwt()->>'email'))
-      AND role = 'superadmin'
-      AND is_active = true
-  );
+  SELECT private.is_store_superadmin();
 $$;
 
 -- 8. FONCTION RPC SÉCURISÉE DE CRÉATION DE COMMANDE (TRANSACTION ATOMIQUE)
@@ -199,6 +229,9 @@ DECLARE
   v_unit_price BIGINT;
   v_qty INT;
 BEGIN
+  -- Verrou applicatif transactionnel pour éviter toute collision sur le numéro de commande
+  PERFORM pg_advisory_xact_lock(17923679);
+
   IF p_customer_name IS NULL OR TRIM(p_customer_name) = '' THEN
     RAISE EXCEPTION 'Le nom du client est obligatoire pour le retrait en boutique.';
   END IF;
@@ -255,7 +288,11 @@ BEGIN
     WHERE id = (v_item->>'product_id') AND published = true;
 
     IF NOT FOUND THEN
-      RAISE EXCEPTION 'Produit introuvable ou non publié : %', (v_item->>'product_id');
+      RAISE EXCEPTION 'Produit introuvable ou indisponible : %', (v_item->>'product_id');
+    END IF;
+
+    IF v_prod.in_stock = false THEN
+      RAISE EXCEPTION 'Le produit "%" est actuellement en rupture de stock.', v_prod.name;
     END IF;
 
     v_unit_price := v_prod.price;
@@ -301,7 +338,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.create_store_order TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_store_order(TEXT, TEXT, TEXT, JSONB) TO anon, authenticated;
 
 -- 9. ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.store_admins ENABLE ROW LEVEL SECURITY;
@@ -313,51 +350,44 @@ ALTER TABLE public.store_order_items ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   DROP POLICY IF EXISTS "Admins can view admins" ON public.store_admins;
-  CREATE POLICY "Admins can view admins" ON public.store_admins
-    FOR SELECT TO authenticated
-    USING (public.is_store_admin());
+  CREATE POLICY "Admins can view admins" ON public.store_admins FOR SELECT TO authenticated USING (private.is_store_admin());
 
   DROP POLICY IF EXISTS "Superadmins can manage admins" ON public.store_admins;
-  CREATE POLICY "Superadmins can manage admins" ON public.store_admins
-    FOR ALL TO authenticated
-    USING (public.is_store_superadmin())
-    WITH CHECK (public.is_store_superadmin());
+  CREATE POLICY "Superadmins can manage admins" ON public.store_admins FOR ALL TO authenticated USING (private.is_store_superadmin()) WITH CHECK (private.is_store_superadmin());
 
   DROP POLICY IF EXISTS "Public can view published products" ON public.store_products;
-  CREATE POLICY "Public can view published products" ON public.store_products FOR SELECT USING (published = true OR public.is_store_admin());
+  CREATE POLICY "Public can view published products" ON public.store_products FOR SELECT USING (published = true OR private.is_store_admin());
   DROP POLICY IF EXISTS "Admins can manage products" ON public.store_products;
-  CREATE POLICY "Admins can manage products" ON public.store_products FOR ALL TO authenticated USING (public.is_store_admin()) WITH CHECK (public.is_store_admin());
+  CREATE POLICY "Admins can manage products" ON public.store_products FOR ALL TO authenticated USING (private.is_store_admin()) WITH CHECK (private.is_store_admin());
 
   DROP POLICY IF EXISTS "Public can view published videos" ON public.store_videos;
-  CREATE POLICY "Public can view published videos" ON public.store_videos FOR SELECT USING (published = true OR public.is_store_admin());
+  CREATE POLICY "Public can view published videos" ON public.store_videos FOR SELECT USING (published = true OR private.is_store_admin());
   DROP POLICY IF EXISTS "Admins can manage videos" ON public.store_videos;
-  CREATE POLICY "Admins can manage videos" ON public.store_videos FOR ALL TO authenticated USING (public.is_store_admin()) WITH CHECK (public.is_store_admin());
+  CREATE POLICY "Admins can manage videos" ON public.store_videos FOR ALL TO authenticated USING (private.is_store_admin()) WITH CHECK (private.is_store_admin());
 
   DROP POLICY IF EXISTS "Public can view store settings" ON public.store_settings;
   CREATE POLICY "Public can view store settings" ON public.store_settings FOR SELECT USING (true);
   DROP POLICY IF EXISTS "Admins can update settings" ON public.store_settings;
-  CREATE POLICY "Admins can update settings" ON public.store_settings FOR UPDATE TO authenticated USING (public.is_store_admin()) WITH CHECK (public.is_store_admin());
+  CREATE POLICY "Admins can update settings" ON public.store_settings FOR UPDATE TO authenticated USING (private.is_store_admin()) WITH CHECK (private.is_store_admin());
 
-  -- Orders & Items RLS: AUCUNE lecture publique, INSERT public (ou via RPC), SELECT/UPDATE/DELETE réservé aux admins
+  -- Orders & Items RLS: AUCUNE INSERTION DIRECTE NI LECTURE PUBLIQUE (Passage obligatoire par RPC create_store_order)
   DROP POLICY IF EXISTS "Public can insert orders" ON public.store_orders;
-  CREATE POLICY "Public can insert orders" ON public.store_orders FOR INSERT WITH CHECK (true);
   DROP POLICY IF EXISTS "Public can insert order items" ON public.store_order_items;
-  CREATE POLICY "Public can insert order items" ON public.store_order_items FOR INSERT WITH CHECK (true);
 
   DROP POLICY IF EXISTS "Admins can view orders" ON public.store_orders;
-  CREATE POLICY "Admins can view orders" ON public.store_orders FOR SELECT TO authenticated USING (public.is_store_admin());
+  CREATE POLICY "Admins can view orders" ON public.store_orders FOR SELECT TO authenticated USING (private.is_store_admin());
   DROP POLICY IF EXISTS "Admins can view order items" ON public.store_order_items;
-  CREATE POLICY "Admins can view order items" ON public.store_order_items FOR SELECT TO authenticated USING (public.is_store_admin());
+  CREATE POLICY "Admins can view order items" ON public.store_order_items FOR SELECT TO authenticated USING (private.is_store_admin());
 
   DROP POLICY IF EXISTS "Admins can update orders" ON public.store_orders;
-  CREATE POLICY "Admins can update orders" ON public.store_orders FOR UPDATE TO authenticated USING (public.is_store_admin()) WITH CHECK (public.is_store_admin());
+  CREATE POLICY "Admins can update orders" ON public.store_orders FOR UPDATE TO authenticated USING (private.is_store_admin()) WITH CHECK (private.is_store_admin());
   DROP POLICY IF EXISTS "Admins can delete orders" ON public.store_orders;
-  CREATE POLICY "Admins can delete orders" ON public.store_orders FOR DELETE TO authenticated USING (public.is_store_admin());
+  CREATE POLICY "Admins can delete orders" ON public.store_orders FOR DELETE TO authenticated USING (private.is_store_admin());
 
   DROP POLICY IF EXISTS "Admins can update order items" ON public.store_order_items;
-  CREATE POLICY "Admins can update order items" ON public.store_order_items FOR UPDATE TO authenticated USING (public.is_store_admin()) WITH CHECK (public.is_store_admin());
+  CREATE POLICY "Admins can update order items" ON public.store_order_items FOR UPDATE TO authenticated USING (private.is_store_admin()) WITH CHECK (private.is_store_admin());
   DROP POLICY IF EXISTS "Admins can delete order items" ON public.store_order_items;
-  CREATE POLICY "Admins can delete order items" ON public.store_order_items FOR DELETE TO authenticated USING (public.is_store_admin());
+  CREATE POLICY "Admins can delete order items" ON public.store_order_items FOR DELETE TO authenticated USING (private.is_store_admin());
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 `;

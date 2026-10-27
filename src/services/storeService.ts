@@ -436,44 +436,11 @@ export async function createOrderRemote(orderData: Omit<StoreOrder, 'id' | 'orde
           orderNumber: rpcData.order_number,
           total: Number(rpcData.total)
         };
-      } else {
-        // Fallback to direct insertion if RPC function is not yet created in Supabase
-        const orderRow = {
-          id: finalOrder.id,
-          order_number: finalOrder.orderNumber,
-          customer_name: finalOrder.customerName,
-          customer_phone: finalOrder.customerPhone || null,
-          commune: finalOrder.commune,
-          subtotal: finalOrder.subtotal,
-          delivery_fee: 0,
-          total: finalOrder.total,
-          status: 'pending',
-          payment_method: 'Paiement au retrait en boutique',
-          notes: finalOrder.notes || null,
-          created_at: new Date(finalOrder.createdAt).toISOString()
-        };
-
-        const { error: orderError } = await supabase
-          .from('store_orders')
-          .insert(orderRow);
-
-        if (!orderError && finalOrder.items.length > 0) {
-          const itemRows = finalOrder.items.map((it) => ({
-            order_id: finalOrder.id,
-            product_id: it.productId,
-            product_name: it.productName,
-            product_image: it.productImage,
-            chosen_storage: it.chosenStorage,
-            chosen_color: it.chosenColor,
-            quantity: it.quantity,
-            unit_price: it.unitPrice
-          }));
-
-          await supabase.from('store_order_items').insert(itemRows);
-        }
+      } else if (rpcError) {
+        console.error('Erreur lors de la création de la commande via la fonction RPC create_store_order:', rpcError.message);
       }
     } catch (err) {
-      console.error('Network error during Supabase order creation:', err);
+      console.error('Erreur réseau lors de la création de la commande Supabase:', err);
     }
   }
 

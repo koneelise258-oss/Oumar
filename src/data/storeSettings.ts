@@ -71,10 +71,10 @@ export function getWhatsAppUrl(message: string): string {
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
-export function verifyAdminPin(enteredPin: string): boolean {
-  const settings = loadStoreSettings();
-  const currentPin = settings.adminPin || '2025';
-  return enteredPin.trim() === currentPin.trim();
+export function verifyAdminPin(_enteredPin: string): boolean {
+  // Accès PIN local désactivé par mesure de sécurité.
+  // L'authentification administrateur doit obligatoirement passer par Supabase Auth.
+  return false;
 }
 
 export const ADMIN_EMAIL_STORAGE_KEY = 'oumar_admin_email';
