@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { CartItem } from '../types';
-import { X, Plus, Minus, Trash2, MessageCircle, ShieldCheck, CheckCircle2, Store, RefreshCw, AlertTriangle } from 'lucide-react';
+import { X, Plus, Minus, Trash2, MessageCircle, ShieldCheck, CheckCircle2, Store, AlertTriangle } from 'lucide-react';
 import { getWhatsAppUrl } from '../data/storeSettings';
-import { createOrderRemote } from '../services/storeService';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -38,7 +37,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const deliveryFee = 0;
   const total = subtotal;
 
-  const handleOrderSubmitted = async (e: React.FormEvent | React.MouseEvent) => {
+  const handleOrderSubmitted = (e: React.FormEvent | React.MouseEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
@@ -51,29 +50,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setIsSubmitting(true);
 
     try {
-      // 1. Transmettre la réservation au serveur Supabase et attendre la confirmation explicite (RPC)
-      const confirmedOrder = await createOrderRemote({
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim() || undefined,
-        commune: 'Retrait en boutique OUMAR IPHONE',
-        items: items.map((it) => ({
-          productId: it.product.id,
-          productName: it.product.name,
-          productImage: it.product.image,
-          chosenStorage: it.chosenStorage,
-          chosenColor: it.chosenColor,
-          quantity: it.quantity,
-          unitPrice: it.unitPrice || it.product.price
-        })),
-        subtotal,
-        deliveryFee: 0,
-        total,
-        status: 'pending',
-        paymentMethod: 'Paiement au retrait en boutique',
-        notes: 'Réservation passée en ligne pour retrait en boutique OUMAR IPHONE Abidjan'
-      });
-
-      // 2. Construire le message WhatsApp avec le numéro de commande et le total confirmés par le serveur
+      // Construction du message WhatsApp direct avec les détails du panier
       const itemListText = items
         .map(
           (it) =>
@@ -83,11 +60,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         )
         .join('\n');
 
-      const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite valider la réservation de ma commande N° ${confirmedOrder.orderNumber} :\n\n${itemListText}\n\nTotal confirmé : ${confirmedOrder.total.toLocaleString(
+      const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite réserver les appareils suivants pour un retrait en boutique :\n\n${itemListText}\n\nTotal estimé : ${total.toLocaleString(
         'fr-FR'
-      )} FCFA\n\nClient : ${confirmedOrder.customerName}${confirmedOrder.customerPhone ? `\nTéléphone : ${confirmedOrder.customerPhone}` : ''}\nMode : Retrait en Boutique OUMAR IPHONE Abidjan\nRèglement : Paiement au retrait (Espèces / Wave / Orange Money)`;
+      )} FCFA\n\nNom du client : ${customerName.trim()}${customerPhone.trim() ? `\nTéléphone de contact : ${customerPhone.trim()}` : ''}\nMode de retrait : En boutique OUMAR IPHONE (Abidjan)\nRèglement : Au retrait (Espèces / Wave / Orange Money)\n\nMerci de me confirmer la disponibilité et le rendez-vous en boutique.`;
 
-      // 3. Ouvrir WhatsApp
+      // Ouvrir WhatsApp via le lien wa.me sécurisé
       const whatsappUrl = getWhatsAppUrl(whatsappMessage);
       window.open(whatsappUrl, '_blank');
 
@@ -99,8 +76,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         onClose();
       }, 2000);
     } catch (err: any) {
-      console.error('Échec de la réservation:', err);
-      setFormError(err?.message || "Impossible d'enregistrer votre commande sur le serveur. Veuillez vérifier votre connexion et réessayer.");
+      console.error('Échec de la préparation WhatsApp:', err);
+      setFormError('Impossible d’ouvrir WhatsApp. Veuillez vérifier votre navigateur ou l’application WhatsApp.');
       setIsSubmitting(false);
     }
   };
@@ -289,13 +266,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               >
                 {isSubmitting ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Enregistrement sécurisé...</span>
+                    <MessageCircle className="w-4 h-4 animate-bounce" />
+                    <span>Préparation du message WhatsApp...</span>
                   </>
                 ) : orderSent ? (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Réservation transmise (Validation en cours)</span>
+                    <span>Demande préparée sur WhatsApp !</span>
                   </>
                 ) : (
                   <>

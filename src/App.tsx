@@ -26,13 +26,13 @@ function StoreApp() {
   // Background sync with Supabase on mount
   useEffect(() => {
     fetchProductsRemote().then((remoteProds) => {
-      if (remoteProds && remoteProds.length > 0) {
+      if (Array.isArray(remoteProds)) {
         setProducts(remoteProds);
       }
     }).catch(() => {});
 
     fetchVideosRemote().then((remoteVideos) => {
-      if (remoteVideos && remoteVideos.length > 0) {
+      if (Array.isArray(remoteVideos)) {
         setVideos(remoteVideos);
       }
     }).catch(() => {});

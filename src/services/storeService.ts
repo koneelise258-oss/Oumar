@@ -112,9 +112,11 @@ export async function fetchProductsRemote(): Promise<Product[]> {
       return loadProducts();
     }
 
-    if (data && data.length > 0) {
+    if (data) {
       const mapped = data.map(rowToProduct);
-      saveProducts(mapped); // Cache locally for offline reliability
+      if (mapped.length > 0) {
+        saveProducts(mapped); // Cache locally for offline reliability
+      }
       return mapped;
     }
   } catch (err) {
@@ -189,9 +191,11 @@ export async function fetchVideosRemote(): Promise<VideoItem[]> {
       return loadVideos();
     }
 
-    if (data && data.length > 0) {
+    if (data) {
       const mapped = data.map(rowToVideo);
-      saveVideos(mapped);
+      if (mapped.length > 0) {
+        saveVideos(mapped);
+      }
       return mapped;
     }
   } catch (err) {
@@ -621,21 +625,26 @@ export async function addStoreAdminRemote(newAdmin: {
   }
 
   try {
-    const { error } = await supabase
-      .from('store_admins')
-      .insert({
-        email: newAdmin.email.trim().toLowerCase(),
-        role: newAdmin.role,
-        phone: newAdmin.phone?.trim() || null,
-        is_active: true
-      });
+    const { data, error } = await supabase.rpc('add_store_admin_by_email', {
+      p_email: newAdmin.email.trim().toLowerCase(),
+      p_role: newAdmin.role,
+      p_phone: newAdmin.phone?.trim() || null
+    });
 
     if (error) {
-      return { success: false, message: error.message };
+      return { success: false, message: `Erreur de traitement: ${error.message}` };
     }
-    return { success: true, message: `Administrateur ${newAdmin.email} ajouté avec succès.` };
+
+    if (data && typeof data === 'object' && 'success' in data) {
+      if (!data.success) {
+        return { success: false, message: data.message || 'L’utilisateur n’a pas pu être ajouté.' };
+      }
+      return { success: true, message: data.message || `Administrateur ${newAdmin.email} associé avec succès.` };
+    }
+
+    return { success: true, message: `Administrateur ${newAdmin.email} traité avec succès.` };
   } catch (e: any) {
-    return { success: false, message: e?.message || 'Erreur inconnue.' };
+    return { success: false, message: e?.message || 'Erreur inconnue lors de l’ajout.' };
   }
 }
 
