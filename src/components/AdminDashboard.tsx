@@ -18,6 +18,7 @@ import {
   loadStoreSettings, 
   saveStoreSettings, 
   setAdminAuthenticated,
+  getAdminEmail,
   getWhatsAppUrl,
   getHeroCustomPhoto,
   saveHeroCustomPhoto
@@ -38,7 +39,7 @@ import {
   testSupabaseHealth,
   SyncMigrationResult
 } from '../services/storeService';
-import { SUPABASE_PROJECT_ID, isSupabaseConfigured, supabaseUrl } from '../lib/supabase';
+import { SUPABASE_PROJECT_ID, isSupabaseConfigured, supabaseUrl, signOutAdmin } from '../lib/supabase';
 import { SUPABASE_MIGRATION_SQL } from '../db/migrationSql';
 import {
   X,
@@ -681,10 +682,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setPinMessage(null), 4000);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOutAdmin();
     setAdminAuthenticated(false);
     onClose();
   };
+
+  const currentAdminEmail = getAdminEmail();
 
   if (!isOpen) return null;
 
@@ -704,16 +708,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <ShieldCheck className="w-5 h-5 text-emerald-400 dark:text-emerald-600" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-lg font-bold text-slate-950 dark:text-white font-['Outfit']">
                   Espace Direction & Gestion
                 </h2>
                 <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                   OUMAR IPHONE
                 </span>
+                {currentAdminEmail && (
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                    {currentAdminEmail}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Administration complète · Catalogue, Stocks, Vidéos, Commandes & Paramètres Abidjan
+                Administration sécurisée · Catalogue, Stocks, Vidéos, Commandes & Paramètres Abidjan
               </p>
             </div>
           </div>

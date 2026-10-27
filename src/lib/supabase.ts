@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 
 export const SUPABASE_PROJECT_ID = 'orjbwpbyiqscbbvaukrz';
 export const DEFAULT_SUPABASE_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co`;
@@ -53,7 +53,6 @@ export async function testSupabaseHealth(): Promise<SupabaseHealthResult> {
   }
 
   try {
-    // Attempt a lightweight query to store_products
     const { error, count } = await supabase
       .from('store_products')
       .select('id', { count: 'exact', head: true });
@@ -78,4 +77,117 @@ export async function testSupabaseHealth(): Promise<SupabaseHealthResult> {
   }
 
   return result;
+}
+
+// ==============================================================================
+// SUPABASE AUTH & ADMIN AUTHORIZATION (RBAC)
+// ==============================================================================
+export interface StoreAdminRecord {
+  id: string;
+  user_id: string;
+  email: string;
+  role: 'superadmin' | 'admin' | 'manager';
+}
+
+export async function checkIsUserAdmin(userId?: string, email?: string): Promise<{
+  isAdmin: boolean;
+  record?: StoreAdminRecord;
+  error?: string;
+}> {
+  if (!isSupabaseConfigured) {
+    return { isAdmin: false, error: 'Supabase non configuré' };
+  }
+
+  if (!userId && !email) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return { isAdmin: false };
+    userId = session.user.id;
+    email = session.user.email;
+  }
+
+  try {
+    // 1. Check in store_admins by user_id
+    if (userId) {
+      const { data, error } = await supabase
+        .from('store_admins')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!error && data) {
+        return { isAdmin: true, record: data as StoreAdminRecord };
+      }
+    }
+
+    // 2. Check in store_admins by email (case-insensitive)
+    if (email) {
+      const { data, error } = await supabase
+        .from('store_admins')
+        .select('*')
+        .ilike('email', email.trim())
+        .maybeSingle();
+
+      if (!error && data) {
+        return { isAdmin: true, record: data as StoreAdminRecord };
+      }
+    }
+  } catch (e: any) {
+    console.warn('Error checking store admin status:', e?.message);
+  }
+
+  return { isAdmin: false };
+}
+
+export async function signInAdminWithPassword(email: string, password: string): Promise<{
+  user: User | null;
+  isAdmin: boolean;
+  error?: string;
+}> {
+  if (!isSupabaseConfigured) {
+    return {
+      user: null,
+      isAdmin: false,
+      error: "Supabase n'est pas encore configuré avec VITE_SUPABASE_ANON_KEY dans le fichier .env."
+    };
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password: password.trim()
+  });
+
+  if (error || !data.user) {
+    return {
+      user: null,
+      isAdmin: false,
+      error: error?.message || "Identifiants Supabase Auth invalides."
+    };
+  }
+
+  // Verify explicit admin authorization in store_admins
+  const adminCheck = await checkIsUserAdmin(data.user.id, data.user.email);
+  if (!adminCheck.isAdmin) {
+    // If not listed in store_admins, sign out immediately to prevent unauthorized session
+    await supabase.auth.signOut();
+    return {
+      user: null,
+      isAdmin: false,
+      error: `Accès refusé : Le compte "${data.user.email}" n'est pas répertorié dans la table store_admins. Veuillez contacter le propriétaire.`
+    };
+  }
+
+  return {
+    user: data.user,
+    isAdmin: true
+  };
+}
+
+export async function signOutAdmin(): Promise<void> {
+  if (isSupabaseConfigured) {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('Error signing out Supabase:', e);
+    }
+  }
 }

@@ -83,6 +83,8 @@ export function verifyAdminPin(enteredPin: string): boolean {
   return enteredPin.trim() === currentPin.trim();
 }
 
+export const ADMIN_EMAIL_STORAGE_KEY = 'oumar_admin_email';
+
 export function isAdminAuthenticated(): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -92,13 +94,26 @@ export function isAdminAuthenticated(): boolean {
   }
 }
 
-export function setAdminAuthenticated(auth: boolean): void {
+export function getAdminEmail(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return sessionStorage.getItem(ADMIN_EMAIL_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAdminAuthenticated(auth: boolean, email?: string): void {
   if (typeof window === 'undefined') return;
   try {
     if (auth) {
       sessionStorage.setItem(ADMIN_AUTH_STORAGE_KEY, 'authenticated');
+      if (email) {
+        sessionStorage.setItem(ADMIN_EMAIL_STORAGE_KEY, email);
+      }
     } else {
       sessionStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
+      sessionStorage.removeItem(ADMIN_EMAIL_STORAGE_KEY);
     }
     window.dispatchEvent(new CustomEvent('oumar_admin_auth_changed', { detail: auth }));
   } catch {

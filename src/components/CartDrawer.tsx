@@ -273,7 +273,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 {orderSent ? (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Commande transmise !</span>
+                    <span>Commande transmise (En attente de validation)</span>
                   </>
                 ) : (
                   <>
