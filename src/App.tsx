@@ -11,6 +11,7 @@ import { AdminAuthModal } from './components/AdminAuthModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { loadProducts } from './data/products';
 import { loadVideos } from './data/videos';
+import { fetchProductsRemote, fetchVideosRemote } from './services/storeService';
 import { isAdminAuthenticated } from './data/storeSettings';
 import { CartItem, Product, VideoItem } from './types';
 import { ThemeProvider } from './context/ThemeContext';
@@ -21,6 +22,21 @@ function StoreApp() {
   const [videos, setVideos] = useState<VideoItem[]>(loadVideos);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+
+  // Background sync with Supabase on mount
+  useEffect(() => {
+    fetchProductsRemote().then((remoteProds) => {
+      if (remoteProds && remoteProds.length > 0) {
+        setProducts(remoteProds);
+      }
+    }).catch(() => {});
+
+    fetchVideosRemote().then((remoteVideos) => {
+      if (remoteVideos && remoteVideos.length > 0) {
+        setVideos(remoteVideos);
+      }
+    }).catch(() => {});
+  }, []);
 
   // Search Modal state
   const [isSearchOpen, setIsSearchOpen] = useState(false);

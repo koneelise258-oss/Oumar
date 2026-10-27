@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { CartItem } from '../types';
 import { X, Plus, Minus, Trash2, MessageCircle, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
-import { recordNewOrder } from '../data/orders';
+import { createOrderRemote } from '../services/storeService';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -23,6 +23,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 }) => {
   const [commune, setCommune] = useState('Cocody');
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [orderSent, setOrderSent] = useState(false);
 
   if (!isOpen) return null;
@@ -50,13 +51,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     'fr-FR'
   )} FCFA\nTotal : ${total.toLocaleString(
     'fr-FR'
-  )} FCFA\n\nNom du client : ${customerName || 'Client Abidjan'}\nLieu de livraison : ${commune}\nMode de règlement : Paiement à la livraison`;
+  )} FCFA\n\nNom du client : ${customerName || 'Client Abidjan'}${customerPhone ? `\nTéléphone : ${customerPhone}` : ''}\nLieu de livraison : ${commune}\nMode de règlement : Paiement à la livraison`;
 
   const handleOrderSubmitted = () => {
-    // Record order in store orders history
+    // Record order in Supabase and local store orders history
     try {
-      recordNewOrder({
+      createOrderRemote({
         customerName: customerName.trim() || 'Client Abidjan',
+        customerPhone: customerPhone.trim() || undefined,
         commune,
         items: items.map((it) => ({
           productId: it.product.id,
@@ -213,13 +215,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1">
-                    Votre Prénom
+                    Votre Nom ou Prénom
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex: Jean"
+                    placeholder="Ex: Jean Kouassi"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
+                    className="w-full text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1">
+                    Numéro de contact (Optionnel)
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="Ex: 07 00 00 00 00"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
                     className="w-full text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-white"
                   />
                 </div>

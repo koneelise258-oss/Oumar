@@ -26,6 +26,21 @@ import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905
 import { saveProducts, resetProducts } from '../data/products';
 import { saveVideos, resetVideos } from '../data/videos';
 import {
+  upsertProductRemote,
+  deleteProductRemote,
+  syncVideosRemote,
+  deleteVideoRemote,
+  saveStoreSettingsRemote,
+  updateOrderStatusRemote,
+  deleteOrderRemote,
+  fetchOrdersRemote,
+  syncLocalDataToSupabase,
+  testSupabaseHealth,
+  SyncMigrationResult
+} from '../services/storeService';
+import { SUPABASE_PROJECT_ID, isSupabaseConfigured, supabaseUrl } from '../lib/supabase';
+import { SUPABASE_MIGRATION_SQL } from '../db/migrationSql';
+import {
   X,
   Package,
   Video,
@@ -55,7 +70,13 @@ import {
   ChevronDown,
   AlertTriangle,
   Sparkles,
-  Smartphone
+  Smartphone,
+  Database,
+  Cloud,
+  RefreshCw,
+  FileCode,
+  CheckCheck,
+  Server
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -84,6 +105,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Success / notification message
   const [notification, setNotification] = useState<string | null>(null);
 
+  const triggerNotification = (msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 3000);
+  };
+
   // Sync orders & settings from events
   useEffect(() => {
     const handleOrdersUpdate = (e: any) => {
@@ -100,9 +126,103 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
   }, []);
 
-  const triggerNotification = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 3000);
+  // Supabase Cloud Integration States
+  const [supabaseStatus, setSupabaseStatus] = useState<{
+    tested: boolean;
+    loading: boolean;
+    connected: boolean;
+    tablesReady: boolean;
+    message: string;
+  }>({
+    tested: false,
+    loading: false,
+    connected: isSupabaseConfigured,
+    tablesReady: false,
+    message: isSupabaseConfigured
+      ? 'Variables Supabase détectées. Cliquez sur "Tester la connexion" pour vérifier l’état des tables.'
+      : 'Supabase fonctionne en mode local sécurisé (en attente de VITE_SUPABASE_ANON_KEY dans .env).'
+  });
+  const [isSyncingSupabase, setIsSyncingSupabase] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncMigrationResult | null>(null);
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
+
+  // Background fetch remote orders when dashboard opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchOrdersRemote()
+        .then((remoteOrders) => {
+          if (remoteOrders && remoteOrders.length > 0) {
+            setOrders(remoteOrders);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
+  const handleTestSupabase = async () => {
+    setSupabaseStatus((prev) => ({ ...prev, loading: true }));
+    try {
+      const res = await testSupabaseHealth();
+      setSupabaseStatus({
+        tested: true,
+        loading: false,
+        connected: res.isConnected,
+        tablesReady: res.tablesReady,
+        message: res.message
+      });
+      triggerNotification(res.tablesReady ? 'Connexion Supabase opérationnelle !' : 'Test Supabase terminé');
+    } catch (e: any) {
+      setSupabaseStatus({
+        tested: true,
+        loading: false,
+        connected: false,
+        tablesReady: false,
+        message: `Erreur: ${e?.message || 'Échec du test'}`
+      });
+    }
+  };
+
+  const handleSyncToSupabase = async () => {
+    if (!isSupabaseConfigured) {
+      alert("Veuillez d’abord renseigner VITE_SUPABASE_ANON_KEY dans le fichier .env avant d’initialiser les données dans Supabase.");
+      return;
+    }
+
+    if (!window.confirm("Êtes-vous sûr de vouloir synchroniser tout le catalogue, les vidéos et les paramètres locaux vers Supabase ? Cette action mettra à jour la base de données distante.")) {
+      return;
+    }
+
+    setIsSyncingSupabase(true);
+    setSyncResult(null);
+
+    try {
+      const res = await syncLocalDataToSupabase(products, videos, settings);
+      setSyncResult(res);
+      if (res.success) {
+        triggerNotification('Données synchronisées avec succès sur Supabase !');
+      }
+    } catch (e: any) {
+      setSyncResult({
+        success: false,
+        message: `Erreur de synchronisation: ${e?.message || 'Inconnue'}`
+      });
+    } finally {
+      setIsSyncingSupabase(false);
+    }
+  };
+
+  const handleCopySql = async () => {
+    try {
+      await navigator.clipboard.writeText(SUPABASE_MIGRATION_SQL);
+      setCopiedSql(true);
+      triggerNotification('Script SQL copié dans le presse-papier !');
+      setTimeout(() => setCopiedSql(false), 2500);
+    } catch {
+      // Fallback
+      setCopiedSql(true);
+      setTimeout(() => setCopiedSql(false), 2500);
+    }
   };
 
   // ==========================================
@@ -186,6 +306,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const updated = [completeProduct, ...products];
       onProductsUpdated(updated);
       saveProducts(updated);
+      upsertProductRemote(completeProduct);
       triggerNotification(`Produit "${completeProduct.name}" créé avec succès !`);
     } else {
       const updated = products.map((p) =>
@@ -193,6 +314,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       );
       onProductsUpdated(updated);
       saveProducts(updated);
+      upsertProductRemote(completeProduct);
       triggerNotification(`Produit "${completeProduct.name}" mis à jour !`);
     }
 
@@ -210,6 +332,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const updated = [clone, ...products];
     onProductsUpdated(updated);
     saveProducts(updated);
+    upsertProductRemote(clone);
     triggerNotification(`Copie créée pour "${p.name}"`);
   };
 
@@ -219,6 +342,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
     onProductsUpdated(updated);
     saveProducts(updated);
+    const target = updated.find((p) => p.id === id);
+    if (target) upsertProductRemote(target);
   };
 
   const handleToggleProductStock = (id: string) => {
@@ -227,6 +352,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
     onProductsUpdated(updated);
     saveProducts(updated);
+    const target = updated.find((p) => p.id === id);
+    if (target) upsertProductRemote(target);
     triggerNotification('Statut de stock modifié');
   };
 
@@ -244,6 +371,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const updated = products.filter((p) => p.id !== id);
     onProductsUpdated(updated);
     saveProducts(updated);
+    deleteProductRemote(id);
     setProductDeleteConfirmId(null);
     triggerNotification('Produit supprimé du catalogue');
   };
@@ -366,6 +494,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const updated = [newVid, ...videos];
     onVideosUpdated(updated);
     saveVideos(updated);
+    syncVideosRemote(updated);
     setVideoUrlInput('');
     setVideoTitleInput('');
     setIsAddingVideo(false);
@@ -378,6 +507,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
     onVideosUpdated(updated);
     saveVideos(updated);
+    syncVideosRemote(updated);
   };
 
   const handleMoveVideo = (index: number, direction: 'up' | 'down') => {
@@ -389,6 +519,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const reordered = clone.map((v, i) => ({ ...v, order: i + 1 }));
     onVideosUpdated(reordered);
     saveVideos(reordered);
+    syncVideosRemote(reordered);
   };
 
   const handleDeleteVideo = (id: string) => {
@@ -397,6 +528,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       .map((v, i) => ({ ...v, order: i + 1 }));
     onVideosUpdated(updated);
     saveVideos(updated);
+    deleteVideoRemote(id);
     setVideoDeleteConfirmId(null);
     triggerNotification('Vidéo supprimée');
   };
@@ -443,12 +575,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleUpdateStatus = (orderId: string, status: OrderStatus) => {
     updateOrderStatus(orderId, status);
+    updateOrderStatusRemote(orderId, status);
     triggerNotification('Statut de la commande actualisé');
   };
 
   const handleDeleteOrder = (orderId: string) => {
     if (window.confirm('Supprimer cette commande de l’historique ?')) {
       deleteOrder(orderId);
+      deleteOrderRemote(orderId);
       triggerNotification('Commande supprimée');
     }
   };
@@ -518,6 +652,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleSaveStoreSettings = () => {
     saveStoreSettings(settingsForm);
+    saveStoreSettingsRemote(settingsForm);
     triggerNotification('Paramètres de la boutique enregistrés !');
   };
 
@@ -1598,19 +1733,259 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   )}
 
-                  <button
-                    type="submit"
-                    className="px-4 py-2.5 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-950 rounded-xl hover:opacity-90 transition-opacity cursor-pointer"
-                  >
-                    Mettre à jour le code secret
-                  </button>
                 </form>
+              </div>
+
+              {/* Card 4: Supabase Cloud Database & Data Synchronization */}
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                      <Database className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2">
+                        <span>Base de Données Cloud Supabase</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-normal">
+                          {SUPABASE_PROJECT_ID} (eu-west-1)
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Persistance temps réel multi-appareils (catalogue, vidéos, commandes) avec isolation stricte des tables du magasin (<code className="text-emerald-600 dark:text-emerald-400">store_*</code>).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                      supabaseStatus.tablesReady
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60'
+                        : isSupabaseConfigured
+                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60'
+                        : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                    }`}>
+                      <span className={`w-2 h-2 rounded-full ${
+                        supabaseStatus.tablesReady
+                          ? 'bg-emerald-500 animate-pulse'
+                          : isSupabaseConfigured
+                          ? 'bg-amber-500'
+                          : 'bg-slate-400'
+                      }`} />
+                      <span>
+                        {supabaseStatus.tablesReady
+                          ? 'Base Cloud Opérationnelle'
+                          : isSupabaseConfigured
+                          ? 'Clés détectées (Non testé)'
+                          : 'Mode Local Sécurisé (Cache actif)'}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Cloud Details Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">ID Projet Supabase</span>
+                    <span className="font-mono font-bold text-slate-900 dark:text-white">{SUPABASE_PROJECT_ID}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">Région Cloud</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">eu-west-1 (Europe Ouest)</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">Isolation Données</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">Strictement préfixé store_*</span>
+                  </div>
+                </div>
+
+                {/* Status Message or Warning */}
+                {supabaseStatus.message && (
+                  <div className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 ${
+                    supabaseStatus.tablesReady
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/60'
+                      : supabaseStatus.connected
+                      ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800/60'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}>
+                    <Cloud className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold">{supabaseStatus.message}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sync Result Report */}
+                {syncResult && (
+                  <div className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 ${
+                    syncResult.success
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800/60'
+                      : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-200 border border-rose-200 dark:border-rose-800/60'
+                  }`}>
+                    {syncResult.success ? (
+                      <Check className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                    )}
+                    <div>
+                      <p className="font-semibold">{syncResult.message}</p>
+                      {syncResult.details && (
+                        <p className="text-[11px] opacity-80 mt-1">
+                          Produits synchronisés : {syncResult.details.productsCount} · Vidéos synchronisées : {syncResult.details.videosCount} · Paramètres : Synchronisés
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleTestSupabase}
+                    disabled={supabaseStatus.loading}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${supabaseStatus.loading ? 'animate-spin' : ''}`} />
+                    <span>{supabaseStatus.loading ? 'Test en cours...' : 'Tester la connexion Supabase'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSyncToSupabase}
+                    disabled={isSyncingSupabase}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    <Cloud className={`w-3.5 h-3.5 ${isSyncingSupabase ? 'animate-bounce' : ''}`} />
+                    <span>{isSyncingSupabase ? 'Synchronisation en cours...' : 'Synchroniser le catalogue local vers Supabase'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsSqlModalOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 transition-all cursor-pointer shadow-xs"
+                  >
+                    <FileCode className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Afficher le script SQL de migration</span>
+                  </button>
+                </div>
+
+                {/* Help instructions for environment setup */}
+                {!isSupabaseConfigured && (
+                  <div className="mt-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 space-y-2">
+                    <p className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Comment activer la connexion à votre projet Supabase ({SUPABASE_PROJECT_ID}) ?</span>
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1.5 pl-1">
+                      <li>
+                        Ouvrez le tableau de bord Supabase : <a href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}`} target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold">Projet Oumar iPhone (eu-west-1)</a>
+                      </li>
+                      <li>
+                        Dans <strong>Project Settings &gt; API</strong>, copiez la clé <code className="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[11px]">anon public</code>.
+                      </li>
+                      <li>
+                        Renseignez la variable <code className="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[11px]">VITE_SUPABASE_ANON_KEY="..."</code> dans le fichier <code className="font-semibold">.env</code> du projet.
+                      </li>
+                      <li>
+                        Exécutez le script SQL fourni dans l'éditeur SQL de Supabase (bouton ci-dessus) pour créer les tables <code className="text-emerald-600 dark:text-emerald-400">store_*</code> en toute sécurité.
+                      </li>
+                    </ol>
+                  </div>
+                )}
               </div>
 
             </div>
           )}
 
         </div>
+
+        {/* ========================================================= */}
+        {/* SQL MIGRATION MODAL */}
+        {/* ========================================================= */}
+        {isSqlModalOpen && (
+          <div className="fixed inset-0 z-70 bg-black/75 backdrop-blur-sm flex justify-center items-center p-3 sm:p-6 overflow-y-auto">
+            <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 max-h-[90vh] flex flex-col text-slate-900 dark:text-white animate-in zoom-in-95">
+              
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+                    <FileCode className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold font-['Outfit']">
+                      Script SQL de Migration Supabase
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Projet : {SUPABASE_PROJECT_ID} (eu-west-1) · Tables <code className="text-emerald-600 dark:text-emerald-400">store_*</code> · Respect strict des tables scolaires
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopySql}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+                  >
+                    {copiedSql ? (
+                      <>
+                        <CheckCheck className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
+                        <span>Copié !</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        <span>Copier le script SQL</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsSqlModalOpen(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Guide bar */}
+              <div className="p-3 my-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border border-indigo-100 dark:border-indigo-900/50 text-xs flex items-center justify-between">
+                <span>
+                  Ouvrez l'éditeur SQL de votre console Supabase, collez ce script et cliquez sur <strong>Run</strong>.
+                </span>
+                <a
+                  href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}/sql`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-bold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0 ml-2"
+                >
+                  <span>Aller sur l'éditeur SQL Supabase</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+
+              {/* Code viewer */}
+              <div className="flex-1 overflow-y-auto bg-slate-950 text-emerald-400 font-mono text-[11px] p-4 rounded-2xl border border-slate-800 shadow-inner select-all">
+                <pre className="whitespace-pre-wrap leading-relaxed">{SUPABASE_MIGRATION_SQL}</pre>
+              </div>
+
+              <div className="flex justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800 shrink-0 text-xs">
+                <span className="text-slate-500 dark:text-slate-400">
+                  Fichier également disponible dans : <code className="font-semibold text-slate-700 dark:text-slate-300">/supabase/migrations/20261027_store_schema.sql</code>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsSqlModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Fermer
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
 
         {/* ========================================================= */}
         {/* PRODUCT FORM MODAL (CREATE OR EDIT) */}
