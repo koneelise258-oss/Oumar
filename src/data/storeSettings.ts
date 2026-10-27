@@ -105,3 +105,28 @@ export function setAdminAuthenticated(auth: boolean): void {
     // Ignore storage errors
   }
 }
+
+export const HERO_PHOTO_STORAGE_KEY = 'oumar_photo_custom';
+
+export function getHeroCustomPhoto(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(HERO_PHOTO_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveHeroCustomPhoto(dataUrl: string | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (dataUrl) {
+      localStorage.setItem(HERO_PHOTO_STORAGE_KEY, dataUrl);
+    } else {
+      localStorage.removeItem(HERO_PHOTO_STORAGE_KEY);
+    }
+    window.dispatchEvent(new CustomEvent('oumar_hero_photo_updated', { detail: dataUrl }));
+  } catch (err) {
+    console.error('Error saving hero photo', err);
+  }
+}

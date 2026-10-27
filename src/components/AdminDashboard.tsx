@@ -18,8 +18,11 @@ import {
   loadStoreSettings, 
   saveStoreSettings, 
   setAdminAuthenticated,
-  getWhatsAppUrl 
+  getWhatsAppUrl,
+  getHeroCustomPhoto,
+  saveHeroCustomPhoto
 } from '../data/storeSettings';
+import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
 import { saveProducts, resetProducts } from '../data/products';
 import { saveVideos, resetVideos } from '../data/videos';
 import {
@@ -451,13 +454,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // ==========================================
-  // TAB 4: STORE SETTINGS & PIN
+  // TAB 4: STORE SETTINGS, HERO PHOTO & PIN
   // ==========================================
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(settings);
   const [pinChangeCurrent, setPinChangeCurrent] = useState('');
   const [pinChangeNew, setPinChangeNew] = useState('');
   const [pinChangeConfirm, setPinChangeConfirm] = useState('');
   const [pinMessage, setPinMessage] = useState<{ text: string; error: boolean } | null>(null);
+
+  // Hero Section Photo State
+  const [heroPhotoSrc, setHeroPhotoSrc] = useState<string | null>(getHeroCustomPhoto);
+  const [heroPhotoUrlInput, setHeroPhotoUrlInput] = useState('');
+  const [heroPhotoPreview, setHeroPhotoPreview] = useState<string | null>(getHeroCustomPhoto);
+  const heroPhotoInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync heroPhotoSrc on external update
+  useEffect(() => {
+    const handlePhotoUpdated = (e: any) => {
+      setHeroPhotoSrc(e.detail || null);
+      setHeroPhotoPreview(e.detail || null);
+    };
+    window.addEventListener('oumar_hero_photo_updated', handlePhotoUpdated);
+    return () => window.removeEventListener('oumar_hero_photo_updated', handlePhotoUpdated);
+  }, []);
+
+  const handleHeroPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        triggerNotification("L'image sélectionnée est trop volumineuse (max 10 Mo).");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        if (dataUrl) {
+          setHeroPhotoPreview(dataUrl);
+          saveHeroCustomPhoto(dataUrl);
+          setHeroPhotoSrc(dataUrl);
+          triggerNotification("Photo de la section Hero mise à jour et publiée avec succès !");
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleApplyHeroPhotoUrl = () => {
+    const trimmed = heroPhotoUrlInput.trim();
+    if (!trimmed) return;
+    setHeroPhotoPreview(trimmed);
+    saveHeroCustomPhoto(trimmed);
+    setHeroPhotoSrc(trimmed);
+    setHeroPhotoUrlInput('');
+    triggerNotification("Photo de la section Hero mise à jour avec succès !");
+  };
+
+  const handleResetHeroPhoto = () => {
+    saveHeroCustomPhoto(null);
+    setHeroPhotoSrc(null);
+    setHeroPhotoPreview(null);
+    triggerNotification("Photo de l'Hero réinitialisée à l'image officielle.");
+  };
 
   const handleSaveStoreSettings = () => {
     saveStoreSettings(settingsForm);
@@ -608,7 +665,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             }`}
           >
             <Settings className="w-3.5 h-3.5" />
-            <span>Boutique & Sécurité</span>
+            <span>Visuels Hero, Boutique & Sécurité</span>
           </button>
         </div>
 
@@ -1290,6 +1347,125 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {activeTab === 'settings' && (
             <div className="max-w-3xl mx-auto space-y-6">
               
+              {/* Card 1: Hero Section Photo & Brand Visual Management */}
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <span>Photo de l'Hero Section & Image de Marque (Oumar)</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      Cette photo est le visuel d'accueil officiel. Elle pilote automatiquement le halo d'ambiance chromatique, les reflets et l'arrière-plan de toute la page d'accueil.
+                    </p>
+                  </div>
+                  <div className="shrink-0">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                      heroPhotoSrc 
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60' 
+                        : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                    }`}>
+                      <span className={`w-2 h-2 rounded-full ${heroPhotoSrc ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                      <span>{heroPhotoSrc ? 'Photo personnalisée active' : 'Photo officielle par défaut'}</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                  {/* Photo Preview Column */}
+                  <div className="md:col-span-4 flex flex-col items-center">
+                    <div className="relative w-full max-w-[220px] aspect-[4/5] rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 shadow-md group">
+                      <img
+                        src={heroPhotoPreview || heroPhotoSrc || heroTitaniumSample}
+                        alt="Aperçu photo Hero"
+                        className="w-full h-full object-cover object-top select-none transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-3 pointer-events-none">
+                        <span className="text-[11px] text-white font-semibold font-['Outfit'] tracking-wide">
+                          Aperçu en direct
+                        </span>
+                      </div>
+                    </div>
+                    {heroPhotoSrc && (
+                      <button
+                        type="button"
+                        onClick={handleResetHeroPhoto}
+                        className="mt-3 text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center gap-1.5 font-semibold transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Rétablir la photo d'origine</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Upload & Configuration Controls */}
+                  <div className="md:col-span-8 space-y-4 text-xs">
+                    {/* File Upload Trigger */}
+                    <div>
+                      <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                        Importer une photo depuis vos fichiers
+                      </label>
+                      <input
+                        ref={heroPhotoInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleHeroPhotoUpload}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => heroPhotoInputRef.current?.click()}
+                        className="w-full py-5 px-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-slate-900 dark:hover:border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-2.5 bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all cursor-pointer group shadow-xs"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-800 dark:text-slate-200 group-hover:scale-110 transition-transform">
+                          <Upload className="w-4 h-4 text-slate-900 dark:text-white" />
+                        </div>
+                        <div className="text-center">
+                          <span className="font-bold text-slate-900 dark:text-white block text-sm">
+                            Sélectionner une photo d'Oumar
+                          </span>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Prend en charge PNG, JPG, WebP (Max 10 Mo)
+                          </span>
+                        </div>
+                      </button>
+                    </div>
+
+                    {/* URL Input option */}
+                    <div>
+                      <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                        Ou saisir l'URL directe d'une image web
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          value={heroPhotoUrlInput}
+                          onChange={(e) => setHeroPhotoUrlInput(e.target.value)}
+                          placeholder="https://.../photo-oumar.jpg"
+                          className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleApplyHeroPhotoUrl}
+                          disabled={!heroPhotoUrlInput.trim()}
+                          className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-950 font-bold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity cursor-pointer shrink-0"
+                        >
+                          Appliquer
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Information Box */}
+                    <div className="p-3.5 bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-800/60 rounded-xl text-[11px] text-amber-900 dark:text-amber-300 flex items-start gap-2.5 leading-relaxed">
+                      <Sparkles className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                      <span>
+                        Cette modification est immédiatement sauvegardée et transmise à la page d'accueil publique en temps réel.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Store Parameters Form */}
               <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
                 <h3 className="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2">

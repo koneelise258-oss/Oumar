@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect, ChangeEvent } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { ArrowDown, MessageCircle, ShieldCheck, Zap, Sparkles, Upload, User } from 'lucide-react';
+import { ArrowDown, MessageCircle, ShieldCheck, Zap, Sparkles } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
+import { getHeroCustomPhoto } from '../data/storeSettings';
 import { Product } from '../types';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { LiquidGlassIcon } from './LiquidGlassIcon';
@@ -22,7 +23,6 @@ const DEFAULT_OUMAR_PHOTO_PATH = heroTitaniumSample;
 
 export const Hero: React.FC<HeroProps> = () => {
   const heroRef = useRef<HTMLElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState<number | null>(null);
@@ -53,11 +53,28 @@ export const Hero: React.FC<HeroProps> = () => {
     };
   }, []);
 
-  // Editable image source for Oumar's portrait
+  // Image source for Oumar's portrait (configured in Admin Dashboard)
   const [oumarPhotoSrc, setOumarPhotoSrc] = useState<string>(() => {
-    return localStorage.getItem('oumar_photo_custom') || DEFAULT_OUMAR_PHOTO_PATH;
+    return getHeroCustomPhoto() || DEFAULT_OUMAR_PHOTO_PATH;
   });
   const [imageError, setImageError] = useState(false);
+
+  // Real-time synchronization when admin updates the Hero photo
+  useEffect(() => {
+    const handlePhotoUpdated = (e: any) => {
+      const updatedUrl = e.detail;
+      if (updatedUrl && typeof updatedUrl === 'string') {
+        setOumarPhotoSrc(updatedUrl);
+        setImageError(false);
+      } else {
+        setOumarPhotoSrc(DEFAULT_OUMAR_PHOTO_PATH);
+        setImageError(false);
+      }
+    };
+
+    window.addEventListener('oumar_hero_photo_updated', handlePhotoUpdated);
+    return () => window.removeEventListener('oumar_hero_photo_updated', handlePhotoUpdated);
+  }, []);
 
   // Dynamic photo tone detection for adaptive ambient lighting
   const [photoTone, setPhotoTone] = useState<{
@@ -236,51 +253,12 @@ export const Hero: React.FC<HeroProps> = () => {
     return () => ctx.revert();
   }, []);
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        if (dataUrl) {
-          setOumarPhotoSrc(dataUrl);
-          setImageError(false);
-          try {
-            localStorage.setItem('oumar_photo_custom', dataUrl);
-          } catch {
-            // Storage limit catch (retains in memory)
-          }
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleImageError = () => {
     if (oumarPhotoSrc !== DEFAULT_OUMAR_PHOTO_PATH) {
-      try {
-        localStorage.removeItem('oumar_photo_custom');
-      } catch {
-        // Ignore
-      }
       setOumarPhotoSrc(DEFAULT_OUMAR_PHOTO_PATH);
       setImageError(false);
     } else {
       setImageError(true);
-    }
-  };
-
-  const handleTriggerUpload = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleUseSamplePhoto = () => {
-    setOumarPhotoSrc(DEFAULT_OUMAR_PHOTO_PATH);
-    setImageError(false);
-    try {
-      localStorage.removeItem('oumar_photo_custom');
-    } catch {
-      // Storage limit catch
     }
   };
 
@@ -289,16 +267,6 @@ export const Hero: React.FC<HeroProps> = () => {
       ref={heroRef}
       className="hero relative min-h-[calc(100vh-4rem)] flex items-center justify-center overflow-hidden pt-8 pb-16 lg:py-16 transition-colors duration-300"
     >
-      {/* Hidden file input for uploading Oumar's real photo */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleFileChange}
-        className="hidden"
-        aria-label="Charger la véritable photo d'Oumar"
-      />
-
       {/* ========================================================
           1. COUCHE D'ARRIÈRE-PLAN : Photo importée agrandie et floutée
          ======================================================== */}
@@ -468,74 +436,16 @@ export const Hero: React.FC<HeroProps> = () => {
                   loading="eager"
                   fetchPriority="high"
                 />
-
-                {/* Quick Trigger to replace/update photo */}
-                <div className="absolute top-2 right-2 z-30 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleTriggerUpload}
-                    title="Remplacer ou tester une autre photo d'Oumar"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/85 dark:bg-slate-800/85 hover:bg-white dark:hover:bg-slate-700 backdrop-blur-md text-xs font-semibold text-slate-800 dark:text-slate-100 hover:text-slate-950 dark:hover:text-white shadow-md border border-white/90 dark:border-slate-700 transition-all opacity-80 hover:opacity-100 focus:opacity-100 cursor-pointer"
-                    aria-label="Charger ou modifier la photo d'Oumar"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Changer de photo</span>
-                  </button>
-
-                  {oumarPhotoSrc !== DEFAULT_OUMAR_PHOTO_PATH && (
-                    <button
-                      type="button"
-                      onClick={handleUseSamplePhoto}
-                      title="Réinitialiser la photo"
-                      className="px-2.5 py-1.5 rounded-full bg-white/70 dark:bg-slate-800/70 hover:bg-white dark:hover:bg-slate-700 backdrop-blur-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white shadow-sm border border-white/90 dark:border-slate-700 transition-all opacity-80 hover:opacity-100 cursor-pointer"
-                    >
-                      Réinitialiser
-                    </button>
-                  )}
-                </div>
               </div>
             ) : (
-              /* Elegant, unboxed placeholder with natural sizing */
-              <div className="w-full max-w-md min-h-[360px] rounded-3xl p-8 flex flex-col items-center justify-center text-center relative border border-dashed border-slate-300/80 dark:border-slate-700/80 bg-white/20 dark:bg-slate-900/20 backdrop-blur-xs">
-                <div className="w-20 h-20 rounded-full bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-center mb-5 text-slate-700 dark:text-slate-200">
-                  <User className="w-10 h-10 text-slate-400 dark:text-slate-500" />
-                </div>
-
-                <div className="relative z-10 max-w-xs flex flex-col items-center">
-                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 tracking-wider uppercase mb-1">
-                    Intégration Photographiée
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white font-['Outfit'] mb-2">
-                    Photo d'Oumar
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-                    Importez la photo d'Oumar pour qu'elle définisse automatiquement l'ambiance et l'arrière-plan du Hero entier.
-                  </p>
-
-                  <div className="flex flex-col sm:flex-row gap-2.5 items-center justify-center">
-                    <LiquidGlassSurface
-                      as="button"
-                      onClick={handleTriggerUpload}
-                      elastic={true}
-                      maxStretch={8}
-                      chromaticDispersion={true}
-                      dispersionIntensity={0.6}
-                      borderRadius="12px"
-                      className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-slate-900 dark:text-white transition-all shadow-xs border border-slate-300/80 dark:border-slate-700 cursor-pointer"
-                    >
-                      <Upload className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
-                      <span>Choisir une photo</span>
-                    </LiquidGlassSurface>
-
-                    <button
-                      type="button"
-                      onClick={handleUseSamplePhoto}
-                      className="text-[11px] font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 underline underline-offset-4 transition-colors py-1 px-2 cursor-pointer"
-                    >
-                      Tester avec une photo d'exemple
-                    </button>
-                  </div>
-                </div>
+              <div className="relative flex items-center justify-center w-full h-full max-h-full">
+                <img
+                  src={DEFAULT_OUMAR_PHOTO_PATH}
+                  alt="Oumar — Fondateur OUMAR IPHONE Abidjan"
+                  className="hero__photo hero-portrait-img select-none transition-transform duration-700 ease-out"
+                  loading="eager"
+                  fetchPriority="high"
+                />
               </div>
             )}
           </div>

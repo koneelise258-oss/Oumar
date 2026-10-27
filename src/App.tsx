@@ -100,7 +100,7 @@ function StoreApp() {
 
   // Active section tracking as user scrolls past sections
   useEffect(() => {
-    const sectionIds = ['videos', 'catalogue', 'garantie', 'boutique'];
+    const sectionIds = ['videos', 'catalogue', 'garantie'];
     const handleScroll = () => {
       const scrollY = window.scrollY;
       if (scrollY < 380) {
