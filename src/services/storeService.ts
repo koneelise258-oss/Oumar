@@ -397,60 +397,79 @@ export async function fetchOrdersRemote(): Promise<StoreOrder[]> {
 
 export async function createOrderRemote(orderData: Omit<StoreOrder, 'id' | 'orderNumber' | 'createdAt'>): Promise<StoreOrder> {
   const currentOrders = loadOrders();
-  const nextNum = currentOrders.length + 104;
-  const newOrder: StoreOrder = {
+  const nextNum = currentOrders.length + 1;
+  const tempId = `ord-${Date.now()}`;
+  const tempOrderNumber = `OMR-${String(nextNum).padStart(4, '0')}`;
+
+  let finalOrder: StoreOrder = {
     ...orderData,
-    id: `ord-${Date.now()}`,
-    orderNumber: `OMR-${nextNum}`,
-    createdAt: Date.now()
+    id: tempId,
+    orderNumber: tempOrderNumber,
+    createdAt: Date.now(),
+    deliveryFee: 0,
+    commune: orderData.commune || 'Retrait en boutique OUMAR IPHONE',
+    paymentMethod: 'Paiement au retrait en boutique',
+    total: orderData.subtotal // Retrait boutique sans frais
   };
 
-  // 1. Save locally immediately
-  const updatedOrders = [newOrder, ...currentOrders];
-  saveOrders(updatedOrders);
-
-  // 2. If Supabase configured, push to database
+  // 1. If Supabase configured, execute secure atomic server-side RPC validation
   if (isSupabaseConfigured) {
     try {
-      const orderRow = {
-        id: newOrder.id,
-        order_number: newOrder.orderNumber,
-        customer_name: newOrder.customerName,
-        customer_phone: newOrder.customerPhone || null,
-        commune: newOrder.commune,
-        subtotal: newOrder.subtotal,
-        delivery_fee: newOrder.deliveryFee,
-        total: newOrder.total,
-        status: newOrder.status,
-        payment_method: newOrder.paymentMethod,
-        notes: newOrder.notes || null,
-        created_at: new Date(newOrder.createdAt).toISOString()
-      };
-
-      const { error: orderError } = await supabase
-        .from('store_orders')
-        .insert(orderRow);
-
-      if (orderError) {
-        console.error('Failed to insert order in Supabase:', orderError);
-      } else if (newOrder.items.length > 0) {
-        const itemRows = newOrder.items.map((it) => ({
-          order_id: newOrder.id,
+      const rpcPayload = {
+        p_customer_name: finalOrder.customerName,
+        p_customer_phone: finalOrder.customerPhone || null,
+        p_notes: finalOrder.notes || null,
+        p_items: finalOrder.items.map((it) => ({
           product_id: it.productId,
-          product_name: it.productName,
-          product_image: it.productImage,
           chosen_storage: it.chosenStorage,
           chosen_color: it.chosenColor,
-          quantity: it.quantity,
-          unit_price: it.unitPrice
-        }));
+          quantity: it.quantity
+        }))
+      };
 
-        const { error: itemsError } = await supabase
-          .from('store_order_items')
-          .insert(itemRows);
+      const { data: rpcData, error: rpcError } = await supabase.rpc('create_store_order', rpcPayload);
 
-        if (itemsError) {
-          console.error('Failed to insert order items in Supabase:', itemsError);
+      if (!rpcError && rpcData && rpcData.success) {
+        finalOrder = {
+          ...finalOrder,
+          id: rpcData.order_id,
+          orderNumber: rpcData.order_number,
+          total: Number(rpcData.total)
+        };
+      } else {
+        // Fallback to direct insertion if RPC function is not yet created in Supabase
+        const orderRow = {
+          id: finalOrder.id,
+          order_number: finalOrder.orderNumber,
+          customer_name: finalOrder.customerName,
+          customer_phone: finalOrder.customerPhone || null,
+          commune: finalOrder.commune,
+          subtotal: finalOrder.subtotal,
+          delivery_fee: 0,
+          total: finalOrder.total,
+          status: 'pending',
+          payment_method: 'Paiement au retrait en boutique',
+          notes: finalOrder.notes || null,
+          created_at: new Date(finalOrder.createdAt).toISOString()
+        };
+
+        const { error: orderError } = await supabase
+          .from('store_orders')
+          .insert(orderRow);
+
+        if (!orderError && finalOrder.items.length > 0) {
+          const itemRows = finalOrder.items.map((it) => ({
+            order_id: finalOrder.id,
+            product_id: it.productId,
+            product_name: it.productName,
+            product_image: it.productImage,
+            chosen_storage: it.chosenStorage,
+            chosen_color: it.chosenColor,
+            quantity: it.quantity,
+            unit_price: it.unitPrice
+          }));
+
+          await supabase.from('store_order_items').insert(itemRows);
         }
       }
     } catch (err) {
@@ -458,7 +477,11 @@ export async function createOrderRemote(orderData: Omit<StoreOrder, 'id' | 'orde
     }
   }
 
-  return newOrder;
+  // 2. Save locally immediately for fast UI feedback
+  const updatedOrders = [finalOrder, ...currentOrders];
+  saveOrders(updatedOrders);
+
+  return finalOrder;
 }
 
 export async function updateOrderStatusRemote(orderId: string, status: OrderStatus): Promise<void> {
@@ -596,3 +619,90 @@ export async function syncLocalDataToSupabase(
     };
   }
 }
+
+// ==============================================================================
+// STORE ADMINS MANAGEMENT (RBAC: Superadmin)
+// ==============================================================================
+export interface StoreAdminUser {
+  id: string;
+  user_id?: string;
+  email: string;
+  role: 'superadmin' | 'admin' | 'manager';
+  phone?: string;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export async function fetchStoreAdminsRemote(): Promise<StoreAdminUser[]> {
+  if (!isSupabaseConfigured) return [];
+  try {
+    const { data, error } = await supabase
+      .from('store_admins')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      return data as StoreAdminUser[];
+    }
+  } catch (e) {
+    console.warn('Error fetching store_admins:', e);
+  }
+  return [];
+}
+
+export async function addStoreAdminRemote(newAdmin: {
+  email: string;
+  role: 'superadmin' | 'admin' | 'manager';
+  phone?: string;
+}): Promise<{ success: boolean; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { success: false, message: 'Supabase n’est pas configuré.' };
+  }
+
+  try {
+    const { error } = await supabase
+      .from('store_admins')
+      .insert({
+        email: newAdmin.email.trim().toLowerCase(),
+        role: newAdmin.role,
+        phone: newAdmin.phone?.trim() || null,
+        is_active: true
+      });
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+    return { success: true, message: `Administrateur ${newAdmin.email} ajouté avec succès.` };
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Erreur inconnue.' };
+  }
+}
+
+export async function toggleStoreAdminActiveRemote(adminId: string, isActive: boolean): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+  try {
+    const { error } = await supabase
+      .from('store_admins')
+      .update({ is_active: isActive })
+      .eq('id', adminId);
+
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteStoreAdminRemote(adminId: string): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+  try {
+    const { error } = await supabase
+      .from('store_admins')
+      .delete()
+      .eq('id', adminId);
+
+    return !error;
+  } catch {
+    return false;
+  }
+}
+

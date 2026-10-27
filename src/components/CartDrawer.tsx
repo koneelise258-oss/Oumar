@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CartItem } from '../types';
-import { X, Plus, Minus, Trash2, MessageCircle, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { X, Plus, Minus, Trash2, MessageCircle, ShieldCheck, CheckCircle2, MapPin, Store } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
 import { createOrderRemote } from '../services/storeService';
 
@@ -21,10 +21,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onClearCart
 }) => {
-  const [commune, setCommune] = useState('Cocody');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [orderSent, setOrderSent] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -33,8 +33,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     0
   );
 
-  const deliveryFee = 2000; // 2,000 FCFA standard delivery in Abidjan
-  const total = subtotal > 0 ? subtotal + deliveryFee : 0;
+  // La boutique ne propose AUCUNE livraison : retrait gratuit en boutique
+  const deliveryFee = 0;
+  const total = subtotal;
 
   const itemListText = items
     .map(
@@ -45,21 +46,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     )
     .join('\n');
 
-  const orderMessage = `Bonjour OUMAR IPHONE, je souhaite valider ma commande :\n\n${itemListText}\n\nSous-total : ${subtotal.toLocaleString(
+  const orderMessage = `Bonjour OUMAR IPHONE, je souhaite réserver ma commande pour un retrait en boutique :\n\n${itemListText}\n\nTotal à régler au retrait : ${total.toLocaleString(
     'fr-FR'
-  )} FCFA\nLivraison (${commune}) : ${deliveryFee.toLocaleString(
-    'fr-FR'
-  )} FCFA\nTotal : ${total.toLocaleString(
-    'fr-FR'
-  )} FCFA\n\nNom du client : ${customerName || 'Client Abidjan'}${customerPhone ? `\nTéléphone : ${customerPhone}` : ''}\nLieu de livraison : ${commune}\nMode de règlement : Paiement à la livraison`;
+  )} FCFA\n\nNom du client : ${customerName.trim() || 'Client OUMAR IPHONE'}${customerPhone.trim() ? `\nTéléphone : ${customerPhone.trim()}` : ''}\nMode : Retrait en Boutique OUMAR IPHONE (Abidjan)\nRèglement : Paiement au retrait (Espèces / Wave / Orange Money)`;
 
-  const handleOrderSubmitted = () => {
-    // Record order in Supabase and local store orders history
+  const handleOrderSubmitted = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!customerName.trim()) {
+      e.preventDefault();
+      setFormError('Veuillez renseigner votre Nom et Prénom pour la réservation.');
+      return;
+    }
+
+    setFormError(null);
+
+    // Record order in Supabase via secure RPC / service
     try {
       createOrderRemote({
-        customerName: customerName.trim() || 'Client Abidjan',
+        customerName: customerName.trim(),
         customerPhone: customerPhone.trim() || undefined,
-        commune,
+        commune: 'Retrait en boutique OUMAR IPHONE',
         items: items.map((it) => ({
           productId: it.product.id,
           productName: it.product.name,
@@ -70,14 +75,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           unitPrice: it.unitPrice || it.product.price
         })),
         subtotal,
-        deliveryFee,
+        deliveryFee: 0,
         total,
         status: 'pending',
-        paymentMethod: 'Paiement à la livraison (Wave / Espèces)',
-        notes: `Commande passée via WhatsApp. Destination : ${commune}`
+        paymentMethod: 'Paiement au retrait en boutique',
+        notes: 'Réservation passée en ligne pour retrait en boutique OUMAR IPHONE Abidjan'
       });
-    } catch (e) {
-      console.error('Failed to record order', e);
+    } catch (err) {
+      console.error('Failed to record order', err);
     }
 
     setOrderSent(true);
@@ -85,7 +90,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       setOrderSent(false);
       onClearCart();
       onClose();
-    }, 2500);
+    }, 2800);
   };
 
   return (
@@ -108,7 +113,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {items.length === 0
                   ? 'Aucun article pour le moment'
-                  : `${items.length} modèle(s) sélectionné(s)`}
+                  : `${items.length} modèle(s) sélectionné(s) · Retrait en boutique`}
               </p>
             </div>
             <button
@@ -127,9 +132,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <p className="text-sm">Votre panier est vide.</p>
                 <button
                   onClick={onClose}
-                  className="mt-4 text-xs font-semibold text-slate-900 dark:text-white hover:underline"
+                  className="mt-4 text-xs font-semibold text-slate-900 dark:text-white hover:underline cursor-pointer"
                 >
-                  Découvrir le catalogue
+                  Découvrir le catalogue Apple
                 </button>
               </div>
             ) : (
@@ -141,122 +146,121 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <img
                     src={item.product.image}
                     alt={item.product.name}
-                    className="w-16 h-16 object-contain rounded-lg bg-white dark:bg-slate-800 p-1 border border-slate-100 dark:border-slate-700"
+                    className="w-16 h-16 object-cover rounded-lg bg-white dark:bg-slate-850 p-1 border border-slate-200/60 dark:border-slate-700/60"
                   />
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">
                       {item.product.name}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       {item.chosenStorage} · {item.chosenColor}
                     </p>
-                    <div className="text-xs font-bold text-slate-900 dark:text-white mt-1 tabular-nums">
-                      {(item.product.price * item.quantity).toLocaleString('fr-FR')} FCFA
-                    </div>
+                    <p className="text-xs font-bold text-slate-950 dark:text-white mt-1">
+                      {((item.unitPrice || item.product.price) * item.quantity).toLocaleString(
+                        'fr-FR'
+                      )}{' '}
+                      FCFA
+                    </p>
                   </div>
-
                   <div className="flex flex-col items-end gap-2">
-                    <button
-                      onClick={() => onRemoveItem(index)}
-                      className="text-slate-400 hover:text-rose-600 transition-colors"
-                      aria-label="Supprimer cet article"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                    <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800">
+                    <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-1 py-0.5">
                       <button
                         onClick={() => onUpdateQuantity(index, item.quantity - 1)}
-                        className="p-1 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+                        className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white"
                         aria-label="Diminuer la quantité"
                       >
                         <Minus className="w-3 h-3" />
                       </button>
-                      <span className="px-2 text-xs font-semibold tabular-nums text-slate-800 dark:text-white">
+                      <span className="text-xs font-bold w-4 text-center">
                         {item.quantity}
                       </span>
                       <button
                         onClick={() => onUpdateQuantity(index, item.quantity + 1)}
-                        className="p-1 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+                        className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white"
                         aria-label="Augmenter la quantité"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
                     </div>
+                    <button
+                      onClick={() => onRemoveItem(index)}
+                      className="text-slate-400 hover:text-rose-500 p-1"
+                      aria-label="Supprimer du panier"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               ))
             )}
           </div>
 
-          {/* Footer & Order Form */}
+          {/* Footer & Order Reservation Form */}
           {items.length > 0 && (
             <div className="p-6 border-t border-slate-200/90 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850 space-y-4">
               
-              {/* Abidjan Commune Selection */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1">
-                    Commune Abidjan
-                  </label>
-                  <select
-                    value={commune}
-                    onChange={(e) => setCommune(e.target.value)}
-                    className="w-full text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-white"
-                  >
-                    <option value="Cocody">Cocody (Angré, Riviera)</option>
-                    <option value="Plateau">Plateau (Centre)</option>
-                    <option value="Marcory">Marcory / Zone 4</option>
-                    <option value="Treichville">Treichville</option>
-                    <option value="Yopougon">Yopougon</option>
-                    <option value="Koumassi">Koumassi</option>
-                    <option value="Autre">Autre commune</option>
-                  </select>
+              {/* Pickup Mode Notice */}
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center gap-2.5">
+                <Store className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div className="text-[11px] text-emerald-900 dark:text-emerald-200">
+                  <span className="font-bold">Retrait exclusif en boutique OUMAR IPHONE :</span> Vos appareils sont préparés et testés directement sur place à Abidjan.
                 </div>
+              </div>
 
+              {/* Customer Identity Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1">
-                    Votre Nom ou Prénom
+                    Votre Nom & Prénom <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
+                    required
                     placeholder="Ex: Jean Kouassi"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-white"
+                    onChange={(e) => {
+                      setCustomerName(e.target.value);
+                      if (formError) setFormError(null);
+                    }}
+                    className="w-full text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-white"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1">
-                    Numéro de contact (Optionnel)
+                    Numéro de contact / WhatsApp
                   </label>
                   <input
                     type="tel"
-                    placeholder="Ex: 07 00 00 00 00"
+                    placeholder="Ex: 07 78 02 42 85"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
-                    className="w-full text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-white"
+                    className="w-full text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-white"
                   />
                 </div>
               </div>
 
-              {/* Price Calculation */}
+              {formError && (
+                <p className="text-xs text-rose-500 font-medium">
+                  {formError}
+                </p>
+              )}
+
+              {/* Price Calculation (No Delivery Fee) */}
               <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-800">
                 <div className="flex justify-between">
-                  <span>Sous-total</span>
+                  <span>Sous-total articles</span>
                   <span className="font-semibold tabular-nums text-slate-900 dark:text-white">
                     {subtotal.toLocaleString('fr-FR')} FCFA
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Livraison express ({commune})</span>
-                  <span className="font-semibold tabular-nums text-slate-900 dark:text-white">
-                    {deliveryFee.toLocaleString('fr-FR')} FCFA
-                  </span>
+                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span>Frais de retrait en boutique</span>
+                  <span className="tabular-nums font-bold">Gratuit (0 FCFA)</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-slate-950 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
-                  <span>Total à payer à réception</span>
-                  <span className="tabular-nums">
+                  <span>Total à régler au retrait</span>
+                  <span className="tabular-nums text-base">
                     {total.toLocaleString('fr-FR')} FCFA
                   </span>
                 </div>
@@ -273,19 +277,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 {orderSent ? (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Commande transmise (En attente de validation)</span>
+                    <span>Réservation transmise (En attente de validation)</span>
                   </>
                 ) : (
                   <>
                     <MessageCircle className="w-4 h-4" />
-                    <span>Valider la commande sur WhatsApp</span>
+                    <span>Réserver & Valider sur WhatsApp</span>
                   </>
                 )}
               </a>
 
-              <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                <ShieldCheck className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
-                <span>Paiement en espèces ou Wave/Orange Money à la livraison</span>
+              <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 text-center">
+                <ShieldCheck className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300 shrink-0" />
+                <span>Paiement au retrait en boutique (Espèces, Wave, Orange Money)</span>
               </div>
             </div>
           )}

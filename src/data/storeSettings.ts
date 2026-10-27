@@ -16,28 +16,22 @@ export interface StoreSettings {
 }
 
 export const DEFAULT_SETTINGS: StoreSettings = {
-  whatsappPhone: '2250700000000', // Standard Côte d'Ivoire WhatsApp format (+225)
+  whatsappPhone: '2250778024285', // Numéro officiel OUMAR IPHONE (+225 07 78 02 42 85)
   storeName: 'OUMAR IPHONE',
   tagline: 'Boutique Apple d’Excellence à Abidjan',
   city: 'Abidjan, Côte d’Ivoire',
   addresses: [
     {
-      name: 'Boutique Cocody Angré',
-      location: 'Angré 8ème Tranche, Carrefour Duncan, Abidjan',
-      phone: '+225 07 00 00 00 00',
+      name: 'Boutique OUMAR IPHONE Abidjan',
+      location: 'Abidjan, Côte d’Ivoire (Retrait en boutique)',
+      phone: '+225 07 78 02 42 85',
       hours: 'Lun - Sam : 08h30 - 19h30'
-    },
-    {
-      name: 'Showroom Plateau',
-      location: 'Avenue Chardy, Proche Immeuble CCIA, Plateau, Abidjan',
-      phone: '+225 05 00 00 00 00',
-      hours: 'Lun - Ven : 09h00 - 18h30'
     }
   ],
   openingHours: 'Lundi au Samedi : 08h30 - 19h30 | Dimanche : Sur rendez-vous',
-  warrantyText: 'Tous nos iPhone, iPad et MacBook sont vendus avec une garantie officielle de 6 mois à 1 an, facture certifiée avec numéro IMEI et assistance technique dédiée à Abidjan.',
-  deliveryFee: 2000,
-  adminPin: '2025' // Default PIN for OUMAR IPHONE administrator
+  warrantyText: 'Tous nos iPhone, iPad et MacBook sont vendus avec facture certifiée, numéro IMEI et garantie officielle.',
+  deliveryFee: 0, // Aucune livraison : retrait gratuit en boutique
+  adminPin: '2025' // Code de secours transitionnel
 };
 
 export const SETTINGS_STORAGE_KEY = 'oumar_store_settings';
@@ -69,7 +63,7 @@ export function saveStoreSettings(settings: StoreSettings): void {
 
 export function getWhatsAppPhone(): string {
   const settings = loadStoreSettings();
-  return settings.whatsappPhone.replace(/[^0-9]/g, '') || '2250700000000';
+  return settings.whatsappPhone.replace(/[^0-9]/g, '') || '2250778024285';
 }
 
 export function getWhatsAppUrl(message: string): string {

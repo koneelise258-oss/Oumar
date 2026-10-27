@@ -37,7 +37,12 @@ import {
   fetchOrdersRemote,
   syncLocalDataToSupabase,
   testSupabaseHealth,
-  SyncMigrationResult
+  SyncMigrationResult,
+  fetchStoreAdminsRemote,
+  addStoreAdminRemote,
+  toggleStoreAdminActiveRemote,
+  deleteStoreAdminRemote,
+  StoreAdminUser
 } from '../services/storeService';
 import { SUPABASE_PROJECT_ID, isSupabaseConfigured, supabaseUrl, signOutAdmin } from '../lib/supabase';
 import { SUPABASE_MIGRATION_SQL } from '../db/migrationSql';
@@ -77,7 +82,11 @@ import {
   RefreshCw,
   FileCode,
   CheckCheck,
-  Server
+  Server,
+  Users,
+  UserPlus,
+  UserCheck,
+  UserX
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -89,7 +98,7 @@ interface AdminDashboardProps {
   onVideosUpdated: (videos: VideoItem[]) => void;
 }
 
-type AdminTab = 'products' | 'videos' | 'orders' | 'settings';
+type AdminTab = 'products' | 'videos' | 'orders' | 'settings' | 'admins';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   isOpen,
@@ -682,6 +691,107 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setPinMessage(null), 4000);
   };
 
+  // ==========================================
+  // TAB 5: TEAM & ADMINISTRATORS (SUPABASE AUTH RBAC)
+  // ==========================================
+  const [adminsList, setAdminsList] = useState<StoreAdminUser[]>([]);
+  const [loadingAdmins, setLoadingAdmins] = useState(false);
+  const [isAddAdminModalOpen, setIsAddAdminModalOpen] = useState(false);
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminRole, setNewAdminRole] = useState<'superadmin' | 'admin' | 'manager'>('admin');
+  const [newAdminPhone, setNewAdminPhone] = useState('');
+  const [adminActionError, setAdminActionError] = useState<string | null>(null);
+
+  const loadAdmins = async () => {
+    setLoadingAdmins(true);
+    setAdminActionError(null);
+    try {
+      const list = await fetchStoreAdminsRemote();
+      setAdminsList(list);
+    } catch (err: any) {
+      console.warn('Could not fetch admins', err);
+    } finally {
+      setLoadingAdmins(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      loadAdmins();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (activeTab === 'admins') {
+      loadAdmins();
+    }
+  }, [activeTab]);
+
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdminEmail.trim() || !newAdminEmail.includes('@')) {
+      setAdminActionError('Veuillez renseigner une adresse email valide.');
+      return;
+    }
+    setLoadingAdmins(true);
+    setAdminActionError(null);
+    try {
+      const res = await addStoreAdminRemote({
+        email: newAdminEmail.trim(),
+        role: newAdminRole,
+        phone: newAdminPhone.trim()
+      });
+      if (res.success) {
+        triggerNotification(`Administrateur ${newAdminEmail} ajouté avec succès !`);
+        setNewAdminEmail('');
+        setNewAdminPhone('');
+        setIsAddAdminModalOpen(false);
+        await loadAdmins();
+      } else {
+        setAdminActionError(res.message || "Impossible d'ajouter l'administrateur.");
+      }
+    } catch (err: any) {
+      setAdminActionError(err?.message || "Erreur lors de l'ajout.");
+    } finally {
+      setLoadingAdmins(false);
+    }
+  };
+
+  const handleToggleAdminStatus = async (adminId: string, currentStatus: boolean, email: string) => {
+    const nextStatus = !currentStatus;
+    const confirmMsg = nextStatus 
+      ? `Réactiver l'accès administrateur pour ${email} ?`
+      : `Désactiver l'accès pour ${email} ? Cet utilisateur ne pourra plus accéder au tableau de bord.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const success = await toggleStoreAdminActiveRemote(adminId, nextStatus);
+      if (success) {
+        triggerNotification(`Statut de ${email} mis à jour`);
+        await loadAdmins();
+      } else {
+        alert('Erreur lors du changement de statut');
+      }
+    } catch (err: any) {
+      alert(`Erreur: ${err?.message || 'Action impossible'}`);
+    }
+  };
+
+  const handleDeleteAdminItem = async (adminId: string, email: string) => {
+    if (!window.confirm(`Supprimer définitivement l'administrateur ${email} ?`)) return;
+    try {
+      const success = await deleteStoreAdminRemote(adminId);
+      if (success) {
+        triggerNotification(`Administrateur ${email} retiré.`);
+        await loadAdmins();
+      } else {
+        alert('Erreur lors de la suppression');
+      }
+    } catch (err: any) {
+      alert(`Erreur: ${err?.message || 'Action impossible'}`);
+    }
+  };
+
   const handleLogout = async () => {
     await signOutAdmin();
     setAdminAuthenticated(false);
@@ -809,7 +919,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             }`}
           >
             <Settings className="w-3.5 h-3.5" />
-            <span>Visuels Hero, Boutique & Sécurité</span>
+            <span>Visuels Hero, Boutique & Paramètres</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('admins')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'admins'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Équipe & Admins ({adminsList.length})</span>
           </button>
         </div>
 
@@ -1636,14 +1758,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <div>
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Frais de livraison standard Abidjan (FCFA)
+                      Frais de livraison (FCFA) — <span className="text-emerald-600 dark:text-emerald-400 font-bold">Retrait en boutique</span>
                     </label>
                     <input
                       type="number"
-                      value={settingsForm.deliveryFee}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, deliveryFee: parseInt(e.target.value, 10) || 0 })}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
+                      value={0}
+                      disabled
+                      className="w-full bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-500 dark:text-slate-400 focus:outline-none cursor-not-allowed font-medium"
                     />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      OUMAR IPHONE opère exclusivement en retrait direct en boutique. Les frais sont fixés à 0 FCFA.
+                    </p>
                   </div>
 
                   <div className="sm:col-span-2">
@@ -1906,7 +2031,342 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
+          {/* ========================================================= */}
+          {/* TAB 5: TEAM & ADMINISTRATORS (SUPABASE AUTH RBAC) */}
+          {/* ========================================================= */}
+          {activeTab === 'admins' && (
+            <div className="space-y-6 animate-in fade-in-50 duration-200">
+              
+              {/* Header Box */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+                <div>
+                  <h3 className="text-base font-bold text-slate-950 dark:text-white flex items-center gap-2 font-['Outfit']">
+                    <Users className="w-5 h-5 text-indigo-500" />
+                    <span>Direction, Équipe & Rôles Administrateurs</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Contrôle d’accès sécurisé (RBAC) synchronisé avec la table Supabase <code className="text-emerald-600 dark:text-emerald-400 font-semibold">store_admins</code>.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={loadAdmins}
+                    disabled={loadingAdmins}
+                    className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-xl transition-colors cursor-pointer shrink-0"
+                    title="Actualiser la liste des administrateurs"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingAdmins ? 'animate-spin text-indigo-500' : ''}`} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminActionError(null);
+                      setIsAddAdminModalOpen(true);
+                    }}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-xs whitespace-nowrap"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>Ajouter un Administrateur</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Security Architecture Info Banner */}
+              <div className="p-4 bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-200/70 dark:border-indigo-800/40 rounded-2xl text-xs text-indigo-950 dark:text-indigo-200 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-indigo-900 dark:text-indigo-300">
+                  <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span>Architecture de Sécurité OUMAR IPHONE & Supabase Auth</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-indigo-900/80 dark:text-indigo-200/80">
+                  L'accès à ce tableau de bord est doublement protégé : au niveau applicatif par <strong>Supabase Auth</strong> et au niveau base de données par les <strong>politiques RLS (Row Level Security)</strong>. Seuls les comptes listés ci-dessous avec le statut <strong>Actif</strong> peuvent visualiser les commandes des clients, modifier le catalogue ou gérer les stocks.
+                </p>
+                <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px]">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-100/80 dark:bg-indigo-900/50 font-semibold text-indigo-800 dark:text-indigo-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500" /> Superadmin (Accès Total & Gestion Équipe)
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-100/80 dark:bg-indigo-900/50 font-semibold text-indigo-800 dark:text-indigo-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Admin (Catalogue, Stocks & Commandes)
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-100/80 dark:bg-indigo-900/50 font-semibold text-indigo-800 dark:text-indigo-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Manager (Traitement des Commandes)
+                  </span>
+                </div>
+              </div>
+
+              {/* Admins Table Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+                
+                {loadingAdmins && adminsList.length === 0 ? (
+                  <div className="p-12 text-center text-slate-400 space-y-3">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto text-indigo-500" />
+                    <p className="text-xs">Chargement des comptes administrateurs...</p>
+                  </div>
+                ) : adminsList.length === 0 ? (
+                  <div className="p-10 text-center space-y-3">
+                    <Users className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-white">
+                      Aucun administrateur distant configuré
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                      Assurez-vous d’avoir exécuté le script SQL dans votre projet Supabase (<code className="text-emerald-500">{SUPABASE_PROJECT_ID}</code>), puis cliquez sur "Ajouter un Administrateur" pour inviter votre adresse email.
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddAdminModalOpen(true)}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 transition-opacity cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>Créer le premier administrateur</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-800">
+                        <tr>
+                          <th className="py-3 px-4">Administrateur</th>
+                          <th className="py-3 px-4">Rôle RBAC</th>
+                          <th className="py-3 px-4">Téléphone</th>
+                          <th className="py-3 px-4">Statut</th>
+                          <th className="py-3 px-4">Créé le</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium">
+                        {adminsList.map((adm) => {
+                          const isCurrent = adm.email.toLowerCase() === (currentAdminEmail || '').toLowerCase();
+                          return (
+                            <tr key={adm.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
+                              
+                              {/* Admin email & identity */}
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                                    adm.role === 'superadmin'
+                                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
+                                      : adm.role === 'admin'
+                                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                                      : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                  }`}>
+                                    {adm.email.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-slate-900 dark:text-white">
+                                        {adm.email}
+                                      </span>
+                                      {isCurrent && (
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                          Vous
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      ID: {adm.id.slice(0, 8)}...
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Role Badge */}
+                              <td className="py-3 px-4">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                                  adm.role === 'superadmin'
+                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60'
+                                    : adm.role === 'admin'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60'
+                                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60'
+                                }`}>
+                                  <ShieldCheck className="w-3 h-3" />
+                                  <span className="capitalize">{adm.role}</span>
+                                </span>
+                              </td>
+
+                              {/* Phone */}
+                              <td className="py-3 px-4 text-slate-600 dark:text-slate-300 font-mono">
+                                {adm.phone || '—'}
+                              </td>
+
+                              {/* Status Toggle */}
+                              <td className="py-3 px-4">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                                  adm.is_active
+                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60'
+                                    : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${adm.is_active ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                  <span>{adm.is_active ? 'Actif' : 'Désactivé'}</span>
+                                </span>
+                              </td>
+
+                              {/* Created At */}
+                              <td className="py-3 px-4 text-slate-400 text-[11px]">
+                                {adm.created_at ? new Date(adm.created_at).toLocaleDateString('fr-FR', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                }) : '—'}
+                              </td>
+
+                              {/* Actions */}
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {/* Toggle Active Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleAdminStatus(adm.id, adm.is_active, adm.email)}
+                                    disabled={isCurrent && adm.role === 'superadmin'}
+                                    className={`p-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                                      adm.is_active
+                                        ? 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                                        : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                                    } ${isCurrent && adm.role === 'superadmin' ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                    title={adm.is_active ? "Désactiver l'accès" : "Réactiver l'accès"}
+                                  >
+                                    {adm.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                                  </button>
+
+                                  {/* Delete Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteAdminItem(adm.id, adm.email)}
+                                    disabled={isCurrent}
+                                    className={`p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer ${
+                                      isCurrent ? 'opacity-40 cursor-not-allowed' : ''
+                                    }`}
+                                    title={isCurrent ? "Vous ne pouvez pas supprimer votre propre compte" : "Retirer cet administrateur"}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+
         </div>
+
+        {/* ========================================================= */}
+        {/* ADD STORE ADMIN MODAL */}
+        {/* ========================================================= */}
+        {isAddAdminModalOpen && (
+          <div className="fixed inset-0 z-70 bg-black/75 backdrop-blur-sm flex justify-center items-center p-3 sm:p-6 overflow-y-auto">
+            <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 flex flex-col text-slate-900 dark:text-white animate-in zoom-in-95">
+              
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+                    <UserPlus className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold font-['Outfit']">
+                      Ajouter un Administrateur
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Autoriser un membre de l'équipe OUMAR IPHONE
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAddAdminModalOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateAdmin} className="space-y-4 pt-4 text-xs">
+                {/* Email */}
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Adresse Email Supabase *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={newAdminEmail}
+                    onChange={(e) => setNewAdminEmail(e.target.value)}
+                    placeholder="direction@oumar-iphone.ci"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    L'administrateur utilisera cette adresse email pour se connecter via Supabase Auth.
+                  </p>
+                </div>
+
+                {/* Role */}
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Rôle & Privilèges *
+                  </label>
+                  <select
+                    value={newAdminRole}
+                    onChange={(e) => setNewAdminRole(e.target.value as any)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none cursor-pointer"
+                  >
+                    <option value="superadmin">Superadmin — Accès total & gestion des administrateurs</option>
+                    <option value="admin">Admin — Gestion complète (produits, vidéos, commandes)</option>
+                    <option value="manager">Manager — Traitement et validation des commandes</option>
+                  </select>
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Numéro WhatsApp / Téléphone (Optionnel)
+                  </label>
+                  <input
+                    type="text"
+                    value={newAdminPhone}
+                    onChange={(e) => setNewAdminPhone(e.target.value)}
+                    placeholder="+225 07 78 02 42 85"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
+                  />
+                </div>
+
+                {adminActionError && (
+                  <div className="p-3 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300 text-xs font-medium border border-rose-200 dark:border-rose-900/50">
+                    {adminActionError}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddAdminModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loadingAdmins}
+                    className="px-5 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    {loadingAdmins ? 'Ajout en cours...' : 'Confirmer l’autorisation'}
+                  </button>
+                </div>
+              </form>
+
+            </div>
+          </div>
+        )}
 
         {/* ========================================================= */}
         {/* SQL MIGRATION MODAL */}

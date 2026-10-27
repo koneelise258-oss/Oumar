@@ -30,31 +30,31 @@ export const BoutiqueInfo: React.FC = () => {
                 <MapPin className="w-5 h-5" />
               </div>
               <h3 className="text-lg font-bold text-slate-950 dark:text-white font-['Outfit'] mb-2">
-                Boutique Cocody Angré
+                Boutique OUMAR IPHONE
               </h3>
               <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
-                Angré 8ème Tranche, en face de la pharmacie du Soleil, Abidjan.
+                Boutique d'excellence Apple à Abidjan. Retrait direct et test sur place de tous vos appareils.
               </p>
               <div className="space-y-1.5 text-xs text-slate-500 dark:text-slate-400">
                 <div className="flex items-center gap-2">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>Lun - Sam : 08h30 - 20h00</span>
+                  <span>Lun - Sam : 08h30 - 19h30</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Phone className="w-3.5 h-3.5" />
-                  <span>+225 07 00 00 00 00</span>
+                  <span>+225 07 78 02 42 85</span>
                 </div>
               </div>
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-200/60 dark:border-slate-800">
               <a
-                href={WHATSAPP_URL("Bonjour Oumar iPhone, je souhaite localiser la boutique de Cocody Angré.")}
+                href={WHATSAPP_URL("Bonjour Oumar iPhone, je souhaite localiser votre boutique à Abidjan pour un retrait.")}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-semibold text-slate-900 dark:text-white hover:text-emerald-700 dark:hover:text-emerald-400 flex items-center gap-1"
               >
-                <span>Itinéraire & RDV WhatsApp &rarr;</span>
+                <span>Contacter sur WhatsApp &rarr;</span>
               </a>
             </div>
           </div>
