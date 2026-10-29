@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
 import { ProductModal } from './ProductModal';
+import { deduplicateColors } from '../services/storeService';
 interface CatalogueProps {
   products: Product[];
   onAddToCart: (product: Product, storage: string, color: string) => void;
@@ -189,16 +190,16 @@ export const Catalogue: React.FC<CatalogueProps> = ({
           <div>
             <div className="flex items-center gap-2 text-xs font-bold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span>DISPONIBLE À ABIDJAN · STOCK EN TEMPS RÉEL</span>
+              <span>DISPONIBLE À ABIDJAN · RETRAIT BOUTIQUE</span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-950 dark:text-white font-['Outfit']">
-              Catalogue Apple Officiel
+              Catalogue OUMAR IPHONE
             </h2>
           </div>
           
           <div className="flex items-center gap-3">
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-md hidden lg:block">
-              Sélection inspectée sur 35 points de contrôle. Retrait direct et test sur place en boutique à Abidjan.
+              Appareils soigneusement vérifiés et testés. Retrait direct en boutique à Abidjan.
             </p>
           </div>
         </div>
@@ -432,13 +433,37 @@ export const Catalogue: React.FC<CatalogueProps> = ({
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6 lg:gap-8">
             {filteredProducts.map((product, pIndex) => {
               const currentStorage = cardStorages[product.id] || product.storage[0] || 'Standard';
-              const currentColor = cardColors[product.id] || product.colors[0]?.name || 'Standard';
+              const cleanColors = deduplicateColors(product.colors || []);
+              const currentColor = cardColors[product.id] || cleanColors[0]?.name || 'Standard';
               const isAdded = addedIds[product.id];
 
-              // Price adjustment based on chosen capacity
-              const currentPrice = (product.storagePrices && product.storagePrices[currentStorage])
-                ? product.storagePrices[currentStorage]
-                : product.price;
+              // Find matching variant
+              const matchingVariant = product.variants?.find(
+                (v) =>
+                  v.published !== false &&
+                  v.color &&
+                  v.color.trim().toLowerCase() === currentColor.trim().toLowerCase() &&
+                  v.storage &&
+                  v.storage.trim().toLowerCase() === currentStorage.trim().toLowerCase()
+              );
+
+              const selectedColorObj = cleanColors.find(
+                (c) => c.name.trim().toLowerCase() === currentColor.trim().toLowerCase()
+              );
+
+              // Dynamic image
+              const cardImage =
+                (matchingVariant && matchingVariant.imageUrl) ||
+                (selectedColorObj && selectedColorObj.image) ||
+                product.image;
+
+              // Price adjustment based on chosen capacity or variant
+              const currentPrice =
+                matchingVariant && matchingVariant.price > 0
+                  ? matchingVariant.price
+                  : product.storagePrices && product.storagePrices[currentStorage]
+                  ? product.storagePrices[currentStorage]
+                  : product.price;
 
               return (
                 <div
@@ -449,7 +474,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                   {/* Product Visual Stage */}
                   <div className="relative aspect-[4/3] bg-gradient-to-b from-slate-50 to-slate-100/70 dark:from-slate-900/80 dark:to-[#0b0f17] p-2.5 sm:p-5 flex items-center justify-center overflow-hidden">
                     <img
-                      src={product.image || undefined}
+                      src={cardImage || undefined}
                       alt={product.name}
                       className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 select-none"
                       loading="lazy"
@@ -467,7 +492,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       {product.batteryHealth}
                     </div>
 
-                    {/* Official Apple reference visual badge */}
+                    {/* Reference visual badge */}
                     <div className="absolute bottom-1.5 left-1.5 text-[8px] sm:text-[9px] font-medium text-slate-500 dark:text-slate-400 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xs px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-slate-800 hidden xs:block">
                       Visuel de référence
                     </div>
@@ -484,13 +509,13 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                   {/* Product Info & Actions */}
                   <div className="p-3 sm:p-6 flex-1 flex flex-col justify-between min-w-0">
                     <div>
-                      {/* Name & Live Price */}
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-2 mb-1.5 min-w-0">
-                        <h3 className="text-xs sm:text-lg font-bold text-slate-950 dark:text-white font-['Outfit'] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate">
+                      {/* Name & Live Price Stacked Vertically */}
+                      <div className="flex flex-col gap-1 mb-2 min-w-0">
+                        <h3 className="text-xs sm:text-base font-bold text-slate-950 dark:text-white font-['Outfit'] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors leading-snug">
                           {product.name}
                         </h3>
-                        <div className="text-left sm:text-right shrink-0">
-                          <div className="text-xs sm:text-lg font-extrabold text-slate-950 dark:text-white font-['Outfit'] tabular-nums tracking-tight">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <div className="text-xs sm:text-base font-extrabold text-slate-950 dark:text-white font-['Outfit'] tabular-nums tracking-tight">
                             {currentPrice.toLocaleString('fr-FR')} FCFA
                           </div>
                           {product.originalPrice && product.originalPrice > currentPrice && (
@@ -533,27 +558,31 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       )}
 
                       {/* Color Swatches */}
-                      {product.colors && product.colors.length > 0 && (
+                      {cleanColors.length > 0 && (
                         <div className="mb-2 sm:mb-5">
                           <div className="text-[9px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 truncate">
                             <span className="hidden sm:inline">Finition : </span><span className="font-normal text-slate-800 dark:text-slate-200">{currentColor}</span>
                           </div>
                           <div className="flex items-center gap-1 sm:gap-1.5">
-                            {product.colors.map((color, colorIdx) => (
-                              <button
-                                key={`${product.id}-color-${color.name || 'col'}-${colorIdx}`}
-                                type="button"
-                                onClick={(e) => handleCardColorChange(e, product.id, color.name)}
-                                className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border transition-transform cursor-pointer ${
-                                  currentColor === color.name
-                                    ? 'border-slate-950 dark:border-white scale-110 shadow-xs'
-                                    : 'border-transparent hover:scale-105'
-                                }`}
-                                style={{ backgroundColor: color.hex }}
-                                title={color.name}
-                                aria-label={color.name}
-                              />
-                            ))}
+                            {cleanColors.map((color, colorIdx) => {
+                              const isSelected = currentColor.trim().toLowerCase() === color.name.trim().toLowerCase();
+                              return (
+                                <button
+                                  key={`${product.id}-color-${color.name || 'col'}-${colorIdx}`}
+                                  type="button"
+                                  onClick={(e) => handleCardColorChange(e, product.id, color.name)}
+                                  aria-pressed={isSelected}
+                                  className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border transition-transform cursor-pointer ${
+                                    isSelected
+                                      ? 'border-slate-950 dark:border-white scale-110 shadow-xs ring-2 ring-slate-950 dark:ring-white ring-offset-1 dark:ring-offset-slate-900'
+                                      : 'border-slate-300 dark:border-slate-600 hover:scale-105'
+                                  }`}
+                                  style={{ backgroundColor: color.hex }}
+                                  title={color.name}
+                                  aria-label={color.name}
+                                />
+                              );
+                            })}
                           </div>
                         </div>
                       )}

@@ -17,6 +17,7 @@ import {
   Layers
 } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
+import { deduplicateColors } from '../services/storeService';
 
 interface ProductModalProps {
   product: Product | null;
@@ -76,7 +77,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     setTimeout(() => setAdded(false), 2200);
   };
 
-  const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite commander depuis votre catalogue officiel :
+  const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite me renseigner depuis votre catalogue OUMAR IPHONE :
 
 • Produit : ${product.name}
 • Modèle : ${product.model}
@@ -85,7 +86,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 • État : ${product.condition}
 • Prix affiché : ${currentPrice.toLocaleString('fr-FR')} FCFA
 
-Pourriez-vous me confirmer la disponibilité et organiser la livraison à Abidjan ? Merci !`;
+Pourriez-vous me confirmer la disponibilité et les modalités de retrait en boutique à Abidjan ? Merci !`;
 
   return (
     <div 
@@ -146,7 +147,7 @@ Pourriez-vous me confirmer la disponibilité et organiser la livraison à Abidja
                   loading="eager"
                 />
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 italic block text-center mt-2.5 font-medium">
-                  Visuel de référence officiel Apple · Appareil inspecté en boutique OUMAR IPHONE
+                  Visuel de référence · Appareil inspecté en boutique OUMAR IPHONE
                 </span>
               </div>
 
@@ -262,13 +263,21 @@ Pourriez-vous me confirmer la disponibilité et organiser la livraison à Abidja
                       Finition : <span className="font-normal text-slate-900 dark:text-white capitalize">{selectedColor}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
-                      {product.colors.map((color, colIdx) => {
-                        const isSelected = selectedColor === color.name;
+                      {deduplicateColors(product.colors).map((color, colIdx) => {
+                        const isSelected = selectedColor.trim().toLowerCase() === color.name.trim().toLowerCase();
                         return (
                           <button
                             key={`modal-color-${color.name || 'col'}-${colIdx}`}
                             type="button"
-                            onClick={() => setSelectedColor(color.name)}
+                            onClick={() => {
+                              setSelectedColor(color.name);
+                              if (color.image && color.image.trim()) {
+                                setActiveImage(color.image);
+                              } else {
+                                setActiveImage(product.image);
+                              }
+                            }}
+                            aria-pressed={isSelected}
                             className={`group flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs transition-all ${
                               isSelected
                                 ? 'border-slate-950 dark:border-white bg-slate-50 dark:bg-slate-800/80 font-semibold text-slate-950 dark:text-white shadow-xs'
@@ -352,7 +361,7 @@ Pourriez-vous me confirmer la disponibilité et organiser la livraison à Abidja
                   </div>
                   <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800">
                     <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>35 points de contrôle certifiés</span>
+                    <span>Contrôle qualité en boutique</span>
                   </div>
                   <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800">
                     <MessageCircle className="w-4 h-4 text-emerald-500 shrink-0" />

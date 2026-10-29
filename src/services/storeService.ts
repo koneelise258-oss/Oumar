@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured, testSupabaseHealth } from '../lib/supabase';
 export { testSupabaseHealth };
-import { Product, VideoItem, ProductVariant } from '../types';
+import { Product, VideoItem, ProductVariant, ProductColor } from '../types';
 import { StoreOrder, OrderStatus, loadOrders, saveOrders } from '../data/orders';
 import { StoreSettings, loadStoreSettings, saveStoreSettings, getHeroCustomPhoto, saveHeroCustomPhoto } from '../data/storeSettings';
 import { loadProducts, saveProducts, DEFAULT_PRODUCTS } from '../data/products';
@@ -46,7 +46,22 @@ export function variantToRow(v: ProductVariant): any {
   return row;
 }
 
+export function deduplicateColors(colors: any[]): ProductColor[] {
+  if (!Array.isArray(colors)) return [];
+  const seen = new Set<string>();
+  return colors.filter((c) => {
+    if (!c || !c.name || typeof c.name !== 'string' || !c.name.trim()) return false;
+    const key = c.name.trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function rowToProduct(row: any): Product {
+  const rawColors = Array.isArray(row.colors) ? row.colors : [];
+  const cleanColors = deduplicateColors(rawColors);
+
   return {
     id: row.id,
     name: row.name,
@@ -58,12 +73,12 @@ export function rowToProduct(row: any): Product {
     price: Number(row.price),
     originalPrice: row.original_price ? Number(row.original_price) : undefined,
     storagePrices: row.storage_prices || {},
-    colors: Array.isArray(row.colors) ? row.colors : [],
-    selectedColor: row.selected_color || (Array.isArray(row.colors) && row.colors[0]?.name ? row.colors[0].name : ''),
+    colors: cleanColors,
+    selectedColor: row.selected_color || (cleanColors[0]?.name ? cleanColors[0].name : ''),
     image: row.image,
     gallery: Array.isArray(row.gallery) && row.gallery.length > 0 ? row.gallery : [row.image],
     batteryHealth: row.battery_health || '100% Neuf',
-    warranty: row.warranty || 'Garantie Apple 1 an',
+    warranty: row.warranty || 'Garantie boutique OUMAR IPHONE',
     inStock: Boolean(row.in_stock),
     stockLocation: row.stock_location || 'Boutique Cocody & Plateau',
     featured: Boolean(row.featured),

@@ -281,7 +281,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         <div className="px-4 py-3 bg-slate-50 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Tous nos appareils sont vérifiés sur 35 points de contrôle Apple</span>
+            <span>Tous nos appareils sont soigneusement contrôlés en boutique</span>
           </div>
           <span className="hidden sm:inline">OUMAR IPHONE · Abidjan</span>
         </div>

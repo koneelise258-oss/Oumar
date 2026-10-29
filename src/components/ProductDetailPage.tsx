@@ -20,6 +20,7 @@ import {
   Tag
 } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
+import { deduplicateColors } from '../services/storeService';
 
 interface ProductDetailPageProps {
   product: Product;
@@ -119,7 +120,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
   };
 
-  const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite commander depuis la fiche produit officielle :
+  const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite me renseigner depuis la fiche produit OUMAR IPHONE :
 
 • Produit : ${product.name}
 • Catégorie : ${product.category}
@@ -130,7 +131,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 • Prix enregistré : ${currentPrice.toLocaleString('fr-FR')} FCFA
 ${matchingVariant?.priceSource ? `• Source / Référence : ${matchingVariant.priceSource}` : ''}
 
-Merci de me confirmer la disponibilité réelle et d'organiser la livraison à Abidjan !`;
+Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités de retrait en boutique à Abidjan !`;
 
   return (
     <div className="min-h-screen bg-[#fafbfc] dark:bg-[#0b0f17] text-slate-900 dark:text-slate-100 transition-colors py-6 sm:py-10">
@@ -205,10 +206,10 @@ Merci de me confirmer la disponibilité réelle et d'organiser la livraison à A
               
               <div className="mt-4 text-center space-y-1">
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 italic font-medium block">
-                  Visuel officiel · Finition <strong className="font-bold text-slate-700 dark:text-slate-300">{selectedColor}</strong>
+                  Visuel de référence · Finition <strong className="font-bold text-slate-700 dark:text-slate-300">{selectedColor}</strong>
                 </span>
                 <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
-                  Chaque appareil est rigoureusement testé sur 35 points de contrôle à Abidjan
+                  Chaque appareil est soigneusement contrôlé avant mise en boutique à Abidjan
                 </span>
               </div>
             </div>
@@ -331,13 +332,14 @@ Merci de me confirmer la disponibilité réelle et d'organiser la livraison à A
                     <span className="font-bold text-slate-950 dark:text-white">{selectedColor}</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
-                    {product.colors.map((colorObj, colIdx) => {
-                      const isSelected = selectedColor === colorObj.name;
+                    {deduplicateColors(product.colors).map((colorObj, colIdx) => {
+                      const isSelected = selectedColor.trim().toLowerCase() === colorObj.name.trim().toLowerCase();
                       return (
                         <button
                           key={`detail-color-${colorObj.name}-${colIdx}`}
                           type="button"
                           onClick={() => handleColorSelect(colorObj)}
+                          aria-pressed={isSelected}
                           className={`group flex items-center gap-2.5 px-4 py-2 rounded-full border text-xs font-semibold transition-all cursor-pointer ${
                             isSelected
                               ? 'border-slate-950 dark:border-white bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-md ring-2 ring-slate-950 dark:ring-white ring-offset-2 dark:ring-offset-slate-900 scale-105'
@@ -457,7 +459,7 @@ Merci de me confirmer la disponibilité réelle et d'organiser la livraison à A
                 </div>
                 <div className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
                   <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>35 points de contrôle certifiés</span>
+                  <span>Contrôle qualité rigoureux</span>
                 </div>
                 <div className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
                   <MessageCircle className="w-4 h-4 text-emerald-500 shrink-0" />
