@@ -427,7 +427,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
 
         {/* Product Grid */}
         {filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6 lg:gap-8">
             {filteredProducts.map((product, pIndex) => {
               const currentStorage = cardStorages[product.id] || product.storage[0] || 'Standard';
               const currentColor = cardColors[product.id] || product.colors[0]?.name || 'Standard';
@@ -442,10 +442,10 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                 <div
                   key={`${product.id || 'prod'}-${pIndex}`}
                   onClick={() => setActiveModalProduct(product)}
-                  className="bg-white dark:bg-[#0f172a] rounded-3xl overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer"
+                  className="bg-white dark:bg-[#0f172a] rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer min-w-0"
                 >
                   {/* Product Visual Stage */}
-                  <div className="relative aspect-[4/3] bg-gradient-to-b from-slate-50 to-slate-100/70 dark:from-slate-900/80 dark:to-[#0b0f17] p-6 flex items-center justify-center overflow-hidden">
+                  <div className="relative aspect-[4/3] bg-gradient-to-b from-slate-50 to-slate-100/70 dark:from-slate-900/80 dark:to-[#0b0f17] p-2.5 sm:p-5 flex items-center justify-center overflow-hidden">
                     <img
                       src={product.image || undefined}
                       alt={product.name}
@@ -456,22 +456,22 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                     />
 
                     {/* Condition badge */}
-                    <div className="absolute top-3.5 left-3.5 text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-xs">
+                    <div className="absolute top-2 left-2 sm:top-3.5 sm:left-3.5 text-[9px] sm:text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-xs">
                       {product.condition}
                     </div>
 
                     {/* Battery or Warranty badge */}
-                    <div className="absolute top-3.5 right-3.5 text-[11px] font-medium text-slate-700 dark:text-slate-200 px-2 py-0.5 rounded-full bg-white/90 dark:bg-slate-800/90 backdrop-blur-xs border border-slate-200/60 dark:border-slate-700 shadow-xs">
+                    <div className="absolute top-2 right-2 sm:top-3.5 sm:right-3.5 text-[9px] sm:text-[11px] font-medium text-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded-full bg-white/90 dark:bg-slate-800/90 backdrop-blur-xs border border-slate-200/60 dark:border-slate-700 shadow-xs truncate max-w-[85px] sm:max-w-none">
                       {product.batteryHealth}
                     </div>
 
                     {/* Official Apple reference visual badge */}
-                    <div className="absolute bottom-2 left-2 text-[9px] font-medium text-slate-500 dark:text-slate-400 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xs px-2 py-0.5 rounded-md border border-slate-200/60 dark:border-slate-800">
-                      Visuel de référence Apple
+                    <div className="absolute bottom-1.5 left-1.5 text-[8px] sm:text-[9px] font-medium text-slate-500 dark:text-slate-400 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xs px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-slate-800 hidden xs:block">
+                      Visuel de référence
                     </div>
 
                     {/* Quick view button overlay */}
-                    <div className="absolute inset-x-0 bottom-3 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    <div className="absolute inset-x-0 bottom-3 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none hidden sm:flex">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950/80 dark:bg-white/90 text-white dark:text-slate-950 text-xs font-semibold backdrop-blur-sm shadow-md">
                         <Eye className="w-3.5 h-3.5" />
                         <span>Fiche détaillée</span>
@@ -480,19 +480,19 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                   </div>
 
                   {/* Product Info & Actions */}
-                  <div className="p-6 flex-1 flex flex-col justify-between">
+                  <div className="p-3 sm:p-6 flex-1 flex flex-col justify-between min-w-0">
                     <div>
                       {/* Name & Live Price */}
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <h3 className="text-lg sm:text-xl font-bold text-slate-950 dark:text-white font-['Outfit'] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-2 mb-1.5 min-w-0">
+                        <h3 className="text-xs sm:text-lg font-bold text-slate-950 dark:text-white font-['Outfit'] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate">
                           {product.name}
                         </h3>
-                        <div className="text-right shrink-0">
-                          <div className="text-lg font-bold text-slate-950 dark:text-white font-['Outfit'] tabular-nums tracking-tight">
+                        <div className="text-left sm:text-right shrink-0">
+                          <div className="text-xs sm:text-lg font-extrabold text-slate-950 dark:text-white font-['Outfit'] tabular-nums tracking-tight">
                             {currentPrice.toLocaleString('fr-FR')} FCFA
                           </div>
                           {product.originalPrice && product.originalPrice > currentPrice && (
-                            <div className="text-xs text-slate-400 line-through tabular-nums">
+                            <div className="text-[10px] sm:text-xs text-slate-400 line-through tabular-nums">
                               {product.originalPrice.toLocaleString('fr-FR')} FCFA
                             </div>
                           )}
@@ -500,24 +500,24 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       </div>
 
                       {/* Model & Reassurance */}
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-1.5">
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>{product.warranty} · {product.stockLocation}</span>
+                      <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 mb-2 sm:mb-4 flex items-center gap-1 min-w-0 truncate">
+                        <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span className="truncate">{product.warranty}</span>
                       </p>
 
                       {/* Storage Capacity Selector */}
                       {product.storage && product.storage.length > 1 && (
-                        <div className="mb-4">
-                          <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                        <div className="mb-2 sm:mb-4">
+                          <div className="text-[9px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                             Capacité
                           </div>
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-wrap gap-1">
                             {product.storage.map((cap, cIdx) => (
                               <button
                                 key={`${product.id}-storage-${cap}-${cIdx}`}
                                 type="button"
                                 onClick={(e) => handleCardStorageChange(e, product.id, cap)}
-                                className={`px-2.5 py-1 text-xs rounded-lg font-semibold transition-all cursor-pointer ${
+                                className={`px-1.5 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-xs rounded-md sm:rounded-lg font-semibold transition-all cursor-pointer ${
                                   currentStorage === cap
                                     ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-xs'
                                     : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
@@ -532,17 +532,17 @@ export const Catalogue: React.FC<CatalogueProps> = ({
 
                       {/* Color Swatches */}
                       {product.colors && product.colors.length > 0 && (
-                        <div className="mb-5">
-                          <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                            Finition : <span className="font-normal text-slate-800 dark:text-slate-200">{currentColor}</span>
+                        <div className="mb-2 sm:mb-5">
+                          <div className="text-[9px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 truncate">
+                            <span className="hidden sm:inline">Finition : </span><span className="font-normal text-slate-800 dark:text-slate-200">{currentColor}</span>
                           </div>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1 sm:gap-1.5">
                             {product.colors.map((color, colorIdx) => (
                               <button
                                 key={`${product.id}-color-${color.name || 'col'}-${colorIdx}`}
                                 type="button"
                                 onClick={(e) => handleCardColorChange(e, product.id, color.name)}
-                                className={`w-5 h-5 rounded-full border-2 transition-transform cursor-pointer ${
+                                className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border transition-transform cursor-pointer ${
                                   currentColor === color.name
                                     ? 'border-slate-950 dark:border-white scale-110 shadow-xs'
                                     : 'border-transparent hover:scale-105'
@@ -558,12 +558,12 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                     </div>
 
                     {/* Bottom Card Actions: Cart + WhatsApp */}
-                    <div className="grid grid-cols-2 gap-2 pt-4 border-t border-slate-100 dark:border-slate-800/80">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2 pt-2.5 sm:pt-4 border-t border-slate-100 dark:border-slate-800/80">
                       {/* Add to cart */}
                       <button
                         type="button"
                         onClick={(e) => handleQuickAdd(e, product)}
-                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        className={`w-full py-2 sm:py-2.5 px-2 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
                           isAdded
                             ? 'bg-emerald-600 text-white'
                             : 'bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-950 shadow-xs'
@@ -571,13 +571,13 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       >
                         {isAdded ? (
                           <>
-                            <Check className="w-3.5 h-3.5" />
+                            <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                             <span>Ajouté</span>
                           </>
                         ) : (
                           <>
-                            <ShoppingBag className="w-3.5 h-3.5" />
-                            <span>Au panier</span>
+                            <ShoppingBag className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                            <span>Panier</span>
                           </>
                         )}
                       </button>
@@ -590,9 +590,9 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 transition-colors"
+                        className="w-full py-2 sm:py-2.5 px-2 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 transition-colors"
                       >
-                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <MessageCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <span>WhatsApp</span>
                       </a>
                     </div>
