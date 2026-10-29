@@ -56,7 +56,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [product]);
 
-  // Recherche d'une variante exacte dans public.store_product_variants
+  // Recherche d'une variante exacte dans public.store_product_variants (sans repli silencieux)
   const matchingVariant = product.variants?.find((v) => {
     if (v.published === false) return false;
     const matchColor = !v.color || v.color.toLowerCase() === selectedColor.toLowerCase();
@@ -65,12 +65,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     return matchColor && matchStorage && matchCond;
   });
 
-  // Détermination du prix fiable de la variante
-  const currentPrice = (matchingVariant && matchingVariant.price > 0)
-    ? matchingVariant.price
-    : ((product.storagePrices && product.storagePrices[selectedStorage])
-      ? product.storagePrices[selectedStorage]
-      : product.price);
+  // Détermination stricte du prix : si la variante existe et a un prix > 0, on l'utilise. Sinon null (« Prix à confirmer »).
+  const currentPrice = matchingVariant && matchingVariant.price > 0 ? matchingVariant.price : null;
 
   // Image et stock associés à la variante
   const displayImage = (matchingVariant && matchingVariant.imageUrl)
@@ -128,7 +124,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 • État sélectionné : ${selectedCondition}
 • Capacité : ${selectedStorage}
 • Finition : ${selectedColor}
-• Prix enregistré : ${currentPrice.toLocaleString('fr-FR')} FCFA
+• Prix enregistré : ${currentPrice !== null ? `${currentPrice.toLocaleString('fr-FR')} FCFA` : 'Prix à confirmer'}
 ${matchingVariant?.priceSource ? `• Source / Référence : ${matchingVariant.priceSource}` : ''}
 
 Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités de retrait en boutique à Abidjan !`;
@@ -188,7 +184,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                   Nouveauté
                 </span>
               )}
-              {product.originalPrice && product.originalPrice > currentPrice && (
+              {currentPrice !== null && product.originalPrice && product.originalPrice > currentPrice && (
                 <span className="text-xs font-bold tracking-wider uppercase px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                   -{(product.originalPrice - currentPrice).toLocaleString('fr-FR')} FCFA
                 </span>
@@ -267,20 +263,34 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
               {/* Price Tag & Source Reference note */}
               <div className="flex flex-col mb-6 pb-6 border-b border-slate-200/80 dark:border-slate-800 space-y-1">
                 <div className="flex items-baseline gap-3">
-                  <span className="text-3xl sm:text-4xl font-extrabold text-slate-950 dark:text-white font-['Outfit'] tabular-nums tracking-tight">
-                    {currentPrice.toLocaleString('fr-FR')} FCFA
-                  </span>
-                  {product.originalPrice && product.originalPrice > currentPrice && (
-                    <span className="text-lg text-slate-400 dark:text-slate-500 line-through tabular-nums">
-                      {product.originalPrice.toLocaleString('fr-FR')} FCFA
+                  {currentPrice !== null ? (
+                    <>
+                      <span className="text-3xl sm:text-4xl font-extrabold text-slate-950 dark:text-white font-['Outfit'] tabular-nums tracking-tight">
+                        {currentPrice.toLocaleString('fr-FR')} FCFA
+                      </span>
+                      {product.originalPrice && product.originalPrice > currentPrice && (
+                        <span className="text-lg text-slate-400 dark:text-slate-500 line-through tabular-nums">
+                          {product.originalPrice.toLocaleString('fr-FR')} FCFA
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-2xl sm:text-3xl font-extrabold text-amber-600 dark:text-amber-400 font-['Outfit'] tracking-tight">
+                      Prix à confirmer
                     </span>
                   )}
                 </div>
 
+                {currentPrice === null && (
+                  <span className="text-xs text-amber-700 dark:text-amber-300 font-medium pt-1">
+                    Cette configuration exacte n'a pas de tarif confirmé. Contactez Oumar pour estimation.
+                  </span>
+                )}
+
                 {matchingVariant?.priceSource && (
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 pt-1">
                     <Tag className="w-3 h-3 text-slate-400" />
-                    <span>Référence tarifaire : {matchingVariant.priceSource}</span>
+                    <span>Prix indicatif — à confirmer auprès d’Oumar ({matchingVariant.priceSource})</span>
                   </span>
                 )}
               </div>
