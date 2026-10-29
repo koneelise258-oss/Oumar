@@ -11,7 +11,7 @@ import { AdminAuthModal } from './components/AdminAuthModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { loadProducts } from './data/products';
 import { loadVideos } from './data/videos';
-import { fetchProductsRemote, fetchVideosRemote } from './services/storeService';
+import { fetchProductsRemote, fetchVideosRemote, fetchStoreSettingsRemote } from './services/storeService';
 import { checkIsUserAdmin } from './lib/supabase';
 import { CartItem, Product, VideoItem } from './types';
 import { ThemeProvider } from './context/ThemeContext';
@@ -36,6 +36,8 @@ function StoreApp() {
         setVideos(remoteVideos);
       }
     }).catch(() => {});
+
+    fetchStoreSettingsRemote().catch(() => {});
   }, []);
 
   // Search Modal state

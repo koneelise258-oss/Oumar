@@ -35,6 +35,10 @@ export interface SupabaseHealthResult {
   message: string;
   projectId: string;
   url: string;
+  productsCount?: number;
+  videosCount?: number;
+  adminsCount?: number;
+  ordersCount?: number;
 }
 
 export async function testSupabaseHealth(): Promise<SupabaseHealthResult> {
@@ -44,7 +48,11 @@ export async function testSupabaseHealth(): Promise<SupabaseHealthResult> {
     tablesReady: false,
     message: '',
     projectId: SUPABASE_PROJECT_ID,
-    url: supabaseUrl
+    url: supabaseUrl,
+    productsCount: 0,
+    videosCount: 0,
+    adminsCount: 0,
+    ordersCount: 0
   };
 
   if (!isSupabaseConfigured) {
@@ -53,24 +61,33 @@ export async function testSupabaseHealth(): Promise<SupabaseHealthResult> {
   }
 
   try {
-    const { error, count } = await supabase
-      .from('store_products')
-      .select('id', { count: 'exact', head: true });
+    const [prodRes, vidRes, admRes, ordRes] = await Promise.all([
+      supabase.from('store_products').select('id', { count: 'exact', head: true }),
+      supabase.from('store_videos').select('id', { count: 'exact', head: true }),
+      supabase.from('store_admins').select('id', { count: 'exact', head: true }),
+      supabase.from('store_orders').select('id', { count: 'exact', head: true })
+    ]);
 
-    if (error) {
-      if (error.code === '42P01' || error.message.includes('does not exist') || error.message.includes('store_products')) {
+    if (prodRes.error) {
+      if (prodRes.error.code === '42P01' || prodRes.error.message.includes('does not exist') || prodRes.error.message.includes('store_products')) {
         result.isConnected = true;
         result.tablesReady = false;
         result.message = "Connexion Supabase réussie, mais les tables 'store_*' ne sont pas encore créées. Veuillez exécuter le script SQL de migration.";
       } else {
         result.isConnected = false;
-        result.message = `Erreur de connexion Supabase: ${error.message}`;
+        result.message = `Erreur de connexion Supabase: ${prodRes.error.message}`;
       }
-    } else {
-      result.isConnected = true;
-      result.tablesReady = true;
-      result.message = `Connecté avec succès à Supabase ! (${count ?? 0} produit(s) en base)`;
+      return result;
     }
+
+    result.isConnected = true;
+    result.tablesReady = true;
+    result.productsCount = prodRes.count ?? 0;
+    result.videosCount = vidRes.count ?? 0;
+    result.adminsCount = admRes.count ?? 0;
+    result.ordersCount = ordRes.count ?? 0;
+
+    result.message = `Connecté à Supabase (${SUPABASE_PROJECT_ID}) : ${result.productsCount} produit(s), ${result.videosCount} vidéo(s), ${result.adminsCount} admin(s) configuré(s).`;
   } catch (err: any) {
     result.isConnected = false;
     result.message = `Échec de connexion réseau Supabase: ${err?.message || 'Erreur inconnue'}`;
@@ -100,32 +117,60 @@ export async function checkIsUserAdmin(expectedUserId?: string): Promise<{
   }
 
   try {
-    // 1. Obtenir l'utilisateur authentifié réel directement auprès du serveur Supabase Auth
+    // 1. Obtenir l'utilisateur authentifié réel auprès de Supabase Auth
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
     if (authErr || !user) {
-      return { isAdmin: false, error: 'Non authentifié sur Supabase Auth' };
+      return { isAdmin: false, error: 'Non authentifié sur Supabase Auth.' };
     }
 
     if (expectedUserId && expectedUserId !== user.id) {
-      return { isAdmin: false, error: 'Identifiant utilisateur non correspondant' };
+      return { isAdmin: false, error: 'Identifiant utilisateur non correspondant.' };
     }
 
-    // 2. Vérifier strictement l'existence d'une ligne active liée à ce user_id dans store_admins
-    const { data, error } = await supabase
+    // 2. Vérification directe par user_id
+    const { data: byUserId, error: errUserId } = await supabase
       .from('store_admins')
       .select('*')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .maybeSingle();
 
-    if (!error && data) {
-      return { isAdmin: true, record: data as StoreAdminRecord };
+    if (!errUserId && byUserId) {
+      return { isAdmin: true, record: byUserId as StoreAdminRecord };
+    }
+
+    // 3. Si non trouvé par user_id, vérifier par email pour rattacher automatiquement user_id
+    if (user.email) {
+      const { data: byEmail, error: errEmail } = await supabase
+        .from('store_admins')
+        .select('*')
+        .ilike('email', user.email.trim())
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (!errEmail && byEmail) {
+        // Mettre à jour user_id si non renseigné
+        if (!byEmail.user_id) {
+          try {
+            await supabase
+              .from('store_admins')
+              .update({ user_id: user.id })
+              .eq('id', byEmail.id);
+          } catch {
+            // Ignorer si RLS restreint l'update directe
+          }
+        }
+        return { isAdmin: true, record: { ...byEmail, user_id: user.id } as StoreAdminRecord };
+      }
     }
   } catch (e: any) {
     console.warn('Erreur lors de la vérification des droits administrateur:', e?.message);
   }
 
-  return { isAdmin: false, error: 'Accès refusé : Ce compte ne possède pas de droits administrateur actifs dans store_admins.' };
+  return { 
+    isAdmin: false, 
+    error: 'Accès refusé : Votre compte existe dans Supabase Auth, mais il n’est pas encore enregistré comme administrateur actif dans la table "store_admins".' 
+  };
 }
 
 export async function signInAdminWithPassword(email: string, password: string): Promise<{
@@ -141,33 +186,73 @@ export async function signInAdminWithPassword(email: string, password: string): 
     };
   }
 
+  const cleanEmail = email.trim().toLowerCase();
+
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.trim(),
+    email: cleanEmail,
     password: password.trim()
   });
 
   if (error || !data.user) {
+    const errorMsg = error?.message || '';
+    if (errorMsg.includes('Invalid login credentials')) {
+      return {
+        user: null,
+        isAdmin: false,
+        error: "Identifiants Supabase incorrects. Assurez-vous d'avoir créé l'utilisateur dans Supabase (Authentication > Users) et vérifiez le mot de passe."
+      };
+    }
     return {
       user: null,
       isAdmin: false,
-      error: error?.message || "Identifiants Supabase Auth invalides."
+      error: errorMsg || "Identifiants Supabase Auth invalides."
     };
   }
 
-  // Vérifier la présence stricte de l'utilisateur actif par user_id dans store_admins
-  const adminCheck = await checkIsUserAdmin(data.user.id);
-  if (!adminCheck.isAdmin) {
-    await supabase.auth.signOut();
+  // 1. Vérification des droits administrateur existants
+  let adminCheck = await checkIsUserAdmin(data.user.id);
+  if (adminCheck.isAdmin) {
     return {
-      user: null,
-      isAdmin: false,
-      error: `Accès refusé : Le compte "${data.user.email}" n'est pas configuré avec un accès administrateur actif (user_id) dans store_admins.`
+      user: data.user,
+      isAdmin: true
     };
   }
 
+  // 2. BOOTSTRAP AUTO : Si store_admins ne contient encore aucun admin actif,
+  // tenter d'enregistrer l'utilisateur connecté comme premier Superadmin via la RPC
+  try {
+    const { count } = await supabase
+      .from('store_admins')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true);
+
+    if (count === 0) {
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('add_store_admin_by_email', {
+        p_email: cleanEmail,
+        p_role: 'superadmin',
+        p_phone: null
+      });
+
+      if (!rpcErr && rpcRes && rpcRes.success) {
+        adminCheck = await checkIsUserAdmin(data.user.id);
+        if (adminCheck.isAdmin) {
+          return {
+            user: data.user,
+            isAdmin: true
+          };
+        }
+      }
+    }
+  } catch (bootstrapErr) {
+    console.warn('Tentative d’auto-initialisation du superadmin:', bootstrapErr);
+  }
+
+  // Si toujours non autorisé, déconnecter la session et expliquer clairement
+  await supabase.auth.signOut();
   return {
-    user: data.user,
-    isAdmin: true
+    user: null,
+    isAdmin: false,
+    error: `Accès refusé : Le compte "${data.user.email}" est valide dans Auth, mais il n'est pas enregistré dans la table "store_admins". Exécutez le script SQL pour configurer les administrateurs.`
   };
 }
 

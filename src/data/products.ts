@@ -291,18 +291,20 @@ const STORAGE_KEY = 'oumar_products_catalog';
 
 // Safe loader that synchronizes with localStorage
 export const loadProducts = (): Product[] => {
-  if (typeof window === 'undefined') return DEFAULT_PRODUCTS;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_PRODUCTS;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
     }
   } catch (err) {
-    console.warn('Failed to load products from localStorage, falling back to defaults', err);
+    console.warn('Failed to load products from localStorage', err);
   }
-  return DEFAULT_PRODUCTS;
+  // Do not display demo products when no saved catalogue exists.
+  return [];
 };
 
 // Save products to localStorage with event broadcast
@@ -316,15 +318,8 @@ export const saveProducts = (products: Product[]) => {
   }
 };
 
-// Reset products to initial defaults
+// Reset the local catalogue to an explicitly empty state.
 export const resetProducts = (): Product[] => {
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-      window.dispatchEvent(new CustomEvent('oumar_products_updated', { detail: DEFAULT_PRODUCTS }));
-    } catch {
-      // Ignore
-    }
-  }
-  return DEFAULT_PRODUCTS;
+  saveProducts([]);
+  return [];
 };

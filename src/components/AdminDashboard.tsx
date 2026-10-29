@@ -24,7 +24,7 @@ import {
   saveHeroCustomPhoto
 } from '../data/storeSettings';
 import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
-import { saveProducts, resetProducts } from '../data/products';
+import { loadProducts, saveProducts, resetProducts } from '../data/products';
 import { saveVideos, resetVideos } from '../data/videos';
 import {
   upsertProductRemote,
@@ -32,6 +32,8 @@ import {
   syncVideosRemote,
   deleteVideoRemote,
   saveStoreSettingsRemote,
+  syncHeroPhotoRemote,
+  seedOfficialAppleProductsRemote,
   updateOrderStatusRemote,
   deleteOrderRemote,
   fetchOrdersRemote,
@@ -235,6 +237,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const [isSeedingCatalog, setIsSeedingCatalog] = useState(false);
+
+  const handleSeedOfficialCatalog = async () => {
+    if (!window.confirm("Initialiser le catalogue officiel Apple (les 6 modèles certifiés) dans Supabase ?")) {
+      return;
+    }
+    setIsSeedingCatalog(true);
+    try {
+      const res = await seedOfficialAppleProductsRemote();
+      if (res.success) {
+        onProductsUpdated(loadProducts());
+        triggerNotification(res.message);
+        handleTestSupabase();
+      } else {
+        triggerNotification(`Erreur d'initialisation : ${res.message}`);
+      }
+    } catch (e: any) {
+      triggerNotification(`Erreur : ${e?.message || 'Échec du peuplement'}`);
+    } finally {
+      setIsSeedingCatalog(false);
+    }
+  };
+
   // ==========================================
   // TAB 1: PRODUCT MANAGEMENT STATES
   // ==========================================
@@ -304,67 +329,70 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsCreatingProduct(false);
   };
 
-  const handleSaveProductForm = () => {
+  const handleSaveProductForm = async () => {
     if (!formProduct.name || !formProduct.price) {
       alert('Veuillez renseigner au moins le nom et le prix du produit.');
       return;
     }
 
     const completeProduct = formProduct as Product;
+    const res = await upsertProductRemote(completeProduct);
 
-    if (isCreatingProduct) {
-      const updated = [completeProduct, ...products];
+    if (res.success) {
+      const updated = isCreatingProduct
+        ? [completeProduct, ...products]
+        : products.map((p) => (p.id === completeProduct.id ? completeProduct : p));
       onProductsUpdated(updated);
-      saveProducts(updated);
-      upsertProductRemote(completeProduct);
-      triggerNotification(`Produit "${completeProduct.name}" créé avec succès !`);
+      triggerNotification(`Produit "${completeProduct.name}" enregistré avec succès !`);
+      setEditingProduct(null);
+      setIsCreatingProduct(false);
     } else {
-      const updated = products.map((p) =>
-        p.id === completeProduct.id ? completeProduct : p
-      );
-      onProductsUpdated(updated);
-      saveProducts(updated);
-      upsertProductRemote(completeProduct);
-      triggerNotification(`Produit "${completeProduct.name}" mis à jour !`);
+      triggerNotification(`Échec de la sauvegarde sur Supabase : ${res.message || 'Erreur inconnue'}`);
     }
-
-    setEditingProduct(null);
-    setIsCreatingProduct(false);
   };
 
-  const handleDuplicateProduct = (p: Product) => {
+  const handleDuplicateProduct = async (p: Product) => {
     const clone: Product = {
       ...p,
       id: `prod-copy-${Date.now()}`,
       name: `${p.name} (Copie)`,
       featured: false
     };
-    const updated = [clone, ...products];
-    onProductsUpdated(updated);
-    saveProducts(updated);
-    upsertProductRemote(clone);
-    triggerNotification(`Copie créée pour "${p.name}"`);
+    const res = await upsertProductRemote(clone);
+    if (res.success) {
+      const updated = [clone, ...products];
+      onProductsUpdated(updated);
+      triggerNotification(`Copie créée pour "${p.name}"`);
+    } else {
+      triggerNotification(`Échec de la duplication sur Supabase : ${res.message}`);
+    }
   };
 
-  const handleToggleProductPublish = (id: string) => {
-    const updated = products.map((p) =>
-      p.id === id ? { ...p, published: p.published !== false ? false : true } : p
-    );
-    onProductsUpdated(updated);
-    saveProducts(updated);
-    const target = updated.find((p) => p.id === id);
-    if (target) upsertProductRemote(target);
+  const handleToggleProductPublish = async (id: string) => {
+    const target = products.find((p) => p.id === id);
+    if (!target) return;
+    const updatedProd = { ...target, published: target.published !== false ? false : true };
+    const res = await upsertProductRemote(updatedProd);
+    if (res.success) {
+      const updated = products.map((p) => (p.id === id ? updatedProd : p));
+      onProductsUpdated(updated);
+    } else {
+      triggerNotification(`Erreur Supabase : ${res.message}`);
+    }
   };
 
-  const handleToggleProductStock = (id: string) => {
-    const updated = products.map((p) =>
-      p.id === id ? { ...p, inStock: !p.inStock } : p
-    );
-    onProductsUpdated(updated);
-    saveProducts(updated);
-    const target = updated.find((p) => p.id === id);
-    if (target) upsertProductRemote(target);
-    triggerNotification('Statut de stock modifié');
+  const handleToggleProductStock = async (id: string) => {
+    const target = products.find((p) => p.id === id);
+    if (!target) return;
+    const updatedProd = { ...target, inStock: !target.inStock };
+    const res = await upsertProductRemote(updatedProd);
+    if (res.success) {
+      const updated = products.map((p) => (p.id === id ? updatedProd : p));
+      onProductsUpdated(updated);
+      triggerNotification('Statut de stock modifié');
+    } else {
+      triggerNotification(`Erreur Supabase : ${res.message}`);
+    }
   };
 
   const handleMoveProduct = (index: number, direction: 'up' | 'down') => {
@@ -377,20 +405,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     saveProducts(clone);
   };
 
-  const handleDeleteProduct = (id: string) => {
-    const updated = products.filter((p) => p.id !== id);
-    onProductsUpdated(updated);
-    saveProducts(updated);
-    deleteProductRemote(id);
-    setProductDeleteConfirmId(null);
-    triggerNotification('Produit supprimé du catalogue');
+  const handleDeleteProduct = async (id: string) => {
+    const res = await deleteProductRemote(id);
+    if (res.success) {
+      const updated = products.filter((p) => p.id !== id);
+      onProductsUpdated(updated);
+      setProductDeleteConfirmId(null);
+      triggerNotification('Produit supprimé du catalogue');
+    } else {
+      triggerNotification(`Échec de la suppression sur Supabase : ${res.message}`);
+    }
   };
 
   const handleResetCatalog = () => {
-    if (window.confirm('Voulez-vous vraiment réinitialiser tout le catalogue aux produits officiels Apple d’origine ?')) {
-      const def = resetProducts();
-      onProductsUpdated(def);
-      triggerNotification('Catalogue réinitialisé avec succès');
+    if (isSupabaseConfigured) {
+      triggerNotification('Réinitialisation globale indisponible ici : les produits Supabase sont conservés. Supprimez les produits individuellement pour éviter toute perte de données.');
+      return;
+    }
+    if (window.confirm('Voulez-vous vraiment vider le catalogue local ?')) {
+      const emptyCatalog = resetProducts();
+      onProductsUpdated(emptyCatalog);
+      triggerNotification('Catalogue local vidé');
     }
   };
 
@@ -489,7 +524,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [videoDeleteConfirmId, setVideoDeleteConfirmId] = useState<string | null>(null);
   const videoFileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSaveVideo = () => {
+  const handleSaveVideo = async () => {
     if (!videoUrlInput.trim()) return;
     const detectedType = videoUrlInput.includes('tiktok.com') ? 'tiktok' : videoTypeInput;
     const newVid: VideoItem = {
@@ -502,52 +537,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       createdAt: Date.now()
     };
     const updated = [newVid, ...videos];
-    onVideosUpdated(updated);
-    saveVideos(updated);
-    syncVideosRemote(updated);
-    setVideoUrlInput('');
-    setVideoTitleInput('');
-    setIsAddingVideo(false);
-    triggerNotification('Nouvelle vidéo ajoutée');
+    const res = await syncVideosRemote(updated);
+    if (res.success) {
+      onVideosUpdated(updated);
+      setVideoUrlInput('');
+      setVideoTitleInput('');
+      setIsAddingVideo(false);
+      triggerNotification('Nouvelle vidéo ajoutée');
+    } else {
+      triggerNotification(`Échec de l'ajout vidéo sur Supabase : ${res.message}`);
+    }
   };
 
-  const handleToggleVideoPublish = (id: string) => {
+  const handleToggleVideoPublish = async (id: string) => {
     const updated = videos.map((v) =>
       v.id === id ? { ...v, published: !v.published } : v
     );
-    onVideosUpdated(updated);
-    saveVideos(updated);
-    syncVideosRemote(updated);
+    const res = await syncVideosRemote(updated);
+    if (res.success) {
+      onVideosUpdated(updated);
+    } else {
+      triggerNotification(`Erreur Supabase : ${res.message}`);
+    }
   };
 
-  const handleMoveVideo = (index: number, direction: 'up' | 'down') => {
+  const handleMoveVideo = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= videos.length) return;
     const clone = [...videos];
     const [moved] = clone.splice(index, 1);
     clone.splice(targetIndex, 0, moved);
     const reordered = clone.map((v, i) => ({ ...v, order: i + 1 }));
-    onVideosUpdated(reordered);
-    saveVideos(reordered);
-    syncVideosRemote(reordered);
+    const res = await syncVideosRemote(reordered);
+    if (res.success) {
+      onVideosUpdated(reordered);
+    } else {
+      triggerNotification(`Erreur Supabase : ${res.message}`);
+    }
   };
 
-  const handleDeleteVideo = (id: string) => {
-    const updated = videos
-      .filter((v) => v.id !== id)
-      .map((v, i) => ({ ...v, order: i + 1 }));
-    onVideosUpdated(updated);
-    saveVideos(updated);
-    deleteVideoRemote(id);
-    setVideoDeleteConfirmId(null);
-    triggerNotification('Vidéo supprimée');
+  const handleDeleteVideo = async (id: string) => {
+    const res = await deleteVideoRemote(id);
+    if (res.success) {
+      const updated = videos
+        .filter((v) => v.id !== id)
+        .map((v, i) => ({ ...v, order: i + 1 }));
+      onVideosUpdated(updated);
+      setVideoDeleteConfirmId(null);
+      triggerNotification('Vidéo supprimée');
+    } else {
+      triggerNotification(`Échec de la suppression sur Supabase : ${res.message}`);
+    }
   };
 
   const handleResetVideos = () => {
-    if (window.confirm('Réinitialiser la liste des vidéos aux vidéos par défaut ?')) {
-      const def = resetVideos();
-      onVideosUpdated(def);
-      triggerNotification('Vidéos réinitialisées');
+    if (isSupabaseConfigured) {
+      triggerNotification('Réinitialisation globale indisponible ici : les vidéos Supabase sont conservées. Supprimez les vidéos individuellement pour éviter toute perte de données.');
+      return;
+    }
+    if (window.confirm('Voulez-vous vraiment vider la liste des vidéos locales ?')) {
+      const emptyVideos = resetVideos();
+      onVideosUpdated(emptyVideos);
+      triggerNotification('Liste locale des vidéos vidée');
     }
   };
 
@@ -631,8 +682,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         if (dataUrl) {
           setHeroPhotoPreview(dataUrl);
           saveHeroCustomPhoto(dataUrl);
+          syncHeroPhotoRemote(dataUrl);
           setHeroPhotoSrc(dataUrl);
-          triggerNotification("Photo de la section Hero mise à jour et publiée avec succès !");
+          triggerNotification("Photo de la section Hero mise à jour et synchronisée avec succès !");
         }
       };
       reader.readAsDataURL(file);
@@ -644,22 +696,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!trimmed) return;
     setHeroPhotoPreview(trimmed);
     saveHeroCustomPhoto(trimmed);
+    syncHeroPhotoRemote(trimmed);
     setHeroPhotoSrc(trimmed);
     setHeroPhotoUrlInput('');
-    triggerNotification("Photo de la section Hero mise à jour avec succès !");
+    triggerNotification("Photo de la section Hero mise à jour et synchronisée avec succès !");
   };
 
   const handleResetHeroPhoto = () => {
     saveHeroCustomPhoto(null);
+    syncHeroPhotoRemote(null);
     setHeroPhotoSrc(null);
     setHeroPhotoPreview(null);
-    triggerNotification("Photo de l'Hero réinitialisée à l'image officielle.");
+    triggerNotification("Photo de l'Hero réinitialisée et synchronisée.");
   };
 
-  const handleSaveStoreSettings = () => {
-    saveStoreSettings(settingsForm);
-    saveStoreSettingsRemote(settingsForm);
-    triggerNotification('Paramètres de la boutique enregistrés !');
+  const handleSaveStoreSettings = async () => {
+    const res = await saveStoreSettingsRemote(settingsForm);
+    if (res.success) {
+      triggerNotification('Paramètres de la boutique enregistrés !');
+    } else {
+      triggerNotification(`Échec de la sauvegarde sur Supabase : ${res.message}`);
+    }
   };
 
   // ==========================================
@@ -957,6 +1014,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 {/* Right Action Buttons */}
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSeedOfficialCatalog}
+                    disabled={isSeedingCatalog}
+                    className="px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Enregistrer les 6 modèles officiels Apple certifiés dans Supabase"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${isSeedingCatalog ? 'animate-spin' : ''}`} />
+                    <span>{isSeedingCatalog ? 'Envoi...' : 'Peupler Supabase (Officiel)'}</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={handleResetCatalog}
@@ -1922,6 +1990,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <button
                     type="button"
+                    onClick={handleSeedOfficialCatalog}
+                    disabled={isSeedingCatalog}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${isSeedingCatalog ? 'animate-spin' : ''}`} />
+                    <span>{isSeedingCatalog ? 'Peuplement en cours...' : 'Peupler le catalogue officiel Apple (6 modèles)'}</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setIsSqlModalOpen(true)}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 transition-all cursor-pointer shadow-xs"
                   >
@@ -2035,10 +2113,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="p-10 text-center space-y-3">
                     <Users className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
                     <h4 className="text-sm font-bold text-slate-800 dark:text-white">
-                      Aucun administrateur distant configuré
+                      Aucun administrateur enregistré dans store_admins (0 compte)
                     </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                      Assurez-vous d’avoir exécuté le script SQL dans votre projet Supabase (<code className="text-emerald-500">{SUPABASE_PROJECT_ID}</code>), puis cliquez sur "Ajouter un Administrateur" pour inviter votre adresse email.
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-lg mx-auto">
+                      La table <code className="text-emerald-500 font-mono">store_admins</code> est actuellement vide. Grâce au script SQL de migration, le premier utilisateur qui se connectera ou qui cliquera ci-dessous sera automatiquement provisionné comme <strong>Superadmin</strong> officiel d’OUMAR IPHONE.
                     </p>
                     <div className="pt-2">
                       <button
@@ -2047,7 +2125,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 transition-opacity cursor-pointer inline-flex items-center gap-1.5"
                       >
                         <UserPlus className="w-3.5 h-3.5" />
-                        <span>Créer le premier administrateur</span>
+                        <span>Créer le premier Superadmin</span>
                       </button>
                     </div>
                   </div>

@@ -2,8 +2,8 @@ import { supabase, isSupabaseConfigured, testSupabaseHealth } from '../lib/supab
 export { testSupabaseHealth };
 import { Product, VideoItem } from '../types';
 import { StoreOrder, OrderStatus, loadOrders, saveOrders } from '../data/orders';
-import { StoreSettings, loadStoreSettings, saveStoreSettings } from '../data/storeSettings';
-import { loadProducts, saveProducts } from '../data/products';
+import { StoreSettings, loadStoreSettings, saveStoreSettings, getHeroCustomPhoto, saveHeroCustomPhoto } from '../data/storeSettings';
+import { loadProducts, saveProducts, DEFAULT_PRODUCTS } from '../data/products';
 import { loadVideos, saveVideos } from '../data/videos';
 
 // ==============================================================================
@@ -114,9 +114,7 @@ export async function fetchProductsRemote(): Promise<Product[]> {
 
     if (data) {
       const mapped = data.map(rowToProduct);
-      if (mapped.length > 0) {
-        saveProducts(mapped); // Cache locally for offline reliability
-      }
+      saveProducts(mapped); // Cache mapped array (even if empty) to record exact remote state
       return mapped;
     }
   } catch (err) {
@@ -126,16 +124,16 @@ export async function fetchProductsRemote(): Promise<Product[]> {
   return loadProducts();
 }
 
-export async function upsertProductRemote(product: Product): Promise<void> {
-  // Update local store immediately for instant UI response
-  const localList = loadProducts();
-  const existingIdx = localList.findIndex((p) => p.id === product.id);
-  const updatedList = existingIdx >= 0
-    ? localList.map((p) => (p.id === product.id ? product : p))
-    : [product, ...localList];
-  saveProducts(updatedList);
-
-  if (!isSupabaseConfigured) return;
+export async function upsertProductRemote(product: Product): Promise<{ success: boolean; message?: string }> {
+  if (!isSupabaseConfigured) {
+    const localList = loadProducts();
+    const existingIdx = localList.findIndex((p) => p.id === product.id);
+    const updatedList = existingIdx >= 0
+      ? localList.map((p) => (p.id === product.id ? product : p))
+      : [product, ...localList];
+    saveProducts(updatedList);
+    return { success: true };
+  }
 
   try {
     const row = productToRow(product);
@@ -145,18 +143,28 @@ export async function upsertProductRemote(product: Product): Promise<void> {
 
     if (error) {
       console.error('Error upserting product to Supabase:', error);
+      return { success: false, message: `Échec Supabase: ${error.message}` };
     }
-  } catch (err) {
+
+    const localList = loadProducts();
+    const existingIdx = localList.findIndex((p) => p.id === product.id);
+    const updatedList = existingIdx >= 0
+      ? localList.map((p) => (p.id === product.id ? product : p))
+      : [product, ...localList];
+    saveProducts(updatedList);
+    return { success: true };
+  } catch (err: any) {
     console.error('Network error during Supabase product upsert:', err);
+    return { success: false, message: err?.message || 'Erreur réseau lors de l’enregistrement du produit.' };
   }
 }
 
-export async function deleteProductRemote(productId: string): Promise<void> {
-  const localList = loadProducts();
-  const updatedList = localList.filter((p) => p.id !== productId);
-  saveProducts(updatedList);
-
-  if (!isSupabaseConfigured) return;
+export async function deleteProductRemote(productId: string): Promise<{ success: boolean; message?: string }> {
+  if (!isSupabaseConfigured) {
+    const localList = loadProducts().filter((p) => p.id !== productId);
+    saveProducts(localList);
+    return { success: true };
+  }
 
   try {
     const { error } = await supabase
@@ -166,9 +174,15 @@ export async function deleteProductRemote(productId: string): Promise<void> {
 
     if (error) {
       console.error('Error deleting product from Supabase:', error);
+      return { success: false, message: `Échec Supabase: ${error.message}` };
     }
-  } catch (err) {
+
+    const localList = loadProducts().filter((p) => p.id !== productId);
+    saveProducts(localList);
+    return { success: true };
+  } catch (err: any) {
     console.error('Network error during Supabase product deletion:', err);
+    return { success: false, message: err?.message || 'Erreur réseau lors de la suppression.' };
   }
 }
 
@@ -192,10 +206,11 @@ export async function fetchVideosRemote(): Promise<VideoItem[]> {
     }
 
     if (data) {
-      const mapped = data.map(rowToVideo);
-      if (mapped.length > 0) {
-        saveVideos(mapped);
-      }
+      // Never present Google sample clips as official store content.
+      const mapped = data
+        .map(rowToVideo)
+        .filter((video) => !video.url.includes('commondatastorage.googleapis.com/gtv-videos-bucket/sample/'));
+      saveVideos(mapped); // Cache mapped array, including an empty array
       return mapped;
     }
   } catch (err) {
@@ -205,10 +220,11 @@ export async function fetchVideosRemote(): Promise<VideoItem[]> {
   return loadVideos();
 }
 
-export async function syncVideosRemote(videos: VideoItem[]): Promise<void> {
-  saveVideos(videos);
-
-  if (!isSupabaseConfigured) return;
+export async function syncVideosRemote(videos: VideoItem[]): Promise<{ success: boolean; message?: string }> {
+  if (!isSupabaseConfigured) {
+    saveVideos(videos);
+    return { success: true };
+  }
 
   try {
     const rows = videos.map(videoToRow);
@@ -218,20 +234,25 @@ export async function syncVideosRemote(videos: VideoItem[]): Promise<void> {
 
     if (error) {
       console.error('Error syncing videos to Supabase:', error);
+      return { success: false, message: `Échec Supabase: ${error.message}` };
     }
-  } catch (err) {
+
+    saveVideos(videos);
+    return { success: true };
+  } catch (err: any) {
     console.error('Network error during Supabase videos sync:', err);
+    return { success: false, message: err?.message || 'Erreur réseau lors de la mise à jour des vidéos.' };
   }
 }
 
-export async function deleteVideoRemote(videoId: string): Promise<void> {
-  const localList = loadVideos();
-  const updatedList = localList
-    .filter((v) => v.id !== videoId)
-    .map((v, i) => ({ ...v, order: i + 1 }));
-  saveVideos(updatedList);
-
-  if (!isSupabaseConfigured) return;
+export async function deleteVideoRemote(videoId: string): Promise<{ success: boolean; message?: string }> {
+  if (!isSupabaseConfigured) {
+    const localList = loadVideos()
+      .filter((v) => v.id !== videoId)
+      .map((v, i) => ({ ...v, order: i + 1 }));
+    saveVideos(localList);
+    return { success: true };
+  }
 
   try {
     const { error } = await supabase
@@ -241,9 +262,17 @@ export async function deleteVideoRemote(videoId: string): Promise<void> {
 
     if (error) {
       console.error('Error deleting video from Supabase:', error);
+      return { success: false, message: `Échec Supabase: ${error.message}` };
     }
-  } catch (err) {
+
+    const localList = loadVideos()
+      .filter((v) => v.id !== videoId)
+      .map((v, i) => ({ ...v, order: i + 1 }));
+    saveVideos(localList);
+    return { success: true };
+  } catch (err: any) {
     console.error('Network error deleting video from Supabase:', err);
+    return { success: false, message: err?.message || 'Erreur réseau lors de la suppression de la vidéo.' };
   }
 }
 
@@ -278,6 +307,12 @@ export async function fetchStoreSettingsRemote(): Promise<StoreSettings> {
         warrantyText: data.warranty_text,
         deliveryFee: data.delivery_fee
       };
+
+      // Si Supabase contient une photo personnalisée pour le Hero, la synchroniser localement
+      if (data.hero_photo_custom !== undefined) {
+        saveHeroCustomPhoto(data.hero_photo_custom);
+      }
+
       saveStoreSettings(mapped);
       return mapped;
     }
@@ -288,10 +323,13 @@ export async function fetchStoreSettingsRemote(): Promise<StoreSettings> {
   return loadStoreSettings();
 }
 
-export async function saveStoreSettingsRemote(settings: StoreSettings): Promise<void> {
-  saveStoreSettings(settings);
+export async function saveStoreSettingsRemote(settings: StoreSettings): Promise<{ success: boolean; message?: string }> {
+  const currentHeroPhoto = getHeroCustomPhoto();
 
-  if (!isSupabaseConfigured) return;
+  if (!isSupabaseConfigured) {
+    saveStoreSettings(settings);
+    return { success: true };
+  }
 
   try {
     const row = {
@@ -304,6 +342,7 @@ export async function saveStoreSettingsRemote(settings: StoreSettings): Promise<
       opening_hours: settings.openingHours,
       warranty_text: settings.warrantyText,
       delivery_fee: settings.deliveryFee,
+      hero_photo_custom: currentHeroPhoto,
       updated_at: new Date().toISOString()
     };
 
@@ -313,9 +352,85 @@ export async function saveStoreSettingsRemote(settings: StoreSettings): Promise<
 
     if (error) {
       console.error('Error saving store settings to Supabase:', error);
+      return { success: false, message: `Échec Supabase: ${error.message}` };
     }
-  } catch (err) {
+
+    saveStoreSettings(settings);
+    return { success: true };
+  } catch (err: any) {
     console.error('Network error saving store settings to Supabase:', err);
+    return { success: false, message: err?.message || 'Erreur réseau lors de l’enregistrement des paramètres.' };
+  }
+}
+
+export async function syncHeroPhotoRemote(photoDataUrl: string | null): Promise<boolean> {
+  saveHeroCustomPhoto(photoDataUrl);
+  if (!isSupabaseConfigured) return true;
+
+  try {
+    const { error } = await supabase
+      .from('store_settings')
+      .update({
+        hero_photo_custom: photoDataUrl,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', 'default');
+
+    if (error) {
+      console.warn('Impossible de synchroniser la photo hero sur Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Erreur réseau sync hero photo:', e);
+    return false;
+  }
+}
+
+/**
+ * Initialise le catalogue officiel Apple (les 6 modèles réels avec caractéristiques certifiées)
+ * directement dans la table store_products de Supabase sans aucune donnée fictive.
+ */
+export async function seedOfficialAppleProductsRemote(): Promise<{
+  success: boolean;
+  message: string;
+  count: number;
+}> {
+  if (!isSupabaseConfigured) {
+    saveProducts(DEFAULT_PRODUCTS);
+    return {
+      success: true,
+      message: 'Catalogue officiel Apple restauré dans le cache local.',
+      count: DEFAULT_PRODUCTS.length
+    };
+  }
+
+  try {
+    const rows = DEFAULT_PRODUCTS.map(productToRow);
+    const { error } = await supabase
+      .from('store_products')
+      .upsert(rows, { onConflict: 'id' });
+
+    if (error) {
+      return {
+        success: false,
+        message: `Erreur Supabase lors du peuplement : ${error.message}`,
+        count: 0
+      };
+    }
+
+    saveProducts(DEFAULT_PRODUCTS);
+    return {
+      success: true,
+      message: `${DEFAULT_PRODUCTS.length} produits officiels Apple (iPhone, iPad, MacBook, AirPods) enregistrés dans Supabase !`,
+      count: DEFAULT_PRODUCTS.length
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.message || 'Erreur réseau.',
+      count: 0
+    };
   }
 }
 
