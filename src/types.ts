@@ -1,9 +1,18 @@
-export type ProductCategory = 'iPhone' | 'iPad' | 'MacBook' | 'Accessoires';
+export type ProductCategory = 'iPhone' | 'iPad' | 'iPhone Duo' | 'MacBook' | 'Accessoires';
+
+export type ProductCondition = 
+  | 'Neuf Scellé' 
+  | 'Neuf Original Apple' 
+  | 'Quasi Neuf' 
+  | 'Occasion' 
+  | 'Reconditionné A+' 
+  | 'Reconditionné Certifié';
 
 export interface ProductColor {
   name: string;
   hex: string;
   image?: string;
+  inStock?: boolean;
 }
 
 export interface ProductSpec {
@@ -15,12 +24,28 @@ export interface ProductSpec {
   boxContents?: string;
 }
 
+export interface ProductVariant {
+  id?: string;
+  productId: string;
+  color: string;
+  colorHex?: string;
+  storage: string;
+  condition: string;
+  price: number;
+  imageUrl?: string;
+  inStock?: boolean;
+  published?: boolean;
+  priceSource?: string;
+  priceCheckedAt?: string;
+  sourceUrl?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
   model: string;
   category: ProductCategory;
-  condition: 'Neuf Scellé' | 'Reconditionné A+' | 'Reconditionné Certifié';
+  condition: ProductCondition;
   storage: string[];
   selectedStorage: string;
   price: number; // in FCFA
@@ -39,6 +64,7 @@ export interface Product {
   description?: string;
   specs?: ProductSpec;
   published?: boolean;
+  variants?: ProductVariant[];
 }
 
 export interface CartItem {
@@ -47,6 +73,7 @@ export interface CartItem {
   chosenStorage: string;
   chosenColor: string;
   unitPrice: number;
+  chosenCondition?: string;
 }
 
 export interface VideoItem {

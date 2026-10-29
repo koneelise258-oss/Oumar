@@ -21,6 +21,7 @@ interface CatalogueProps {
   products: Product[];
   onAddToCart: (product: Product, storage: string, color: string) => void;
   onProductsUpdated?: (products: Product[]) => void;
+  onSelectProduct?: (product: Product) => void;
   externalActiveProduct?: Product | null;
   onCloseExternalProduct?: () => void;
 }
@@ -31,6 +32,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
   products, 
   onAddToCart,
   onProductsUpdated,
+  onSelectProduct,
   externalActiveProduct,
   onCloseExternalProduct
 }) => {
@@ -67,7 +69,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
 
   // Available categories with count
   const categories = useMemo(() => {
-    const list: string[] = ['Tous', 'iPhone', 'iPad', 'MacBook', 'Accessoires'];
+    const list: string[] = ['Tous', 'iPhone', 'iPad', 'iPhone Duo', 'MacBook', 'Accessoires'];
     return list;
   }, []);
 
@@ -441,7 +443,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
               return (
                 <div
                   key={`${product.id || 'prod'}-${pIndex}`}
-                  onClick={() => setActiveModalProduct(product)}
+                  onClick={() => onSelectProduct ? onSelectProduct(product) : setActiveModalProduct(product)}
                   className="bg-white dark:bg-[#0f172a] rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer min-w-0"
                 >
                   {/* Product Visual Stage */}

@@ -38,10 +38,10 @@ export const DEFAULT_PRODUCTS: Product[] = [
       '1 To': 1490000
     },
     colors: [
-      { name: 'Titane Naturel', hex: '#BEB8AE' },
-      { name: 'Titane Désert', hex: '#D4C4B5' },
-      { name: 'Titane Blanc', hex: '#F2F1ED' },
-      { name: 'Titane Noir', hex: '#3C3B37' }
+      { name: 'Titane Naturel', hex: '#BEB8AE', image: img16ProMax },
+      { name: 'Titane Désert', hex: '#D4C4B5', image: imgTitanium },
+      { name: 'Titane Blanc', hex: '#F2F1ED', image: img16ProMax },
+      { name: 'Titane Noir', hex: '#3C3B37', image: imgTitanium }
     ],
     selectedColor: 'Titane Naturel',
     image: img16ProMax,
@@ -79,10 +79,10 @@ export const DEFAULT_PRODUCTS: Product[] = [
       '512 Go': 1160000
     },
     colors: [
-      { name: 'Titane Naturel', hex: '#BEB8AE' },
-      { name: 'Titane Désert', hex: '#D4C4B5' },
-      { name: 'Titane Noir', hex: '#3C3B37' },
-      { name: 'Titane Blanc', hex: '#F2F1ED' }
+      { name: 'Titane Naturel', hex: '#BEB8AE', image: imgTitanium },
+      { name: 'Titane Désert', hex: '#D4C4B5', image: imgTitanium },
+      { name: 'Titane Noir', hex: '#3C3B37', image: img16ProMax },
+      { name: 'Titane Blanc', hex: '#F2F1ED', image: img16ProMax }
     ],
     selectedColor: 'Titane Désert',
     image: imgTitanium,
@@ -105,78 +105,40 @@ export const DEFAULT_PRODUCTS: Product[] = [
     published: true
   },
   {
-    id: 'iphone-15-pro-max',
-    name: 'iPhone 15 Pro Max',
-    model: 'Titane Grade A+ Certifié',
-    category: 'iPhone',
-    condition: 'Reconditionné A+',
-    storage: ['256 Go', '512 Go'],
-    selectedStorage: '256 Go',
-    price: 795000,
-    originalPrice: 850000,
+    id: 'iphone-duo-pack-pro',
+    name: 'iPhone Duo (Pack 2 iPhones)',
+    model: 'Offre Spéciale Duo Abidjan',
+    category: 'iPhone Duo',
+    condition: 'Neuf Original Apple',
+    storage: ['256 Go + 128 Go', '512 Go + 256 Go'],
+    selectedStorage: '256 Go + 128 Go',
+    price: 1390000,
+    originalPrice: 1480000,
     storagePrices: {
-      '256 Go': 795000,
-      '512 Go': 895000
+      '256 Go + 128 Go': 1390000,
+      '512 Go + 256 Go': 1590000
     },
     colors: [
-      { name: 'Titane Naturel', hex: '#BEB8AE' },
-      { name: 'Titane Noir', hex: '#3C3B37' },
-      { name: 'Titane Bleu', hex: '#2B3545' }
+      { name: 'Titane Naturel & Noir', hex: '#BEB8AE', image: img16ProMax },
+      { name: 'Titane Désert & Blanc', hex: '#D4C4B5', image: imgTitanium }
     ],
-    selectedColor: 'Titane Naturel',
-    image: img15Pro,
-    gallery: [img15Pro, imgTitanium],
-    batteryHealth: '100% Certifiée',
-    warranty: 'Garantie Oumar 6 mois',
+    selectedColor: 'Titane Naturel & Noir',
+    image: img16ProMax,
+    gallery: [img16ProMax, imgTitanium],
+    batteryHealth: '100% Neuf',
+    warranty: 'Garantie Apple 1 an',
     inStock: true,
-    stockLocation: 'Boutique Plateau',
-    featured: false,
-    description: 'Le premier iPhone en titane aérospatial avec le téléobjectif optique 5x et le bouton Action programmable. Rigoureusement inspecté par Oumar sur 35 points de contrôle.',
+    stockLocation: 'Boutique Cocody & Plateau',
+    featured: true,
+    isNew: true,
+    description: 'Offre exclusive Duo OUMAR IPHONE : pack de deux iPhones neufs scellés certifiés Apple avec garanties individuelles 1 an. Idéal pour couples, associés ou cadeaux d’exception à Abidjan.',
     specs: {
-      screen: 'Super Retina XDR 6,7" OLED ProMotion 120Hz',
-      chip: 'Puce A17 Pro avec GPU 6 cœurs et Ray Tracing matériel',
-      camera: 'Objectif principal 48 Mpx, Téléobjectif 5x 120 mm',
-      battery: 'Batterie certifiée 100% santé avec cycles vérifiés',
-      ports: 'USB-C (USB 3 jusqu’à 10 Gb/s)',
-      boxContents: 'iPhone 15 Pro Max boîte reconditionnée avec chargeur et câble'
-    },
-    published: true
-  },
-  {
-    id: 'iphone-15-pro',
-    name: 'iPhone 15 Pro',
-    model: 'Puce A17 Pro Titane 6,1"',
-    category: 'iPhone',
-    condition: 'Reconditionné A+',
-    storage: ['128 Go', '256 Go'],
-    selectedStorage: '128 Go',
-    price: 640000,
-    originalPrice: 690000,
-    storagePrices: {
-      '128 Go': 640000,
-      '256 Go': 710000
-    },
-    colors: [
-      { name: 'Titane Noir', hex: '#3C3B37' },
-      { name: 'Titane Naturel', hex: '#BEB8AE' },
-      { name: 'Titane Blanc', hex: '#F2F1ED' }
-    ],
-    selectedColor: 'Titane Noir',
-    image: img15Pro,
-    gallery: [img15Pro],
-    batteryHealth: '98% Certifiée',
-    warranty: 'Garantie Oumar 6 mois',
-    inStock: true,
-    stockLocation: 'Boutique Cocody',
-    featured: false,
-    description: 'Élégant, ultra-léger et puissant. Puce A17 Pro pour le jeu mobile de niveau console et format idéal pour une utilisation à une main.',
-    specs: {
-      screen: 'Super Retina XDR 6,1" avec Dynamic Island',
-      chip: 'Puce A17 Pro',
-      camera: '48 Mpx avec mode Portrait nouvelle génération',
-      battery: 'Excellente autonomie avec santé batterie certifiée',
-      ports: 'USB-C universel',
-      boxContents: 'iPhone 15 Pro, Câble de charge et chargeur 20W inclus'
+      screen: 'Écrans Super Retina XDR OLED ProMotion 120Hz',
+      chip: 'Puces Apple Silicon A18 / A17 Pro haute efficacité',
+      camera: 'Système photo Pro 48 Mpx avec enregistrement vidéo 4K Dolby Vision',
+      battery: 'Batteries scellées d’origine Apple avec autonomie maximale',
+      ports: 'USB-C haute vitesse',
+      boxContents: 'Deux coffrets neufs scellés individuels avec câbles de charge tressés'
     },
     published: true
   },
@@ -186,17 +148,18 @@ export const DEFAULT_PRODUCTS: Product[] = [
     model: 'Ultra Retina Tandem OLED Puce M4',
     category: 'iPad',
     condition: 'Neuf Scellé',
-    storage: ['256 Go', '512 Go'],
+    storage: ['256 Go', '512 Go', '1 To'],
     selectedStorage: '256 Go',
     price: 1090000,
     originalPrice: 1150000,
     storagePrices: {
       '256 Go': 1090000,
-      '512 Go': 1250000
+      '512 Go': 1250000,
+      '1 To': 1450000
     },
     colors: [
-      { name: 'Noir Sidéral', hex: '#26282A' },
-      { name: 'Argent', hex: '#E3E4E5' }
+      { name: 'Noir Sidéral', hex: '#26282A', image: imgIpadPro },
+      { name: 'Argent', hex: '#E3E4E5', image: imgIpadPro }
     ],
     selectedColor: 'Noir Sidéral',
     image: imgIpadPro,
@@ -219,6 +182,85 @@ export const DEFAULT_PRODUCTS: Product[] = [
     published: true
   },
   {
+    id: 'ipad-air-11-m2',
+    name: 'iPad Air 11" M2',
+    model: 'Puce Apple M2 Liquid Retina',
+    category: 'iPad',
+    condition: 'Neuf Scellé',
+    storage: ['128 Go', '256 Go', '512 Go'],
+    selectedStorage: '128 Go',
+    price: 590000,
+    originalPrice: 630000,
+    storagePrices: {
+      '128 Go': 590000,
+      '256 Go': 690000,
+      '512 Go': 850000
+    },
+    colors: [
+      { name: 'Gris Sidéral', hex: '#53555B', image: imgIpadPro },
+      { name: 'Lumière Stellaire', hex: '#E2D8CE', image: imgIpadPro },
+      { name: 'Bleu', hex: '#A3B9C9', image: imgIpadPro },
+      { name: 'Mauve', hex: '#C2B6D1', image: imgIpadPro }
+    ],
+    selectedColor: 'Gris Sidéral',
+    image: imgIpadPro,
+    gallery: [imgIpadPro],
+    batteryHealth: '100% Neuf',
+    warranty: 'Garantie Apple 1 an',
+    inStock: true,
+    stockLocation: 'Boutique Cocody',
+    featured: false,
+    isNew: true,
+    description: 'Performances M2 impressionnantes dans un design ultra-léger et coloré. Écran Liquid Retina 11 pouces avec couleur large P3 et compatibilité Apple Pencil Pro.',
+    specs: {
+      screen: '11 pouces Liquid Retina True Tone P3',
+      chip: 'Puce Apple M2 avec GPU 10 cœurs',
+      camera: 'Caméra 12 Mpx grand-angle + Caméra avant paysage 12 Mpx Ultra grand-angle',
+      battery: 'Jusqu’à 10 heures d’autonomie',
+      ports: 'USB-C haute vitesse',
+      boxContents: 'iPad Air 11", Câble de charge USB-C, Adaptateur secteur'
+    },
+    published: true
+  },
+  {
+    id: 'iphone-15-pro-max',
+    name: 'iPhone 15 Pro Max',
+    model: 'Titane Grade A+ Certifié',
+    category: 'iPhone',
+    condition: 'Reconditionné A+',
+    storage: ['256 Go', '512 Go'],
+    selectedStorage: '256 Go',
+    price: 795000,
+    originalPrice: 850000,
+    storagePrices: {
+      '256 Go': 795000,
+      '512 Go': 895000
+    },
+    colors: [
+      { name: 'Titane Naturel', hex: '#BEB8AE', image: img15Pro },
+      { name: 'Titane Noir', hex: '#3C3B37', image: img15Pro },
+      { name: 'Titane Bleu', hex: '#2B3545', image: img15Pro }
+    ],
+    selectedColor: 'Titane Naturel',
+    image: img15Pro,
+    gallery: [img15Pro, imgTitanium],
+    batteryHealth: '100% Certifiée',
+    warranty: 'Garantie Oumar 6 mois',
+    inStock: true,
+    stockLocation: 'Boutique Plateau',
+    featured: false,
+    description: 'Le premier iPhone en titane aérospatial avec le téléobjectif optique 5x et le bouton Action programmable. Rigoureusement inspecté par Oumar sur 35 points de contrôle.',
+    specs: {
+      screen: 'Super Retina XDR 6,7" OLED ProMotion 120Hz',
+      chip: 'Puce A17 Pro avec GPU 6 cœurs et Ray Tracing matériel',
+      camera: 'Objectif principal 48 Mpx, Téléobjectif 5x 120 mm',
+      battery: 'Batterie certifiée 100% santé avec cycles vérifiés',
+      ports: 'USB-C (USB 3 jusqu’à 10 Gb/s)',
+      boxContents: 'iPhone 15 Pro Max boîte reconditionnée avec chargeur et câble'
+    },
+    published: true
+  },
+  {
     id: 'macbook-pro-14-m3',
     name: 'MacBook Pro 14" M3 Pro',
     model: 'Apple Silicon 18 Go RAM / 512 Go SSD',
@@ -233,8 +275,8 @@ export const DEFAULT_PRODUCTS: Product[] = [
       '1 To SSD': 1890000
     },
     colors: [
-      { name: 'Noir Sidéral', hex: '#242527' },
-      { name: 'Argent', hex: '#E3E4E6' }
+      { name: 'Noir Sidéral', hex: '#242527', image: imgMacBookPro },
+      { name: 'Argent', hex: '#E3E4E6', image: imgMacBookPro }
     ],
     selectedColor: 'Noir Sidéral',
     image: imgMacBookPro,
@@ -270,7 +312,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
       'Standard': 195000
     },
     colors: [
-      { name: 'Blanc Pur', hex: '#FFFFFF' }
+      { name: 'Blanc Pur', hex: '#FFFFFF', image: imgAirPodsPro }
     ],
     selectedColor: 'Blanc Pur',
     image: imgAirPodsPro,
@@ -305,15 +347,14 @@ export const loadProducts = (): Product[] => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed;
       }
     }
   } catch (err) {
     console.warn('Failed to load products from localStorage', err);
   }
-  // Do not display demo products when no saved catalogue exists.
-  return [];
+  return DEFAULT_PRODUCTS;
 };
 
 // Save products to localStorage with event broadcast
@@ -327,8 +368,8 @@ export const saveProducts = (products: Product[]) => {
   }
 };
 
-// Reset the local catalogue to an explicitly empty state.
+// Reset the local catalogue to official default catalog.
 export const resetProducts = (): Product[] => {
-  saveProducts([]);
-  return [];
+  saveProducts(DEFAULT_PRODUCTS);
+  return DEFAULT_PRODUCTS;
 };

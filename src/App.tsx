@@ -5,6 +5,7 @@ import { VideosSection } from './components/VideosSection';
 import { Catalogue } from './components/Catalogue';
 import { SocialSection } from './components/SocialSection';
 import { BoutiqueInfo } from './components/BoutiqueInfo';
+import { ProductDetailPage } from './components/ProductDetailPage';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
@@ -24,10 +25,13 @@ function StoreApp() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
+  // Dedicated Product Detail Page State
+  const [activeDetailProduct, setActiveDetailProduct] = useState<Product | null>(null);
+
   // Background sync with Supabase on mount
   useEffect(() => {
     fetchProductsRemote().then((remoteProds) => {
-      if (Array.isArray(remoteProds)) {
+      if (Array.isArray(remoteProds) && remoteProds.length > 0) {
         setProducts(remoteProds);
       }
     }).catch(() => {});
@@ -43,7 +47,6 @@ function StoreApp() {
 
   // Search Modal state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [selectedSearchProduct, setSelectedSearchProduct] = useState<Product | null>(null);
 
   // Admin Space States
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
@@ -71,19 +74,44 @@ function StoreApp() {
     return () => window.removeEventListener('oumar_videos_updated', handleVideosUpdate);
   }, []);
 
-  // Handle URL hashes (#admin, #videos, etc.)
+  // Dedicated Product Page Router: Handles /produit/:id and #produit/:id URLs & Browser Back/Forward
   useEffect(() => {
     const handleLocation = () => {
+      const path = window.location.pathname;
       const hash = window.location.hash.replace('#', '');
-      const path = window.location.pathname.replace('/', '');
 
-      if (hash === 'admin' || path === 'admin') {
+      if (hash === 'admin' || path === '/admin') {
         handleTriggerAdmin();
         return;
       }
 
-      const target = hash || (path === 'videos' ? 'videos' : '');
-      if (target) {
+      // Check if URL points to a product detail page /produit/:id or #produit/:id
+      if (path.startsWith('/produit/') || hash.startsWith('produit/')) {
+        const slug = path.startsWith('/produit/') 
+          ? path.replace('/produit/', '').trim() 
+          : hash.replace('produit/', '').trim();
+
+        if (slug) {
+          const matched = products.find(
+            (p) =>
+              p.id === slug ||
+              p.id.toLowerCase() === slug.toLowerCase() ||
+              p.name.toLowerCase().replace(/\s+/g, '-') === slug.toLowerCase()
+          );
+
+          if (matched) {
+            setActiveDetailProduct(matched);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+          }
+        }
+      }
+
+      // Default: Return to main homepage continuous layout
+      setActiveDetailProduct(null);
+
+      const target = hash || (path === '/videos' ? 'videos' : '');
+      if (target && target !== 'home') {
         setActiveSection(target);
         setTimeout(() => {
           const el = document.getElementById(target);
@@ -99,7 +127,7 @@ function StoreApp() {
     handleLocation();
     window.addEventListener('popstate', handleLocation);
     return () => window.removeEventListener('popstate', handleLocation);
-  }, []);
+  }, [products]);
 
   // Global Keyboard Shortcuts (Ctrl+K for search, Shift+A for admin)
   useEffect(() => {
@@ -117,8 +145,9 @@ function StoreApp() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Active section tracking as user scrolls past sections
+  // Active section tracking as user scrolls past sections on homepage
   useEffect(() => {
+    if (activeDetailProduct) return;
     const sectionIds = ['videos', 'catalogue', 'garantie'];
     const handleScroll = () => {
       const scrollY = window.scrollY;
@@ -139,21 +168,45 @@ function StoreApp() {
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [activeDetailProduct]);
 
   const handleNavigateSection = (sectionId: string) => {
+    if (activeDetailProduct) {
+      setActiveDetailProduct(null);
+    }
+
     if (sectionId === 'home') {
       window.history.pushState(null, '', '/');
       setActiveSection('home');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-      window.history.pushState(null, '', `#${sectionId}`);
+      window.history.pushState(null, '', `/#${sectionId}`);
       setActiveSection(sectionId);
       const el = document.getElementById(sectionId);
       if (el) {
         el.scrollIntoView({ behavior: 'smooth' });
       }
     }
+  };
+
+  // Select Product & Route to Dedicated Product Page
+  const handleSelectProduct = (product: Product) => {
+    setActiveDetailProduct(product);
+    window.history.pushState(null, '', `/produit/${product.id}`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBackToCatalog = () => {
+    setActiveDetailProduct(null);
+    window.history.pushState(null, '', '/#catalogue');
+    setTimeout(() => {
+      const el = document.getElementById('catalogue');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 100);
   };
 
   // Safe Admin Access Trigger
@@ -172,7 +225,7 @@ function StoreApp() {
     setIsAdminDashboardOpen(true);
   };
 
-  // Add to cart from Hero or Catalogue
+  // Add to cart
   const handleAddToCart = (product: Product, storage?: string, color?: string) => {
     const chosenStorage = storage || product.selectedStorage || product.storage[0] || 'Standard';
     const chosenColor = color || product.selectedColor || product.colors[0]?.name || 'Standard';
@@ -227,15 +280,6 @@ function StoreApp() {
     setCartItems([]);
   };
 
-  const handleSelectProductFromSearch = (product: Product) => {
-    setSelectedSearchProduct(product);
-    // Smooth scroll to catalogue section
-    const el = document.getElementById('catalogue');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   return (
@@ -250,34 +294,45 @@ function StoreApp() {
         onOpenAdmin={handleTriggerAdmin}
       />
 
-      {/* Main Content: Continuous Homepage Layout */}
+      {/* Main Content Area */}
       <main className="flex-1">
-        {/* 1. Hero OUMAR IPHONE */}
-        <Hero
-          featuredProduct={products[0]}
-          onAddToCart={(product) => handleAddToCart(product)}
-        />
+        {activeDetailProduct ? (
+          /* Real Standalone Product Detail Page View */
+          <ProductDetailPage
+            product={activeDetailProduct}
+            onBack={handleBackToCatalog}
+            onAddToCart={handleAddToCart}
+          />
+        ) : (
+          /* Continuous Homepage Layout (Hero -> Videos -> Catalogue -> Socials -> BoutiqueInfo) */
+          <>
+            {/* 1. Hero OUMAR IPHONE */}
+            <Hero
+              featuredProduct={products[0]}
+              onAddToCart={(product) => handleAddToCart(product)}
+            />
 
-        {/* 2. Section des Vidéos (immédiatement après la Hero, avant le catalogue) */}
-        <VideosSection
-          id="videos"
-          videos={videos}
-        />
+            {/* 2. Section des Vidéos (immédiatement après la Hero, avant le catalogue) */}
+            <VideosSection
+              id="videos"
+              videos={videos}
+            />
 
-        {/* 3. Catalogue Apple Officiel avec filtres et fiches */}
-        <Catalogue
-          products={products}
-          onAddToCart={handleAddToCart}
-          onProductsUpdated={(newProducts) => setProducts(newProducts)}
-          externalActiveProduct={selectedSearchProduct}
-          onCloseExternalProduct={() => setSelectedSearchProduct(null)}
-        />
+            {/* 3. Catalogue Apple Officiel avec filtres et fiches */}
+            <Catalogue
+              products={products}
+              onAddToCart={handleAddToCart}
+              onProductsUpdated={(newProducts) => setProducts(newProducts)}
+              onSelectProduct={handleSelectProduct}
+            />
 
-        {/* 4. Nos Réseaux Sociaux (TikTok & WhatsApp - après le catalogue) */}
-        <SocialSection />
+            {/* 4. Nos Réseaux Sociaux (TikTok & WhatsApp - après le catalogue) */}
+            <SocialSection />
 
-        {/* 5. Informations boutique, SAV & garantie */}
-        <BoutiqueInfo />
+            {/* 5. Informations boutique, SAV & garantie */}
+            <BoutiqueInfo />
+          </>
+        )}
       </main>
 
       {/* Footer with discreet Admin Portal Trigger */}
@@ -298,7 +353,10 @@ function StoreApp() {
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
         products={products}
-        onSelectProduct={handleSelectProductFromSearch}
+        onSelectProduct={(p) => {
+          setIsSearchOpen(false);
+          handleSelectProduct(p);
+        }}
       />
 
       {/* Secure Admin PIN/Password Gate Modal */}

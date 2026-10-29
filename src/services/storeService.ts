@@ -1,14 +1,51 @@
 import { supabase, isSupabaseConfigured, testSupabaseHealth } from '../lib/supabase';
 export { testSupabaseHealth };
-import { Product, VideoItem } from '../types';
+import { Product, VideoItem, ProductVariant } from '../types';
 import { StoreOrder, OrderStatus, loadOrders, saveOrders } from '../data/orders';
 import { StoreSettings, loadStoreSettings, saveStoreSettings, getHeroCustomPhoto, saveHeroCustomPhoto } from '../data/storeSettings';
 import { loadProducts, saveProducts, DEFAULT_PRODUCTS } from '../data/products';
 import { loadVideos, saveVideos } from '../data/videos';
 
 // ==============================================================================
-// PRODUCT MAPPERS
+// PRODUCT & VARIANT MAPPERS (public.store_products & public.store_product_variants)
 // ==============================================================================
+export function rowToVariant(row: any): ProductVariant {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    color: row.color,
+    colorHex: row.color_hex || undefined,
+    storage: row.storage,
+    condition: row.condition,
+    price: Number(row.price),
+    imageUrl: row.image_url || undefined,
+    inStock: row.in_stock !== false,
+    published: row.published !== false,
+    priceSource: row.price_source || undefined,
+    priceCheckedAt: row.price_checked_at || undefined,
+    sourceUrl: row.source_url || undefined
+  };
+}
+
+export function variantToRow(v: ProductVariant): any {
+  const row: any = {
+    product_id: v.productId,
+    color: v.color,
+    color_hex: v.colorHex || null,
+    storage: v.storage,
+    condition: v.condition,
+    price: Math.round(v.price),
+    image_url: v.imageUrl || null,
+    in_stock: v.inStock !== false,
+    published: v.published !== false,
+    price_source: v.priceSource || null,
+    price_checked_at: v.priceCheckedAt || new Date().toISOString(),
+    source_url: v.sourceUrl || null
+  };
+  if (v.id) row.id = v.id;
+  return row;
+}
+
 export function rowToProduct(row: any): Product {
   return {
     id: row.id,
@@ -33,7 +70,8 @@ export function rowToProduct(row: any): Product {
     isNew: Boolean(row.is_new),
     description: row.description || '',
     specs: row.specs || {},
-    published: row.published !== false
+    published: row.published !== false,
+    variants: []
   };
 }
 
@@ -67,34 +105,7 @@ export function productToRow(prod: Product): any {
 }
 
 // ==============================================================================
-// VIDEO MAPPERS
-// ==============================================================================
-export function rowToVideo(row: any): VideoItem {
-  return {
-    id: row.id,
-    url: row.url,
-    type: row.type || 'html5',
-    title: row.title || undefined,
-    published: row.published !== false,
-    order: row.display_order ?? 1,
-    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now()
-  };
-}
-
-export function videoToRow(v: VideoItem): any {
-  return {
-    id: v.id,
-    url: v.url,
-    type: v.type,
-    title: v.title || null,
-    published: v.published,
-    display_order: v.order,
-    created_at: new Date(v.createdAt).toISOString()
-  };
-}
-
-// ==============================================================================
-// STORE SERVICE: PRODUCTS
+// STORE SERVICE: PRODUCTS & VARIANTS
 // ==============================================================================
 export async function fetchProductsRemote(): Promise<Product[]> {
   if (!isSupabaseConfigured) {
@@ -102,19 +113,37 @@ export async function fetchProductsRemote(): Promise<Product[]> {
   }
 
   try {
-    const { data, error } = await supabase
+    const { data: prodsData, error: prodsErr } = await supabase
       .from('store_products')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.warn('Supabase fetchProducts warning, using local cache:', error.message);
+    if (prodsErr) {
+      console.warn('Supabase fetchProducts warning, using local cache:', prodsErr.message);
       return loadProducts();
     }
 
-    if (data) {
-      const mapped = data.map(rowToProduct);
-      saveProducts(mapped); // Cache mapped array (even if empty) to record exact remote state
+    // Query published variants from public.store_product_variants
+    let variantsList: ProductVariant[] = [];
+    try {
+      const { data: varsData } = await supabase
+        .from('store_product_variants')
+        .select('*');
+
+      if (varsData && Array.isArray(varsData)) {
+        variantsList = varsData.map(rowToVariant);
+      }
+    } catch (vErr) {
+      console.warn('store_product_variants table query note:', vErr);
+    }
+
+    if (prodsData) {
+      const mapped = prodsData.map((row) => {
+        const prod = rowToProduct(row);
+        prod.variants = variantsList.filter((v) => v.productId === prod.id);
+        return prod;
+      });
+      saveProducts(mapped);
       return mapped;
     }
   } catch (err) {
@@ -122,6 +151,54 @@ export async function fetchProductsRemote(): Promise<Product[]> {
   }
 
   return loadProducts();
+}
+
+export async function fetchProductVariantsRemote(productId?: string): Promise<ProductVariant[]> {
+  if (!isSupabaseConfigured) return [];
+  try {
+    let query = supabase.from('store_product_variants').select('*');
+    if (productId) {
+      query = query.eq('product_id', productId);
+    }
+    const { data, error } = await query;
+    if (!error && data) {
+      return data.map(rowToVariant);
+    }
+  } catch (e) {
+    console.warn('Error fetching variants from Supabase:', e);
+  }
+  return [];
+}
+
+export async function upsertProductVariantRemote(variant: ProductVariant): Promise<{ success: boolean; message?: string }> {
+  if (!isSupabaseConfigured) return { success: true };
+  try {
+    const row = variantToRow(variant);
+    const { error } = await supabase
+      .from('store_product_variants')
+      .upsert(row, { onConflict: 'id' });
+
+    if (error) {
+      console.error('Error upserting variant to Supabase:', error);
+      return { success: false, message: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Erreur réseau.' };
+  }
+}
+
+export async function deleteProductVariantRemote(variantId: string): Promise<{ success: boolean; message?: string }> {
+  if (!isSupabaseConfigured) return { success: true };
+  try {
+    const { error } = await supabase
+      .from('store_product_variants')
+      .delete()
+      .eq('id', variantId);
+    return { success: !error, message: error?.message };
+  } catch (err: any) {
+    return { success: false, message: err?.message };
+  }
 }
 
 export async function upsertProductRemote(product: Product): Promise<{ success: boolean; message?: string }> {
@@ -194,6 +271,33 @@ export async function deleteProductRemote(productId: string): Promise<{ success:
     console.error('Network error during Supabase product deletion:', err);
     return { success: false, message: err?.message || 'Erreur réseau lors de la suppression.' };
   }
+}
+
+// ==============================================================================
+// VIDEO MAPPERS
+// ==============================================================================
+export function rowToVideo(row: any): VideoItem {
+  return {
+    id: row.id,
+    url: row.url,
+    type: row.type || 'html5',
+    title: row.title || undefined,
+    published: row.published !== false,
+    order: row.display_order ?? 1,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now()
+  };
+}
+
+export function videoToRow(v: VideoItem): any {
+  return {
+    id: v.id,
+    url: v.url,
+    type: v.type,
+    title: v.title || null,
+    published: v.published,
+    display_order: v.order,
+    created_at: new Date(v.createdAt).toISOString()
+  };
 }
 
 // ==============================================================================

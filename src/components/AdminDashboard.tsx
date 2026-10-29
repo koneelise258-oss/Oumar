@@ -1023,6 +1023,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <option value="Tous">Toutes Catégories</option>
                     <option value="iPhone">iPhone</option>
                     <option value="iPad">iPad</option>
+                    <option value="iPhone Duo">iPhone Duo</option>
                     <option value="MacBook">MacBook</option>
                     <option value="Accessoires">Accessoires</option>
                   </select>
@@ -2561,6 +2562,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <option value="iPhone">iPhone</option>
                     <option value="iPad">iPad</option>
+                    <option value="iPhone Duo">iPhone Duo</option>
                     <option value="MacBook">MacBook</option>
                     <option value="Accessoires">Accessoires</option>
                   </select>
@@ -2575,6 +2577,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none cursor-pointer"
                   >
                     <option value="Neuf Scellé">Neuf Scellé</option>
+                    <option value="Neuf Original Apple">Neuf Original Apple</option>
+                    <option value="Quasi Neuf">Quasi Neuf</option>
+                    <option value="Occasion">Occasion</option>
                     <option value="Reconditionné A+">Reconditionné A+</option>
                     <option value="Reconditionné Certifié">Reconditionné Certifié</option>
                   </select>
