@@ -46,7 +46,7 @@ import {
   deleteStoreAdminRemote,
   StoreAdminUser
 } from '../services/storeService';
-import { SUPABASE_PROJECT_ID, isSupabaseConfigured, supabaseUrl, signOutAdmin } from '../lib/supabase';
+import { SUPABASE_PROJECT_ID, isSupabaseConfigured, supabaseUrl, signOutAdmin, checkIsUserAdmin, StoreAdminRecord } from '../lib/supabase';
 import { SUPABASE_MIGRATION_SQL } from '../db/migrationSql';
 import {
   X,
@@ -159,9 +159,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
 
-  // Background fetch remote orders when dashboard opens
+  const [currentAdminRecord, setCurrentAdminRecord] = useState<StoreAdminRecord | null>(null);
+  const [isSessionValidating, setIsSessionValidating] = useState<boolean>(true);
+
+  // Background fetch remote orders and verify active admin session when dashboard opens
   useEffect(() => {
     if (isOpen) {
+      setIsSessionValidating(true);
+      checkIsUserAdmin().then((res) => {
+        setIsSessionValidating(false);
+        if (!res.isAdmin || !res.record) {
+          handleLogout();
+          alert(res.error || "Session administrateur expirée ou compte non autorisé.");
+          return;
+        }
+        setCurrentAdminRecord(res.record);
+      }).catch(() => {
+        setIsSessionValidating(false);
+      });
+
       fetchOrdersRemote()
         .then((remoteOrders) => {
           if (remoteOrders && remoteOrders.length > 0) {
@@ -827,6 +843,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const currentAdminEmail = getAdminEmail();
+  const isCurrentSuperAdmin = currentAdminRecord?.role === 'superadmin';
 
   if (!isOpen) return null;
 
@@ -856,6 +873,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {currentAdminEmail && (
                   <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                     {currentAdminEmail}
+                  </span>
+                )}
+                {currentAdminRecord?.role && (
+                  <span className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
+                    currentAdminRecord.role === 'superadmin'
+                      ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                      : currentAdminRecord.role === 'admin'
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                  }`}>
+                    {currentAdminRecord.role}
                   </span>
                 )}
               </div>
@@ -2065,17 +2093,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <RefreshCw className={`w-4 h-4 ${loadingAdmins ? 'animate-spin text-indigo-500' : ''}`} />
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAdminActionError(null);
-                      setIsAddAdminModalOpen(true);
-                    }}
-                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-xs whitespace-nowrap"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    <span>Ajouter un Administrateur</span>
-                  </button>
+                  {isCurrentSuperAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminActionError(null);
+                        setIsAddAdminModalOpen(true);
+                      }}
+                      className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-xs whitespace-nowrap"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Ajouter un Administrateur</span>
+                    </button>
+                  ) : (
+                    <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800">
+                      <Lock className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Gestion de l'équipe réservée au Superadmin</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2113,21 +2148,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="p-10 text-center space-y-3">
                     <Users className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
                     <h4 className="text-sm font-bold text-slate-800 dark:text-white">
-                      Aucun administrateur enregistré dans store_admins (0 compte)
+                      Aucun compte administrateur listé
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 max-w-lg mx-auto">
-                      La table <code className="text-emerald-500 font-mono">store_admins</code> est actuellement vide. Grâce au script SQL de migration, le premier utilisateur qui se connectera ou qui cliquera ci-dessous sera automatiquement provisionné comme <strong>Superadmin</strong> officiel d’OUMAR IPHONE.
+                      Seuls les superadministrateurs actifs (dont le compte principal <code className="text-emerald-500 font-mono">mikeyservice98@gmail.com</code>) sont autorisés à inviter ou gérer les membres de l'équipe OUMAR IPHONE.
                     </p>
-                    <div className="pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsAddAdminModalOpen(true)}
-                        className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 transition-opacity cursor-pointer inline-flex items-center gap-1.5"
-                      >
-                        <UserPlus className="w-3.5 h-3.5" />
-                        <span>Créer le premier Superadmin</span>
-                      </button>
-                    </div>
+                    {isCurrentSuperAdmin && (
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsAddAdminModalOpen(true)}
+                          className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 transition-opacity cursor-pointer inline-flex items-center gap-1.5"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Ajouter un Administrateur</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -2220,35 +2257,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                               {/* Actions */}
                               <td className="py-3 px-4 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  {/* Toggle Active Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleAdminStatus(adm.id, adm.is_active, adm.email)}
-                                    disabled={isCurrent && adm.role === 'superadmin'}
-                                    className={`p-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                                      adm.is_active
-                                        ? 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40'
-                                        : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
-                                    } ${isCurrent && adm.role === 'superadmin' ? 'opacity-40 cursor-not-allowed' : ''}`}
-                                    title={adm.is_active ? "Désactiver l'accès" : "Réactiver l'accès"}
-                                  >
-                                    {adm.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-                                  </button>
+                                {isCurrentSuperAdmin ? (
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {/* Toggle Active Button */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleAdminStatus(adm.id, adm.is_active, adm.email)}
+                                      disabled={isCurrent && adm.role === 'superadmin'}
+                                      className={`p-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                                        adm.is_active
+                                          ? 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                                          : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                                      } ${isCurrent && adm.role === 'superadmin' ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                      title={adm.is_active ? "Désactiver l'accès" : "Réactiver l'accès"}
+                                    >
+                                      {adm.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                                    </button>
 
-                                  {/* Delete Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteAdminItem(adm.id, adm.email)}
-                                    disabled={isCurrent}
-                                    className={`p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer ${
-                                      isCurrent ? 'opacity-40 cursor-not-allowed' : ''
-                                    }`}
-                                    title={isCurrent ? "Vous ne pouvez pas supprimer votre propre compte" : "Retirer cet administrateur"}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
+                                    {/* Delete Button */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteAdminItem(adm.id, adm.email)}
+                                      disabled={isCurrent}
+                                      className={`p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer ${
+                                        isCurrent ? 'opacity-40 cursor-not-allowed' : ''
+                                      }`}
+                                      title={isCurrent ? "Vous ne pouvez pas supprimer votre propre compte" : "Retirer cet administrateur"}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 text-[11px]">—</span>
+                                )}
                               </td>
 
                             </tr>

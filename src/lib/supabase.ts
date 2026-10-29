@@ -127,29 +127,39 @@ export async function checkIsUserAdmin(expectedUserId?: string): Promise<{
       return { isAdmin: false, error: 'Identifiant utilisateur non correspondant.' };
     }
 
-    // 2. Vérification directe par user_id
+    // 2. Vérification par user_id
     const { data: byUserId, error: errUserId } = await supabase
       .from('store_admins')
       .select('*')
       .eq('user_id', user.id)
-      .eq('is_active', true)
       .maybeSingle();
 
     if (!errUserId && byUserId) {
+      if (!byUserId.is_active) {
+        return { 
+          isAdmin: false, 
+          error: 'Accès désactivé : Votre compte administrateur a été suspendu ou désactivé par la direction.' 
+        };
+      }
       return { isAdmin: true, record: byUserId as StoreAdminRecord };
     }
 
-    // 3. Si non trouvé par user_id, vérifier par email pour rattacher automatiquement user_id
+    // 3. Si non trouvé par user_id, vérifier par email pour associer user_id
     if (user.email) {
       const { data: byEmail, error: errEmail } = await supabase
         .from('store_admins')
         .select('*')
         .ilike('email', user.email.trim())
-        .eq('is_active', true)
         .maybeSingle();
 
       if (!errEmail && byEmail) {
-        // Mettre à jour user_id si non renseigné
+        if (!byEmail.is_active) {
+          return { 
+            isAdmin: false, 
+            error: 'Accès désactivé : Votre compte administrateur a été suspendu ou désactivé par la direction.' 
+          };
+        }
+        // Associer user_id si ce n'était pas encore fait
         if (!byEmail.user_id) {
           try {
             await supabase
@@ -157,7 +167,7 @@ export async function checkIsUserAdmin(expectedUserId?: string): Promise<{
               .update({ user_id: user.id })
               .eq('id', byEmail.id);
           } catch {
-            // Ignorer si RLS restreint l'update directe
+            // Ignorer si RLS restreint la mise à jour directe
           }
         }
         return { isAdmin: true, record: { ...byEmail, user_id: user.id } as StoreAdminRecord };
@@ -169,7 +179,7 @@ export async function checkIsUserAdmin(expectedUserId?: string): Promise<{
 
   return { 
     isAdmin: false, 
-    error: 'Accès refusé : Votre compte existe dans Supabase Auth, mais il n’est pas encore enregistré comme administrateur actif dans la table "store_admins".' 
+    error: 'Accès refusé : Votre compte existe dans Supabase Auth, mais il n’est pas enregistré comme administrateur actif dans la table "store_admins".' 
   };
 }
 
@@ -209,8 +219,8 @@ export async function signInAdminWithPassword(email: string, password: string): 
     };
   }
 
-  // 1. Vérification des droits administrateur existants
-  let adminCheck = await checkIsUserAdmin(data.user.id);
+  // Vérification stricte des droits administrateur dans store_admins (aucun bootstrap automatique)
+  const adminCheck = await checkIsUserAdmin(data.user.id);
   if (adminCheck.isAdmin) {
     return {
       user: data.user,
@@ -218,41 +228,12 @@ export async function signInAdminWithPassword(email: string, password: string): 
     };
   }
 
-  // 2. BOOTSTRAP AUTO : Si store_admins ne contient encore aucun admin actif,
-  // tenter d'enregistrer l'utilisateur connecté comme premier Superadmin via la RPC
-  try {
-    const { count } = await supabase
-      .from('store_admins')
-      .select('id', { count: 'exact', head: true })
-      .eq('is_active', true);
-
-    if (count === 0) {
-      const { data: rpcRes, error: rpcErr } = await supabase.rpc('add_store_admin_by_email', {
-        p_email: cleanEmail,
-        p_role: 'superadmin',
-        p_phone: null
-      });
-
-      if (!rpcErr && rpcRes && rpcRes.success) {
-        adminCheck = await checkIsUserAdmin(data.user.id);
-        if (adminCheck.isAdmin) {
-          return {
-            user: data.user,
-            isAdmin: true
-          };
-        }
-      }
-    }
-  } catch (bootstrapErr) {
-    console.warn('Tentative d’auto-initialisation du superadmin:', bootstrapErr);
-  }
-
-  // Si toujours non autorisé, déconnecter la session et expliquer clairement
+  // Si non autorisé ou inactif, déconnecter immédiatement la session Supabase Auth
   await supabase.auth.signOut();
   return {
     user: null,
     isAdmin: false,
-    error: `Accès refusé : Le compte "${data.user.email}" est valide dans Auth, mais il n'est pas enregistré dans la table "store_admins". Exécutez le script SQL pour configurer les administrateurs.`
+    error: adminCheck.error || `Accès refusé : Le compte "${data.user.email}" n'est pas configuré comme administrateur actif dans store_admins.`
   };
 }
 
