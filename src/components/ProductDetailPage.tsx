@@ -452,16 +452,16 @@ Merci de me confirmer la disponibilité réelle et d'organiser la livraison à A
               {/* Commercial Reassurances bar */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-8">
                 <div className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
-                  <Zap className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span>Livraison express 2h Abidjan</span>
-                </div>
-                <div className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
                   <Store className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Boutique Cocody & Plateau</span>
+                  <span>Retrait direct en magasin à Abidjan</span>
                 </div>
                 <div className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
-                  <Sparkles className="w-4 h-4 text-blue-500 shrink-0" />
-                  <span>Paiement après vérification</span>
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>35 points de contrôle certifiés</span>
+                </div>
+                <div className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
+                  <MessageCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Contact direct sur WhatsApp</span>
                 </div>
               </div>
             </div>
@@ -476,7 +476,7 @@ Merci de me confirmer la disponibilité réelle et d'organiser la livraison à A
                 className="flex-1 py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all active:scale-[0.98] cursor-pointer"
               >
                 <MessageCircle className="w-5 h-5 fill-current" />
-                <span>Commander sur WhatsApp</span>
+                <span>Se renseigner sur WhatsApp</span>
               </a>
 
               {/* Add to Cart CTA */}

@@ -103,14 +103,14 @@ export const BoutiqueInfo: React.FC = () => {
                 Suivez nos arrivages hebdomadaires en direct, déballages d'iPhone scellés et conseils d'experts sur TikTok et WhatsApp.
               </p>
               <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                <div>Compte officiel : <strong className="text-slate-800 dark:text-white">@oumariphone</strong></div>
+                <div>Compte officiel : <strong className="text-slate-800 dark:text-white">@oumar_iphone.0</strong></div>
                 <div>Plus de 50 000 passionnés en Côte d'Ivoire</div>
               </div>
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-200/60 dark:border-slate-800">
               <a
-                href="https://tiktok.com"
+                href="https://www.tiktok.com/@oumar_iphone.0"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-semibold text-slate-900 dark:text-white hover:underline"

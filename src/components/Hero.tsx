@@ -339,7 +339,7 @@ export const Hero: React.FC<HeroProps> = () => {
 
           {/* Phase B bis: Concise Supporting Description */}
           <p className="hero-desc text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl mb-9">
-            La référence des iPhone neufs scellés et reconditionnés certifiés en Côte d'Ivoire. Sous la direction d'Oumar, profitez d'une sélection rigoureusement inspectée, garantie 12 mois et livrée en 2 heures à Abidjan.
+            La référence des iPhone neufs scellés et reconditionnés certifiés en Côte d'Ivoire. Sous la direction d'Oumar, profitez d'une sélection rigoureusement inspectée, garantie 12 mois et disponible en boutique à Abidjan.
           </p>
 
           {/* Phase E: Action Buttons avec Interactions Élastiques */}
@@ -402,14 +402,14 @@ export const Hero: React.FC<HeroProps> = () => {
               <LiquidGlassIcon size="sm">
                 <Zap className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
               </LiquidGlassIcon>
-              <span>Livraison 2h à Abidjan</span>
+              <span>Test & Retrait en Boutique</span>
             </div>
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
             <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
               <LiquidGlassIcon size="sm">
                 <Sparkles className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
               </LiquidGlassIcon>
-              <span>Paiement à la Réception</span>
+              <span>Échange Direct WhatsApp</span>
             </div>
           </div>
 

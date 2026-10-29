@@ -198,7 +198,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
           
           <div className="flex items-center gap-3">
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-md hidden lg:block">
-              Sélection inspectée sur 35 points de contrôle. Livraison express 2h à Abidjan ou retrait immédiat en boutique.
+              Sélection inspectée sur 35 points de contrôle. Retrait direct et test sur place en boutique à Abidjan.
             </p>
           </div>
         </div>

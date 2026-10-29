@@ -23,7 +23,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin }) => {
             <a href="#catalogue" className="hover:text-white transition-colors">Catalogue</a>
             <a href="#garantie" className="hover:text-white transition-colors">Garantie & SAV</a>
             <a href="#boutique" className="hover:text-white transition-colors">Nos Boutiques</a>
-            <a href="https://tiktok.com" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TikTok @oumariphone</a>
+            <a href="https://www.tiktok.com/@oumar_iphone.0" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TikTok @oumar_iphone.0</a>
           </div>
         </div>
 
@@ -33,7 +33,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin }) => {
           </div>
           
           <div className="flex flex-wrap items-center gap-4 text-slate-400">
-            <span>Paiement sécurisé : Wave · Orange Money · Espèces à la livraison</span>
+            <span>Appareils originaux testés & certifiés en boutique OUMAR IPHONE</span>
 
             {/* Discreet Admin Portal Access for Boutique Owner */}
             {onOpenAdmin && (

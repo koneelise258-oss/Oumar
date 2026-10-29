@@ -347,16 +347,16 @@ Pourriez-vous me confirmer la disponibilité et organiser la livraison à Abidja
                 {/* Abidjan Commercial Reassurances */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-8">
                   <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800">
-                    <Zap className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span>Livraison 2h partout à Abidjan</span>
-                  </div>
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800">
                     <Store className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>Retrait direct à Cocody Angré</span>
+                    <span>Retrait direct en magasin à Abidjan</span>
                   </div>
                   <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800">
-                    <Sparkles className="w-4 h-4 text-blue-500 shrink-0" />
-                    <span>Paiement à la livraison vérifiée</span>
+                    <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>35 points de contrôle certifiés</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800">
+                    <MessageCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>Contact direct sur WhatsApp</span>
                   </div>
                 </div>
               </div>

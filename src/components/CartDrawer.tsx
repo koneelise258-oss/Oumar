@@ -60,9 +60,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         )
         .join('\n');
 
-      const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite réserver les appareils suivants pour un retrait en boutique :\n\n${itemListText}\n\nTotal estimé : ${total.toLocaleString(
+      const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite me renseigner pour réserver et acheter en magasin :\n\n${itemListText}\n\nTotal estimé : ${total.toLocaleString(
         'fr-FR'
-      )} FCFA\n\nNom du client : ${customerName.trim()}${customerPhone.trim() ? `\nTéléphone de contact : ${customerPhone.trim()}` : ''}\nMode de retrait : En boutique OUMAR IPHONE (Abidjan)\nRèglement : Au retrait (Espèces / Wave / Orange Money)\n\nMerci de me confirmer la disponibilité et le rendez-vous en boutique.`;
+      )} FCFA\n\nNom du client : ${customerName.trim()}${customerPhone.trim() ? `\nTéléphone de contact : ${customerPhone.trim()}` : ''}\nMode de retrait : En boutique OUMAR IPHONE (Abidjan)\n\nMerci de me confirmer la disponibilité des articles en boutique.`;
 
       // Ouvrir WhatsApp via le lien wa.me sécurisé
       const whatsappUrl = getWhatsAppUrl(whatsappMessage);
@@ -284,7 +284,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
               <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 text-center">
                 <ShieldCheck className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300 shrink-0" />
-                <span>Paiement au retrait en boutique (Espèces, Wave, Orange Money)</span>
+                <span>Contact direct & échanges sur WhatsApp (+225 07 78 02 42 85)</span>
               </div>
             </div>
           )}
