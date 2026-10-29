@@ -125,6 +125,16 @@ export async function fetchProductsRemote(): Promise<Product[]> {
 }
 
 export async function upsertProductRemote(product: Product): Promise<{ success: boolean; message?: string }> {
+  if (!product.name || !product.name.trim()) {
+    return { success: false, message: 'Le nom du produit est obligatoire.' };
+  }
+  if (!product.image || !product.image.trim()) {
+    return { success: false, message: 'L’image du produit est obligatoire.' };
+  }
+  if (typeof product.price !== 'number' || isNaN(product.price) || product.price < 0) {
+    return { success: false, message: 'Le prix doit être un nombre positif.' };
+  }
+
   if (!isSupabaseConfigured) {
     const localList = loadProducts();
     const existingIdx = localList.findIndex((p) => p.id === product.id);
@@ -143,7 +153,7 @@ export async function upsertProductRemote(product: Product): Promise<{ success: 
 
     if (error) {
       console.error('Error upserting product to Supabase:', error);
-      return { success: false, message: `Échec Supabase: ${error.message}` };
+      return { success: false, message: `Échec de l'enregistrement en ligne: ${error.message}` };
     }
 
     const localList = loadProducts();
@@ -174,7 +184,7 @@ export async function deleteProductRemote(productId: string): Promise<{ success:
 
     if (error) {
       console.error('Error deleting product from Supabase:', error);
-      return { success: false, message: `Échec Supabase: ${error.message}` };
+      return { success: false, message: `Échec de la suppression en ligne: ${error.message}` };
     }
 
     const localList = loadProducts().filter((p) => p.id !== productId);
@@ -234,7 +244,7 @@ export async function syncVideosRemote(videos: VideoItem[]): Promise<{ success: 
 
     if (error) {
       console.error('Error syncing videos to Supabase:', error);
-      return { success: false, message: `Échec Supabase: ${error.message}` };
+      return { success: false, message: `Échec de l'enregistrement en ligne: ${error.message}` };
     }
 
     saveVideos(videos);
@@ -262,7 +272,7 @@ export async function deleteVideoRemote(videoId: string): Promise<{ success: boo
 
     if (error) {
       console.error('Error deleting video from Supabase:', error);
-      return { success: false, message: `Échec Supabase: ${error.message}` };
+      return { success: false, message: `Échec de la suppression en ligne: ${error.message}` };
     }
 
     const localList = loadVideos()
@@ -352,7 +362,7 @@ export async function saveStoreSettingsRemote(settings: StoreSettings): Promise<
 
     if (error) {
       console.error('Error saving store settings to Supabase:', error);
-      return { success: false, message: `Échec Supabase: ${error.message}` };
+      return { success: false, message: `Échec de l'enregistrement en ligne: ${error.message}` };
     }
 
     saveStoreSettings(settings);
@@ -377,7 +387,7 @@ export async function syncHeroPhotoRemote(photoDataUrl: string | null): Promise<
       .eq('id', 'default');
 
     if (error) {
-      console.warn('Impossible de synchroniser la photo hero sur Supabase:', error.message);
+      console.warn('Impossible de synchroniser la photo hero en ligne:', error.message);
       return false;
     }
     return true;
@@ -389,7 +399,7 @@ export async function syncHeroPhotoRemote(photoDataUrl: string | null): Promise<
 
 /**
  * Initialise le catalogue officiel Apple (les 6 modèles réels avec caractéristiques certifiées)
- * directement dans la table store_products de Supabase sans aucune donnée fictive.
+ * directement dans la boutique en ligne sans aucune donnée fictive.
  */
 export async function seedOfficialAppleProductsRemote(): Promise<{
   success: boolean;
@@ -400,7 +410,7 @@ export async function seedOfficialAppleProductsRemote(): Promise<{
     saveProducts(DEFAULT_PRODUCTS);
     return {
       success: true,
-      message: 'Catalogue officiel Apple restauré dans le cache local.',
+      message: 'Catalogue officiel Apple restauré dans la mémoire locale.',
       count: DEFAULT_PRODUCTS.length
     };
   }
@@ -414,7 +424,7 @@ export async function seedOfficialAppleProductsRemote(): Promise<{
     if (error) {
       return {
         success: false,
-        message: `Erreur Supabase lors du peuplement : ${error.message}`,
+        message: `Erreur lors du chargement du catalogue officiel : ${error.message}`,
         count: 0
       };
     }
@@ -422,7 +432,7 @@ export async function seedOfficialAppleProductsRemote(): Promise<{
     saveProducts(DEFAULT_PRODUCTS);
     return {
       success: true,
-      message: `${DEFAULT_PRODUCTS.length} produits officiels Apple (iPhone, iPad, MacBook, AirPods) enregistrés dans Supabase !`,
+      message: `${DEFAULT_PRODUCTS.length} produits certifiés Apple (iPhone, iPad, MacBook, AirPods) chargés avec succès !`,
       count: DEFAULT_PRODUCTS.length
     };
   } catch (err: any) {
@@ -630,7 +640,7 @@ export async function syncLocalDataToSupabase(
   if (!isSupabaseConfigured) {
     return {
       success: false,
-      message: 'Supabase n’est pas configuré. Veuillez renseigner VITE_SUPABASE_ANON_KEY dans votre fichier .env.'
+      message: 'Le serveur en ligne n’est pas configuré. Veuillez contacter l’administrateur.'
     };
   }
 
@@ -657,7 +667,7 @@ export async function syncLocalDataToSupabase(
       if (settingsError.code === '42P01' || settingsError.message.includes('store_settings')) {
         return {
           success: false,
-          message: 'Les tables "store_*" n’existent pas encore dans Supabase. Veuillez d’abord exécuter la migration SQL.'
+          message: 'Les rubriques de la boutique ne sont pas encore créées sur le serveur. Veuillez exécuter le script d’initialisation.'
         };
       }
       throw new Error(`Erreur sync paramètres: ${settingsError.message}`);
@@ -685,7 +695,7 @@ export async function syncLocalDataToSupabase(
 
     return {
       success: true,
-      message: `Synchronisation réussie ! ${products.length} produit(s) et ${videos.length} vidéo(s) enregistrés dans Supabase.`,
+      message: `Mise à jour réussie ! ${products.length} produit(s) et ${videos.length} vidéo(s) enregistrés sur la boutique en ligne.`,
       details: {
         productsCount: products.length,
         videosCount: videos.length,
@@ -695,7 +705,7 @@ export async function syncLocalDataToSupabase(
   } catch (err: any) {
     return {
       success: false,
-      message: err?.message || 'Erreur inconnue lors de la synchronisation Supabase.'
+      message: err?.message || 'Erreur lors de la synchronisation avec le serveur distant.'
     };
   }
 }

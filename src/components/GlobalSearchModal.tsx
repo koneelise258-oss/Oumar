@@ -180,16 +180,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         {/* Results List */}
         <div className="max-h-[60vh] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80 p-2">
           {results.length > 0 ? (
-            results.map((product) => (
+            results.map((product, sIdx) => (
               <div
-                key={product.id}
+                key={`search-${product.id || sIdx}-${sIdx}`}
                 onClick={() => handleProductClick(product)}
                 className="group p-3 sm:p-3.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all flex items-center gap-3 sm:gap-4 cursor-pointer"
               >
                 {/* Product Thumbnail */}
                 <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-slate-100 dark:bg-slate-800 p-1.5 flex items-center justify-center shrink-0 border border-slate-200/60 dark:border-slate-700/60 overflow-hidden">
                   <img
-                    src={product.image}
+                    src={product.image || undefined}
                     alt={product.name}
                     className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
                   />

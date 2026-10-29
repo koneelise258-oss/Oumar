@@ -25,6 +25,7 @@ import {
 } from '../data/storeSettings';
 import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
 import { loadProducts, saveProducts, resetProducts } from '../data/products';
+import { processAndUploadProductImage, APPLE_ASSET_IMAGES } from '../services/imageService';
 import { saveVideos, resetVideos } from '../data/videos';
 import {
   upsertProductRemote,
@@ -151,8 +152,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     connected: isSupabaseConfigured,
     tablesReady: false,
     message: isSupabaseConfigured
-      ? 'Variables Supabase détectées. Cliquez sur "Tester la connexion" pour vérifier l’état des tables.'
-      : 'Supabase fonctionne en mode local sécurisé (en attente de VITE_SUPABASE_ANON_KEY dans .env).'
+      ? 'Connexion configurée. Cliquez sur "Tester la connexion en ligne" pour vérifier la boutique.'
+      : 'Boutique active en mode autonome (catalogue et données enregistrés localement).'
   });
   const [isSyncingSupabase, setIsSyncingSupabase] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncMigrationResult | null>(null);
@@ -199,7 +200,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         tablesReady: res.tablesReady,
         message: res.message
       });
-      triggerNotification(res.tablesReady ? 'Connexion Supabase opérationnelle !' : 'Test Supabase terminé');
+      triggerNotification(res.tablesReady ? 'Connexion au serveur opérationnelle !' : 'Vérification de la connexion terminée');
     } catch (e: any) {
       setSupabaseStatus({
         tested: true,
@@ -213,11 +214,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleSyncToSupabase = async () => {
     if (!isSupabaseConfigured) {
-      alert("Veuillez d’abord renseigner VITE_SUPABASE_ANON_KEY dans le fichier .env avant d’initialiser les données dans Supabase.");
+      alert("La configuration du serveur distant n'est pas finalisée. Veuillez contacter l'administrateur.");
       return;
     }
 
-    if (!window.confirm("Êtes-vous sûr de vouloir synchroniser tout le catalogue, les vidéos et les paramètres locaux vers Supabase ? Cette action mettra à jour la base de données distante.")) {
+    if (!window.confirm("Voulez-vous synchroniser les données de la boutique (catalogue, vidéos et paramètres) avec le serveur en ligne ?")) {
       return;
     }
 
@@ -228,7 +229,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const res = await syncLocalDataToSupabase(products, videos, settings);
       setSyncResult(res);
       if (res.success) {
-        triggerNotification('Données synchronisées avec succès sur Supabase !');
+        triggerNotification('Données de la boutique synchronisées en ligne !');
       }
     } catch (e: any) {
       setSyncResult({
@@ -244,7 +245,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       await navigator.clipboard.writeText(SUPABASE_MIGRATION_SQL);
       setCopiedSql(true);
-      triggerNotification('Script SQL copié dans le presse-papier !');
+      triggerNotification('Script d’initialisation copié dans le presse-papier !');
       setTimeout(() => setCopiedSql(false), 2500);
     } catch {
       // Fallback
@@ -256,7 +257,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isSeedingCatalog, setIsSeedingCatalog] = useState(false);
 
   const handleSeedOfficialCatalog = async () => {
-    if (!window.confirm("Initialiser le catalogue officiel Apple (les 6 modèles certifiés) dans Supabase ?")) {
+    if (!window.confirm("Restaurer les 6 modèles officiels Apple certifiés dans le catalogue ?")) {
       return;
     }
     setIsSeedingCatalog(true);
@@ -297,25 +298,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const openNewProductForm = () => {
     const newProd: Product = {
       id: `prod-${Date.now()}`,
-      name: 'iPhone 16 Pro',
-      model: 'Édition Titane A18 Pro',
+      name: '',
+      model: '',
       category: 'iPhone',
       condition: 'Neuf Scellé',
       storage: ['128 Go', '256 Go', '512 Go'],
       selectedStorage: '256 Go',
-      price: 990000,
-      originalPrice: 1050000,
-      storagePrices: {
-        '128 Go': 895000,
-        '256 Go': 990000,
-        '512 Go': 1160000
-      },
+      price: 0,
+      originalPrice: undefined,
+      storagePrices: {},
       colors: [
-        { name: 'Titane Naturel', hex: '#BEB8AE' },
-        { name: 'Titane Noir', hex: '#3C3B37' }
+        { name: 'Titane Noir', hex: '#232528' },
+        { name: 'Titane Naturel', hex: '#BEB8AE' }
       ],
-      selectedColor: 'Titane Naturel',
-      image: '/src/assets/images/hero_iphone_titanium_1792367905192.jpg',
+      selectedColor: 'Titane Noir',
+      image: APPLE_ASSET_IMAGES.iphone16ProMax,
       gallery: [],
       batteryHealth: '100% Neuf',
       warranty: 'Garantie Apple 1 an',
@@ -325,11 +322,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       isNew: true,
       description: 'Appareil Apple authentique sous blister d’origine avec facture certifiée et garantie 1 an.',
       specs: {
-        screen: 'Super Retina XDR OLED ProMotion 120Hz',
-        chip: 'Puce Apple A18 Pro 3nm',
-        camera: 'Triple objectif 48 Mpx avec zoom 5x',
-        battery: 'Autonomie toute la journée',
-        ports: 'USB-C haute vitesse',
+        screen: 'Super Retina XDR OLED',
+        chip: 'Puce Apple silicon',
+        camera: 'Système photo Apple pro',
+        battery: 'Autonomie longue durée',
+        ports: 'USB-C',
         boxContents: 'Appareil avec câble USB-C tissé, documentation'
       },
       published: true
@@ -363,7 +360,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setEditingProduct(null);
       setIsCreatingProduct(false);
     } else {
-      triggerNotification(`Échec de la sauvegarde sur Supabase : ${res.message || 'Erreur inconnue'}`);
+      triggerNotification(`Échec de l'enregistrement : ${res.message || 'Erreur inconnue'}`);
     }
   };
 
@@ -380,7 +377,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       onProductsUpdated(updated);
       triggerNotification(`Copie créée pour "${p.name}"`);
     } else {
-      triggerNotification(`Échec de la duplication sur Supabase : ${res.message}`);
+      triggerNotification(`Échec de la duplication : ${res.message}`);
     }
   };
 
@@ -393,7 +390,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const updated = products.map((p) => (p.id === id ? updatedProd : p));
       onProductsUpdated(updated);
     } else {
-      triggerNotification(`Erreur Supabase : ${res.message}`);
+      triggerNotification(`Impossible de modifier la visibilité : ${res.message}`);
     }
   };
 
@@ -407,7 +404,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       onProductsUpdated(updated);
       triggerNotification('Statut de stock modifié');
     } else {
-      triggerNotification(`Erreur Supabase : ${res.message}`);
+      triggerNotification(`Impossible d'actualiser le stock : ${res.message}`);
     }
   };
 
@@ -429,13 +426,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setProductDeleteConfirmId(null);
       triggerNotification('Produit supprimé du catalogue');
     } else {
-      triggerNotification(`Échec de la suppression sur Supabase : ${res.message}`);
+      triggerNotification(`Échec de la suppression : ${res.message}`);
     }
   };
 
   const handleResetCatalog = () => {
     if (isSupabaseConfigured) {
-      triggerNotification('Réinitialisation globale indisponible ici : les produits Supabase sont conservés. Supprimez les produits individuellement pour éviter toute perte de données.');
+      triggerNotification('Réinitialisation groupée désactivée : supprimez les modèles individuellement pour préserver le catalogue.');
       return;
     }
     if (window.confirm('Voulez-vous vraiment vider le catalogue local ?')) {
@@ -445,19 +442,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleUploadProductImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadProductImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
+      try {
+        triggerNotification('Optimisation de l’image en cours...');
+        const res = await processAndUploadProductImage(file);
         setFormProduct((prev) => ({
           ...prev,
-          image: dataUrl,
-          gallery: prev?.gallery ? [dataUrl, ...prev.gallery.filter((g) => g !== dataUrl)] : [dataUrl]
+          image: res.url,
+          gallery: prev?.gallery ? [res.url, ...prev.gallery.filter((g) => g !== res.url)] : [res.url]
         }));
-      };
-      reader.readAsDataURL(file);
+        triggerNotification(res.message || 'Image ajoutée au produit !');
+      } catch (err: any) {
+        triggerNotification(`Erreur d’image : ${err?.message || 'Échec du traitement'}`);
+      }
     }
   };
 
@@ -561,7 +560,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setIsAddingVideo(false);
       triggerNotification('Nouvelle vidéo ajoutée');
     } else {
-      triggerNotification(`Échec de l'ajout vidéo sur Supabase : ${res.message}`);
+      triggerNotification(`Impossible d'ajouter la vidéo : ${res.message}`);
     }
   };
 
@@ -573,7 +572,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (res.success) {
       onVideosUpdated(updated);
     } else {
-      triggerNotification(`Erreur Supabase : ${res.message}`);
+      triggerNotification(`Impossible de modifier la vidéo : ${res.message}`);
     }
   };
 
@@ -588,7 +587,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (res.success) {
       onVideosUpdated(reordered);
     } else {
-      triggerNotification(`Erreur Supabase : ${res.message}`);
+      triggerNotification(`Impossible de réorganiser les vidéos : ${res.message}`);
     }
   };
 
@@ -602,13 +601,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setVideoDeleteConfirmId(null);
       triggerNotification('Vidéo supprimée');
     } else {
-      triggerNotification(`Échec de la suppression sur Supabase : ${res.message}`);
+      triggerNotification(`Impossible de supprimer la vidéo : ${res.message}`);
     }
   };
 
   const handleResetVideos = () => {
     if (isSupabaseConfigured) {
-      triggerNotification('Réinitialisation globale indisponible ici : les vidéos Supabase sont conservées. Supprimez les vidéos individuellement pour éviter toute perte de données.');
+      triggerNotification('Réinitialisation groupée désactivée : supprimez les vidéos individuellement pour préserver vos contenus.');
       return;
     }
     if (window.confirm('Voulez-vous vraiment vider la liste des vidéos locales ?')) {
@@ -731,7 +730,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (res.success) {
       triggerNotification('Paramètres de la boutique enregistrés !');
     } else {
-      triggerNotification(`Échec de la sauvegarde sur Supabase : ${res.message}`);
+      triggerNotification(`Échec de l'enregistrement : ${res.message}`);
     }
   };
 
@@ -804,8 +803,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleToggleAdminStatus = async (adminId: string, currentStatus: boolean, email: string) => {
     const nextStatus = !currentStatus;
     const confirmMsg = nextStatus 
-      ? `Réactiver l'accès administrateur pour ${email} ?`
-      : `Désactiver l'accès pour ${email} ? Cet utilisateur ne pourra plus accéder au tableau de bord.`;
+      ? `Réactiver l'accès pour ${email} ?`
+      : `Désactiver l'accès pour ${email} ? Ce collaborateur ne pourra plus accéder à l'espace de gestion.`;
     if (!window.confirm(confirmMsg)) return;
 
     try {
@@ -1047,10 +1046,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onClick={handleSeedOfficialCatalog}
                     disabled={isSeedingCatalog}
                     className="px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    title="Enregistrer les 6 modèles officiels Apple certifiés dans Supabase"
+                    title="Restaurer la sélection officielle des 6 modèles certifiés Apple"
                   >
                     <Sparkles className={`w-3.5 h-3.5 ${isSeedingCatalog ? 'animate-spin' : ''}`} />
-                    <span>{isSeedingCatalog ? 'Envoi...' : 'Peupler Supabase (Officiel)'}</span>
+                    <span>{isSeedingCatalog ? 'Chargement...' : 'Catalogue officiel Apple'}</span>
                   </button>
 
                   <button
@@ -1079,7 +1078,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {filteredProducts.length > 0 ? (
                   filteredProducts.map((p, idx) => (
                     <div 
-                      key={p.id}
+                      key={`admin-prod-${p.id || idx}-${idx}`}
                       className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
                     >
                       {/* Product identity */}
@@ -1087,7 +1086,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {/* Thumbnail */}
                         <div className="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-800 p-1.5 flex items-center justify-center shrink-0 border border-slate-200/80 dark:border-slate-700">
                           <img
-                            src={p.image}
+                            src={p.image || undefined}
                             alt={p.name}
                             className="w-full h-full object-contain"
                           />
@@ -1376,7 +1375,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {videos.map((vid, idx) => (
                   <div
-                    key={vid.id}
+                    key={`admin-vid-${vid.id || idx}-${idx}`}
                     className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col justify-between p-3.5"
                   >
                     {/* Video Player Preview */}
@@ -1389,7 +1388,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       ) : (
                         <video
-                          src={vid.url}
+                          src={vid.url || undefined}
                           muted
                           playsInline
                           controls
@@ -1709,7 +1708,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="md:col-span-4 flex flex-col items-center">
                     <div className="relative w-full max-w-[220px] aspect-[4/5] rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 shadow-md group">
                       <img
-                        src={heroPhotoPreview || heroPhotoSrc || heroTitaniumSample}
+                        src={heroPhotoPreview || heroPhotoSrc || heroTitaniumSample || undefined}
                         alt="Aperçu photo Hero"
                         className="w-full h-full object-cover object-top select-none transition-transform duration-500 group-hover:scale-105"
                       />
@@ -1878,22 +1877,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
                 <h3 className="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                  <span>Sécurité & Authentification Administrateur</span>
+                  <span>Sécurité & Contrôle d'accès</span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  L’accès administrateur est entièrement sécurisé par <strong>Supabase Auth</strong> et les contrôles de rôle dans la table <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-emerald-600 dark:text-emerald-400">store_admins</code>. Les anciens codes PIN locaux ont été définitivement supprimés pour garantir qu’aucun accès non autorisé ne puisse contourner la sécurité de la boutique OUMAR IPHONE.
+                  L’accès administrateur est entièrement protégé par un système d’authentification chiffré et une gestion stricte des privilèges par collaborateur. Seuls les comptes autorisés par la direction peuvent modifier le catalogue et traiter les commandes de la boutique OUMAR IPHONE.
                 </p>
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 space-y-1">
                   <p className="font-semibold text-slate-950 dark:text-white flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-amber-500" /> Gestion des accès administrateurs :
+                    <Lock className="w-3.5 h-3.5 text-amber-500" /> Gestion des accès de l'équipe :
                   </p>
                   <p>
-                    Pour ajouter ou modifier un administrateur, utilisez l’onglet <strong>"Équipe"</strong> ci-dessus. Seuls les comptes authentifiés avec une adresse e-mail enregistrée et active dans <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono">store_admins</code> disposent des droits de modification et de consultation des commandes.
+                    Pour ajouter ou modifier un collaborateur, utilisez l’onglet <strong>"Équipe"</strong> ci-dessus. Seuls les comptes autorisés avec une adresse professionnelle enregistrée et active disposent des privilèges de modification et de suivi des commandes.
                   </p>
                 </div>
               </div>
 
-              {/* Card 4: Supabase Cloud Database & Data Synchronization */}
+              {/* Card 4: Cloud Server & Data Synchronization */}
               <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
                   <div className="flex items-center gap-2.5">
@@ -1902,13 +1901,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2">
-                        <span>Base de Données Cloud Supabase</span>
+                        <span>Serveur & Synchronisation Cloud</span>
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-normal">
-                          {SUPABASE_PROJECT_ID} (eu-west-1)
+                          Boutique en ligne · Connectée
                         </span>
                       </h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Persistance temps réel multi-appareils (catalogue, vidéos, commandes) avec isolation stricte des tables du magasin (<code className="text-emerald-600 dark:text-emerald-400">store_*</code>).
+                        Sauvegarde et synchronisation en temps réel du catalogue, des vidéos et des commandes avec protection des données de la boutique.
                       </p>
                     </div>
                   </div>
@@ -1930,10 +1929,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       }`} />
                       <span>
                         {supabaseStatus.tablesReady
-                          ? 'Base Cloud Opérationnelle'
+                          ? 'Catalogue en ligne opérationnel'
                           : isSupabaseConfigured
-                          ? 'Clés détectées (Non testé)'
-                          : 'Mode Local Sécurisé (Cache actif)'}
+                          ? 'Serveur configuré (Non testé)'
+                          : 'Mode boutique autonome actif'}
                       </span>
                     </span>
                   </div>
@@ -1942,16 +1941,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {/* Cloud Details Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">ID Projet Supabase</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">Identifiant de la boutique</span>
                     <span className="font-mono font-bold text-slate-900 dark:text-white">{SUPABASE_PROJECT_ID}</span>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">Région Cloud</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">Hébergement distant</span>
                     <span className="font-semibold text-slate-900 dark:text-white">eu-west-1 (Europe Ouest)</span>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">Isolation Données</span>
-                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">Strictement préfixé store_*</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">Confidentialité des données</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">Espace marchand sécurisé</span>
                   </div>
                 </div>
 
@@ -2003,7 +2002,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white transition-all cursor-pointer shadow-xs disabled:opacity-50"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${supabaseStatus.loading ? 'animate-spin' : ''}`} />
-                    <span>{supabaseStatus.loading ? 'Test en cours...' : 'Tester la connexion Supabase'}</span>
+                    <span>{supabaseStatus.loading ? 'Vérification...' : 'Tester la connexion en ligne'}</span>
                   </button>
 
                   <button
@@ -2013,7 +2012,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all cursor-pointer shadow-xs disabled:opacity-50"
                   >
                     <Cloud className={`w-3.5 h-3.5 ${isSyncingSupabase ? 'animate-bounce' : ''}`} />
-                    <span>{isSyncingSupabase ? 'Synchronisation en cours...' : 'Synchroniser le catalogue local vers Supabase'}</span>
+                    <span>{isSyncingSupabase ? 'Synchronisation en cours...' : 'Mettre à jour le catalogue en ligne'}</span>
                   </button>
 
                   <button
@@ -2023,7 +2022,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all cursor-pointer shadow-xs disabled:opacity-50"
                   >
                     <Sparkles className={`w-3.5 h-3.5 ${isSeedingCatalog ? 'animate-spin' : ''}`} />
-                    <span>{isSeedingCatalog ? 'Peuplement en cours...' : 'Peupler le catalogue officiel Apple (6 modèles)'}</span>
+                    <span>{isSeedingCatalog ? 'Chargement...' : 'Charger le catalogue officiel Apple (6 modèles)'}</span>
                   </button>
 
                   <button
@@ -2032,7 +2031,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 transition-all cursor-pointer shadow-xs"
                   >
                     <FileCode className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>Afficher le script SQL de migration</span>
+                    <span>Afficher le guide d'initialisation technique</span>
                   </button>
                 </div>
 
@@ -2041,20 +2040,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="mt-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 space-y-2">
                     <p className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                       <Lock className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Comment activer la connexion à votre projet Supabase ({SUPABASE_PROJECT_ID}) ?</span>
+                      <span>Comment raccorder votre boutique au serveur en ligne ({SUPABASE_PROJECT_ID}) ?</span>
                     </p>
                     <ol className="list-decimal list-inside space-y-1.5 pl-1">
                       <li>
-                        Ouvrez le tableau de bord Supabase : <a href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}`} target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold">Projet Oumar iPhone (eu-west-1)</a>
+                        Ouvrez la console de gestion du serveur distant.
                       </li>
                       <li>
-                        Dans <strong>Project Settings &gt; API</strong>, copiez la clé <code className="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[11px]">anon public</code>.
+                        Dans les paramètres d'accès de la boutique, récupérez la clé d'authentification publique.
                       </li>
                       <li>
-                        Renseignez la variable <code className="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[11px]">VITE_SUPABASE_ANON_KEY="..."</code> dans le fichier <code className="font-semibold">.env</code> du projet.
+                        Renseignez la configuration sur votre serveur de déploiement (Vercel ou variables d'environnement).
                       </li>
                       <li>
-                        Exécutez le script SQL fourni dans l'éditeur SQL de Supabase (bouton ci-dessus) pour créer les tables <code className="text-emerald-600 dark:text-emerald-400">store_*</code> en toute sécurité.
+                        Le catalogue et les comptes d'équipe seront automatiquement synchronisés en temps réel.
                       </li>
                     </ol>
                   </div>
@@ -2065,7 +2064,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* ========================================================= */}
-          {/* TAB 5: TEAM & ADMINISTRATORS (SUPABASE AUTH RBAC) */}
+          {/* TAB 5: TEAM & ADMINISTRATORS */}
           {/* ========================================================= */}
           {activeTab === 'admins' && (
             <div className="space-y-6 animate-in fade-in-50 duration-200">
@@ -2075,10 +2074,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div>
                   <h3 className="text-base font-bold text-slate-950 dark:text-white flex items-center gap-2 font-['Outfit']">
                     <Users className="w-5 h-5 text-indigo-500" />
-                    <span>Direction, Équipe & Rôles Administrateurs</span>
+                    <span>Direction & Équipe de Gestion</span>
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Contrôle d’accès sécurisé (RBAC) synchronisé avec la table Supabase <code className="text-emerald-600 dark:text-emerald-400 font-semibold">store_admins</code>.
+                    Gestion des droits d'accès et des responsabilités de l'équipe OUMAR IPHONE.
                   </p>
                 </div>
 
@@ -2108,7 +2107,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   ) : (
                     <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800">
                       <Lock className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Gestion de l'équipe réservée au Superadmin</span>
+                      <span>Gestion de l'équipe réservée à la direction</span>
                     </div>
                   )}
                 </div>
@@ -2118,20 +2117,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="p-4 bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-200/70 dark:border-indigo-800/40 rounded-2xl text-xs text-indigo-950 dark:text-indigo-200 space-y-2">
                 <div className="flex items-center gap-2 font-bold text-indigo-900 dark:text-indigo-300">
                   <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                  <span>Architecture de Sécurité OUMAR IPHONE & Supabase Auth</span>
+                  <span>Sécurité et gestion des droits d'accès</span>
                 </div>
                 <p className="text-[11px] leading-relaxed text-indigo-900/80 dark:text-indigo-200/80">
-                  L'accès à ce tableau de bord est doublement protégé : au niveau applicatif par <strong>Supabase Auth</strong> et au niveau base de données par les <strong>politiques RLS (Row Level Security)</strong>. Seuls les comptes listés ci-dessous avec le statut <strong>Actif</strong> peuvent visualiser les commandes des clients, modifier le catalogue ou gérer les stocks.
+                  L'accès à ce tableau de bord est strictement contrôlé. Seuls les comptes collaborateurs enregistrés ci-dessous avec le statut <strong>Actif</strong> peuvent visualiser les commandes des clients, modifier le catalogue ou ajuster les disponibilités.
                 </p>
                 <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px]">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-100/80 dark:bg-indigo-900/50 font-semibold text-indigo-800 dark:text-indigo-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500" /> Superadmin (Accès Total & Gestion Équipe)
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500" /> Direction (Accès Total & Gestion Équipe)
                   </span>
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-100/80 dark:bg-indigo-900/50 font-semibold text-indigo-800 dark:text-indigo-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Admin (Catalogue, Stocks & Commandes)
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Administrateur (Catalogue, Stocks & Commandes)
                   </span>
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-100/80 dark:bg-indigo-900/50 font-semibold text-indigo-800 dark:text-indigo-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Manager (Traitement des Commandes)
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Responsable (Traitement des Commandes)
                   </span>
                 </div>
               </div>
@@ -2151,7 +2150,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       Aucun compte administrateur listé
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 max-w-lg mx-auto">
-                      Seuls les superadministrateurs actifs (dont le compte principal <code className="text-emerald-500 font-mono">mikeyservice98@gmail.com</code>) sont autorisés à inviter ou gérer les membres de l'équipe OUMAR IPHONE.
+                      Seuls les administrateurs de la direction sont autorisés à inviter ou gérer les membres de l'équipe OUMAR IPHONE.
                     </p>
                     {isCurrentSuperAdmin && (
                       <div className="pt-2">
@@ -2172,7 +2171,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-800">
                         <tr>
                           <th className="py-3 px-4">Administrateur</th>
-                          <th className="py-3 px-4">Rôle RBAC</th>
+                          <th className="py-3 px-4">Niveau d'accès</th>
                           <th className="py-3 px-4">Téléphone</th>
                           <th className="py-3 px-4">Statut</th>
                           <th className="py-3 px-4">Créé le</th>
@@ -2208,8 +2207,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         </span>
                                       )}
                                     </div>
-                                    <span className="text-[10px] text-slate-400 font-mono">
-                                      ID: {adm.id.slice(0, 8)}...
+                                    <span className="text-[10px] text-slate-400">
+                                      Réf: #{adm.id.slice(0, 6)}
                                     </span>
                                   </div>
                                 </div>
@@ -2341,7 +2340,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {/* Email */}
                 <div>
                   <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Adresse Email Supabase *
+                    Adresse Email Professionnelle *
                   </label>
                   <input
                     type="email"
@@ -2352,23 +2351,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
-                    L'administrateur utilisera cette adresse email pour se connecter via Supabase Auth.
+                    Le collaborateur utilisera cette adresse email pour se connecter à l'espace de gestion.
                   </p>
                 </div>
 
                 {/* Role */}
                 <div>
                   <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Rôle & Privilèges *
+                    Niveau d'accès & Privilèges *
                   </label>
                   <select
                     value={newAdminRole}
                     onChange={(e) => setNewAdminRole(e.target.value as any)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none cursor-pointer"
                   >
-                    <option value="superadmin">Superadmin — Accès total & gestion des administrateurs</option>
-                    <option value="admin">Admin — Gestion complète (produits, vidéos, commandes)</option>
-                    <option value="manager">Manager — Traitement et validation des commandes</option>
+                    <option value="superadmin">Direction — Accès total & gestion de l'équipe</option>
+                    <option value="admin">Administrateur — Gestion complète (catalogue, vidéos, commandes)</option>
+                    <option value="manager">Responsable — Traitement et validation des commandes</option>
                   </select>
                 </div>
 
@@ -2428,10 +2427,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                   <div>
                     <h3 className="text-base font-bold font-['Outfit']">
-                      Script SQL de Migration Supabase
+                      Script d'initialisation du serveur en ligne
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Projet : {SUPABASE_PROJECT_ID} (eu-west-1) · Tables <code className="text-emerald-600 dark:text-emerald-400">store_*</code> · Respect strict des tables scolaires
+                      Configuration sécurisée des données de la boutique OUMAR IPHONE ({SUPABASE_PROJECT_ID})
                     </p>
                   </div>
                 </div>
@@ -2450,7 +2449,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     ) : (
                       <>
                         <Copy className="w-4 h-4" />
-                        <span>Copier le script SQL</span>
+                        <span>Copier le script d'initialisation</span>
                       </>
                     )}
                   </button>
@@ -2467,7 +2466,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* Guide bar */}
               <div className="p-3 my-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border border-indigo-100 dark:border-indigo-900/50 text-xs flex items-center justify-between">
                 <span>
-                  Ouvrez l'éditeur SQL de votre console Supabase, collez ce script et cliquez sur <strong>Run</strong>.
+                  Collez ce script dans l'éditeur de votre console serveur pour initialiser les rubriques de la boutique.
                 </span>
                 <a
                   href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}/sql`}
@@ -2475,7 +2474,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 font-bold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0 ml-2"
                 >
-                  <span>Aller sur l'éditeur SQL Supabase</span>
+                  <span>Accéder à la console</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
@@ -2640,9 +2639,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   />
                 </div>
 
-                {/* Image Upload / URL */}
-                <div className="sm:col-span-2">
-                  <label className="block font-semibold mb-1">Image principale</label>
+                {/* Image Upload / URL & Presets */}
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="block font-semibold">Image principale du produit</label>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -2666,6 +2665,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       onChange={handleUploadProductImage}
                       className="hidden"
                     />
+                  </div>
+
+                  {/* Preset photo selector */}
+                  <div className="pt-1">
+                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1.5">
+                      Sélecteur rapide d'images certifiées Apple :
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFormProduct({ ...formProduct, image: APPLE_ASSET_IMAGES.iphone16ProMax })}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                          formProduct.image === APPLE_ASSET_IMAGES.iphone16ProMax
+                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        iPhone 16 Pro Max
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormProduct({ ...formProduct, image: APPLE_ASSET_IMAGES.iphone16Pro })}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                          formProduct.image === APPLE_ASSET_IMAGES.iphone16Pro
+                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        iPhone 16 Pro
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormProduct({ ...formProduct, image: APPLE_ASSET_IMAGES.iphone15Pro })}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                          formProduct.image === APPLE_ASSET_IMAGES.iphone15Pro
+                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        iPhone 15 Pro
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormProduct({ ...formProduct, image: APPLE_ASSET_IMAGES.ipadProM4 })}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                          formProduct.image === APPLE_ASSET_IMAGES.ipadProM4
+                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        iPad Pro M4
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormProduct({ ...formProduct, image: APPLE_ASSET_IMAGES.macbookProM3 })}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                          formProduct.image === APPLE_ASSET_IMAGES.macbookProM3
+                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        MacBook Pro M3
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormProduct({ ...formProduct, image: APPLE_ASSET_IMAGES.airpodsPro2 })}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                          formProduct.image === APPLE_ASSET_IMAGES.airpodsPro2
+                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        AirPods Pro 2
+                      </button>
+                    </div>
                   </div>
                 </div>
 

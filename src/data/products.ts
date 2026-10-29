@@ -9,6 +9,15 @@ import imgAirPodsPro from '../assets/images/product_airpods_pro_2_1792434397170.
 
 import { getWhatsAppPhone, getWhatsAppUrl } from './storeSettings';
 
+export const APPLE_ASSET_IMAGES = {
+  iphone16ProMax: img16ProMax,
+  iphone16Pro: imgTitanium,
+  iphone15Pro: img15Pro,
+  ipadProM4: imgIpadPro,
+  macbookProM3: imgMacBookPro,
+  airpodsPro2: imgAirPodsPro
+};
+
 export const WHATSAPP_PHONE = getWhatsAppPhone();
 export const WHATSAPP_URL = (message: string) => getWhatsAppUrl(message);
 

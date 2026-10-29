@@ -74,10 +74,10 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
             <ShieldCheck className="w-7 h-7" />
           </div>
           <h3 className="text-lg font-bold tracking-tight text-slate-950 dark:text-white font-['Outfit']">
-            Espace Direction & Authentification
+            Espace Direction & Gestion
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Connexion sécurisée Supabase Auth réservée à l'équipe OUMAR IPHONE.
+            Accès sécurisé réservé à la direction et à l'équipe OUMAR IPHONE.
           </p>
         </div>
 
@@ -85,16 +85,16 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
           <div className="mb-4 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
             <span>
-              <strong>Supabase non configuré :</strong> Veuillez ajouter la clé <code className="font-mono bg-amber-100 dark:bg-amber-900/60 px-1 rounded">VITE_SUPABASE_ANON_KEY</code> dans le fichier <code className="font-semibold">.env</code> pour activer l'authentification administrateur.
+              <strong>Service momentanément indisponible :</strong> La connexion au serveur distant est en cours d'initialisation. Veuillez contacter l'assistance technique de la boutique.
             </span>
           </div>
         )}
 
-        {/* SUPABASE AUTH FORM (EMAIL + PASSWORD) */}
+        {/* AUTH FORM (EMAIL + PASSWORD) */}
         <form onSubmit={handleSupabaseSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Adresse e-mail administrateur
+              Adresse e-mail professionnelle
             </label>
             <div className="relative">
               <input
@@ -112,7 +112,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Mot de passe Supabase
+              Mot de passe
             </label>
             <div className="relative">
               <input
@@ -146,21 +146,21 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
               </>
             ) : (
               <>
-                <Database className="w-4 h-4" />
-                <span>Se connecter à l'Administration</span>
+                <Lock className="w-4 h-4" />
+                <span>Se connecter à l'espace de gestion</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
 
           <p className="text-[11px] text-slate-400 text-center">
-            Vérification stricte dans la table <code className="text-emerald-600 dark:text-emerald-400 font-mono">store_admins</code> ({SUPABASE_PROJECT_ID}).
+            Accès protégé par chiffrement sécurisé · Boutique officielle OUMAR IPHONE Abidjan
           </p>
         </form>
 
         <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center text-[10px] text-slate-400 flex items-center justify-center gap-1.5">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-          <span>Protection Supabase Auth & RLS · OUMAR IPHONE SARL</span>
+          <span>Espace professionnel sécurisé · OUMAR IPHONE SARL</span>
         </div>
 
       </div>

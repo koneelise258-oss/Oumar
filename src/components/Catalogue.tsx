@@ -428,7 +428,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
         {/* Product Grid */}
         {filteredProducts.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            {filteredProducts.map((product) => {
+            {filteredProducts.map((product, pIndex) => {
               const currentStorage = cardStorages[product.id] || product.storage[0] || 'Standard';
               const currentColor = cardColors[product.id] || product.colors[0]?.name || 'Standard';
               const isAdded = addedIds[product.id];
@@ -440,14 +440,14 @@ export const Catalogue: React.FC<CatalogueProps> = ({
 
               return (
                 <div
-                  key={product.id}
+                  key={`${product.id || 'prod'}-${pIndex}`}
                   onClick={() => setActiveModalProduct(product)}
                   className="bg-white dark:bg-[#0f172a] rounded-3xl overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer"
                 >
                   {/* Product Visual Stage */}
                   <div className="relative aspect-[4/3] bg-gradient-to-b from-slate-50 to-slate-100/70 dark:from-slate-900/80 dark:to-[#0b0f17] p-6 flex items-center justify-center overflow-hidden">
                     <img
-                      src={product.image}
+                      src={product.image || undefined}
                       alt={product.name}
                       className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 select-none"
                       loading="lazy"
@@ -463,6 +463,11 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                     {/* Battery or Warranty badge */}
                     <div className="absolute top-3.5 right-3.5 text-[11px] font-medium text-slate-700 dark:text-slate-200 px-2 py-0.5 rounded-full bg-white/90 dark:bg-slate-800/90 backdrop-blur-xs border border-slate-200/60 dark:border-slate-700 shadow-xs">
                       {product.batteryHealth}
+                    </div>
+
+                    {/* Official Apple reference visual badge */}
+                    <div className="absolute bottom-2 left-2 text-[9px] font-medium text-slate-500 dark:text-slate-400 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xs px-2 py-0.5 rounded-md border border-slate-200/60 dark:border-slate-800">
+                      Visuel de référence Apple
                     </div>
 
                     {/* Quick view button overlay */}
@@ -507,9 +512,9 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                             Capacité
                           </div>
                           <div className="flex flex-wrap gap-1.5">
-                            {product.storage.map((cap) => (
+                            {product.storage.map((cap, cIdx) => (
                               <button
-                                key={cap}
+                                key={`${product.id}-storage-${cap}-${cIdx}`}
                                 type="button"
                                 onClick={(e) => handleCardStorageChange(e, product.id, cap)}
                                 className={`px-2.5 py-1 text-xs rounded-lg font-semibold transition-all cursor-pointer ${
@@ -532,9 +537,9 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                             Finition : <span className="font-normal text-slate-800 dark:text-slate-200">{currentColor}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            {product.colors.map((color) => (
+                            {product.colors.map((color, colorIdx) => (
                               <button
-                                key={color.name}
+                                key={`${product.id}-color-${color.name || 'col'}-${colorIdx}`}
                                 type="button"
                                 onClick={(e) => handleCardColorChange(e, product.id, color.name)}
                                 className={`w-5 h-5 rounded-full border-2 transition-transform cursor-pointer ${

@@ -129,11 +129,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             ) : (
               items.map((item, index) => (
                 <div
-                  key={`${item.product.id}-${index}`}
+                  key={`cart-${item.product?.id || index}-${item.chosenStorage}-${item.chosenColor}-${index}`}
                   className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex gap-3.5 items-center"
                 >
                   <img
-                    src={item.product.image}
+                    src={item.product.image || undefined}
                     alt={item.product.name}
                     className="w-16 h-16 object-cover rounded-lg bg-white dark:bg-slate-850 p-1 border border-slate-200/60 dark:border-slate-700/60"
                   />

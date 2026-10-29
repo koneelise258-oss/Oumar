@@ -106,7 +106,7 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
     >
       <video
         ref={videoRef}
-        src={video.url}
+        src={video.url || undefined}
         autoPlay
         muted
         loop

@@ -138,13 +138,16 @@ Pourriez-vous me confirmer la disponibilité et organiser la livraison à Abidja
               </div>
 
               {/* Main Image Stage */}
-              <div className="relative aspect-square w-full flex items-center justify-center my-auto py-4">
+              <div className="relative aspect-square w-full flex items-center justify-center my-auto py-4 flex-col">
                 <img
-                  src={activeImage || product.image}
+                  src={activeImage || product.image || undefined}
                   alt={`${product.name} — ${selectedColor}`}
-                  className="max-h-full max-w-full object-contain drop-shadow-md select-none transition-all duration-300"
+                  className="max-h-[85%] max-w-full object-contain drop-shadow-md select-none transition-all duration-300"
                   loading="eager"
                 />
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 italic block text-center mt-2.5 font-medium">
+                  Visuel de référence officiel Apple · Appareil inspecté en boutique OUMAR IPHONE
+                </span>
               </div>
 
               {/* Thumbnails strip (if multiple gallery photos available) */}
@@ -152,7 +155,7 @@ Pourriez-vous me confirmer la disponibilité et organiser la livraison à Abidja
                 <div className="flex items-center justify-center gap-3 pt-4 border-t border-slate-200/60 dark:border-slate-800">
                   {galleryImages.map((thumb, idx) => (
                     <button
-                      key={idx}
+                      key={`modal-thumb-${idx}-${thumb}`}
                       type="button"
                       onClick={() => setActiveImage(thumb)}
                       className={`w-14 h-14 rounded-xl p-1 bg-white dark:bg-slate-800 border-2 transition-all overflow-hidden ${
@@ -162,7 +165,7 @@ Pourriez-vous me confirmer la disponibilité et organiser la livraison à Abidja
                       }`}
                       aria-label={`Afficher la vue ${idx + 1}`}
                     >
-                      <img src={thumb} alt={`Miniature ${idx + 1}`} className="w-full h-full object-contain" />
+                      <img src={thumb || undefined} alt={`Miniature ${idx + 1}`} className="w-full h-full object-contain" />
                     </button>
                   ))}
                 </div>
@@ -224,13 +227,13 @@ Pourriez-vous me confirmer la disponibilité et organiser la livraison à Abidja
                       <span className="text-slate-400 font-normal lowercase">{selectedStorage}</span>
                     </div>
                     <div className="flex flex-wrap gap-2.5">
-                      {product.storage.map((cap) => {
+                      {product.storage.map((cap, capIdx) => {
                         const isSelected = selectedStorage === cap;
                         const capPrice = product.storagePrices ? product.storagePrices[cap] : undefined;
 
                         return (
                           <button
-                            key={cap}
+                            key={`modal-storage-${cap}-${capIdx}`}
                             type="button"
                             onClick={() => setSelectedStorage(cap)}
                             className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-start ${
@@ -259,11 +262,11 @@ Pourriez-vous me confirmer la disponibilité et organiser la livraison à Abidja
                       Finition : <span className="font-normal text-slate-900 dark:text-white capitalize">{selectedColor}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
-                      {product.colors.map((color) => {
+                      {product.colors.map((color, colIdx) => {
                         const isSelected = selectedColor === color.name;
                         return (
                           <button
-                            key={color.name}
+                            key={`modal-color-${color.name || 'col'}-${colIdx}`}
                             type="button"
                             onClick={() => setSelectedColor(color.name)}
                             className={`group flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs transition-all ${
