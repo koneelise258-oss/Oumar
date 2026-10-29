@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { VideosSection } from './components/VideosSection';
 import { Catalogue } from './components/Catalogue';
+import { SocialSection } from './components/SocialSection';
 import { BoutiqueInfo } from './components/BoutiqueInfo';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
@@ -257,7 +258,7 @@ function StoreApp() {
           onAddToCart={(product) => handleAddToCart(product)}
         />
 
-        {/* 2. Espace Vidéos Immersif (au centre, entre Hero et Catalogue) */}
+        {/* 2. Section des Vidéos (immédiatement après la Hero, avant le catalogue) */}
         <VideosSection
           id="videos"
           videos={videos}
@@ -272,7 +273,10 @@ function StoreApp() {
           onCloseExternalProduct={() => setSelectedSearchProduct(null)}
         />
 
-        {/* 4. Informations boutique, SAV & garantie */}
+        {/* 4. Nos Réseaux Sociaux (TikTok & WhatsApp - après le catalogue) */}
+        <SocialSection />
+
+        {/* 5. Informations boutique, SAV & garantie */}
         <BoutiqueInfo />
       </main>
 

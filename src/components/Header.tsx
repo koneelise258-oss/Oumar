@@ -126,14 +126,14 @@ export const Header: React.FC<HeaderProps> = ({
             Garantie & SAV
           </a>
 
-          {/* 5. TikTok @oumariphone */}
+          {/* 5. TikTok @oumar_iphone.0 */}
           <a
-            href="https://tiktok.com"
+            href="https://www.tiktok.com/@oumar_iphone.0"
             target="_blank"
             rel="noopener noreferrer"
             className="px-3.5 py-1.5 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all duration-200 whitespace-nowrap"
           >
-            TikTok @oumariphone
+            TikTok @oumar_iphone.0
           </a>
         </nav>
 
@@ -315,12 +315,12 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* 5. TikTok */}
             <a
-              href="https://tiktok.com"
+              href="https://www.tiktok.com/@oumar_iphone.0"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
-              <span>TikTok @oumariphone</span>
+              <span>TikTok @oumar_iphone.0</span>
               <span className="text-xs text-slate-400">↗</span>
             </a>
           </div>

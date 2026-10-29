@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { VideoItem } from '../types';
-import { ExternalLink, Play } from 'lucide-react';
+import { ExternalLink, Play, Pause, Volume2, VolumeX } from 'lucide-react';
 
 interface VideosSectionProps {
   id?: string;
@@ -28,16 +28,16 @@ export const extractTikTokVideoId = (rawUrl: string): string | null => {
 const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isManuallyPausedRef = useRef<boolean>(false);
 
   const [isInView, setIsInView] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(true);
 
   const isTikTok = video.type === 'tiktok' || video.url.includes('tiktok.com');
   const tikTokId = isTikTok ? extractTikTokVideoId(video.url) : null;
 
-  // IntersectionObserver pour charger les lecteurs et gérer l'autoplay HTML5 uniquement en vision
+  // IntersectionObserver pour déclencher la visibilité et l'autoplay muet HTML5
   useEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
@@ -47,12 +47,11 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             setIsInView(true);
-            if (!isTikTok && videoRef.current && !isManuallyPausedRef.current) {
-              videoRef.current.play().catch(() => {});
-            }
-          } else {
             if (!isTikTok && videoRef.current) {
-              videoRef.current.pause();
+              // Tente un démarrage muet automatique
+              videoRef.current.play()
+                .then(() => setIsPlaying(true))
+                .catch(() => setIsPlaying(false));
             }
           }
         });
@@ -64,40 +63,36 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
     return () => observer.disconnect();
   }, [isTikTok]);
 
-  // Gestion des clics pour les vidéos HTML5 (simple clic : redémarrage/son, double clic : pause/lecture)
-  const handlePointerClick = () => {
-    if (isTikTok) return;
+  // Synchronisation des évènements vidéo HTML5 (sans réinitialiser le temps)
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!videoRef.current || isTikTok) return;
 
-    if (clickTimeoutRef.current) {
-      clearTimeout(clickTimeoutRef.current);
-      clickTimeoutRef.current = null;
-      if (videoRef.current) {
-        if (videoRef.current.paused) {
-          isManuallyPausedRef.current = false;
-          videoRef.current.play().catch(() => {});
-        } else {
-          isManuallyPausedRef.current = true;
-          videoRef.current.pause();
-        }
-      }
+    if (videoRef.current.paused) {
+      videoRef.current.play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
     } else {
-      clickTimeoutRef.current = setTimeout(() => {
-        clickTimeoutRef.current = null;
-        if (videoRef.current) {
-          videoRef.current.currentTime = 0;
-          videoRef.current.muted = false;
-          isManuallyPausedRef.current = false;
-          videoRef.current.play().catch(() => {});
-        }
-      }, 250);
+      videoRef.current.pause();
+      setIsPlaying(false);
     }
+  };
+
+  const toggleMute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!videoRef.current || isTikTok) return;
+
+    // Basculer le son SANS toucher à currentTime
+    const newMuted = !videoRef.current.muted;
+    videoRef.current.muted = newMuted;
+    setIsMuted(newMuted);
   };
 
   // 1. Rendu TikTok avec le lecteur officiel player/v1
   if (isTikTok) {
     const fallbackUrl = tikTokId
-      ? `https://www.tiktok.com/@oumariphone/video/${tikTokId}`
-      : video.url;
+      ? `https://www.tiktok.com/@oumar_iphone.0/video/${tikTokId}`
+      : `https://www.tiktok.com/@oumar_iphone.0`;
 
     return (
       <div
@@ -106,7 +101,7 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
       >
         {isInView && tikTokId && !hasError ? (
           <iframe
-            src={`https://www.tiktok.com/player/v1/${tikTokId}`}
+            src={`https://www.tiktok.com/player/v1/${tikTokId}?autoplay=1`}
             title={video.title || "Vidéo TikTok OUMAR IPHONE"}
             className="w-full h-full border-0 outline-none rounded-2xl sm:rounded-[24px] block"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -125,7 +120,7 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
                 Vidéo TikTok OUMAR
               </span>
               <span className="text-[10px] sm:text-[11px] text-slate-400 block">
-                @oumariphone
+                @oumar_iphone.0
               </span>
             </div>
             <a
@@ -147,8 +142,8 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
   return (
     <div
       ref={containerRef}
-      onClick={handlePointerClick}
-      className="relative w-full aspect-[9/16] rounded-2xl sm:rounded-[24px] overflow-hidden bg-slate-900/5 dark:bg-slate-950/40 border-0 outline-none cursor-pointer select-none transition-transform duration-300 hover:scale-[1.012] active:scale-[0.99]"
+      onClick={togglePlay}
+      className="relative w-full aspect-[9/16] rounded-2xl sm:rounded-[24px] overflow-hidden bg-slate-900/5 dark:bg-slate-950/40 border-0 outline-none cursor-pointer select-none transition-transform duration-300 hover:scale-[1.012] group"
     >
       <video
         ref={videoRef}
@@ -158,8 +153,52 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
         loop
         playsInline
         preload="metadata"
-        className="w-full h-full object-cover rounded-2xl sm:rounded-[24px] pointer-events-none block border-0 outline-none"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onVolumeChange={() => {
+          if (videoRef.current) setIsMuted(videoRef.current.muted);
+        }}
+        className="w-full h-full object-cover rounded-2xl sm:rounded-[24px] block border-0 outline-none"
       />
+
+      {/* Overlay indicateur pause quand la vidéo est suspendue */}
+      {!isPlaying && (
+        <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] flex items-center justify-center transition-opacity">
+          <div className="w-12 h-12 rounded-full bg-white/90 text-slate-900 flex items-center justify-center shadow-lg">
+            <Play className="w-6 h-6 ml-1 fill-current" />
+          </div>
+        </div>
+      )}
+
+      {/* Bouton de contrôle du Son (Active/Désactive le son SANS réinitialiser le temps) */}
+      <button
+        type="button"
+        onClick={toggleMute}
+        className="absolute top-2.5 right-2.5 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-md transition-all active:scale-90 cursor-pointer shadow-md border border-white/10"
+        title={isMuted ? "Activer le son" : "Couper le son"}
+        aria-label={isMuted ? "Activer le son" : "Couper le son"}
+      >
+        {isMuted ? (
+          <VolumeX className="w-4 h-4 text-rose-400" />
+        ) : (
+          <Volume2 className="w-4 h-4 text-emerald-400" />
+        )}
+      </button>
+
+      {/* Bouton manuel Pause/Lecture au survol/au bas de la vidéo */}
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="absolute bottom-2.5 left-2.5 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-md transition-all active:scale-90 cursor-pointer opacity-80 group-hover:opacity-100 shadow-md border border-white/10"
+        title={isPlaying ? "Mettre en pause" : "Lire"}
+        aria-label={isPlaying ? "Mettre en pause" : "Lire"}
+      >
+        {isPlaying ? (
+          <Pause className="w-4 h-4 text-white" />
+        ) : (
+          <Play className="w-4 h-4 text-white fill-current ml-0.5" />
+        )}
+      </button>
     </div>
   );
 };
@@ -196,4 +235,3 @@ export const VideosSection: React.FC<VideosSectionProps> = ({
     </section>
   );
 };
-
