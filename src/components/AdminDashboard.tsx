@@ -301,7 +301,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       name: '',
       model: '',
       category: 'iPhone',
-      condition: 'Neuf Scellé',
+      condition: 'Neuf scellé',
       storage: ['128 Go', '256 Go', '512 Go'],
       selectedStorage: '256 Go',
       price: 0,

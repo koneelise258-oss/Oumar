@@ -15,7 +15,7 @@ export interface StoreSettings {
 }
 
 export const DEFAULT_SETTINGS: StoreSettings = {
-  whatsappPhone: '2250778024285', // Numéro officiel OUMAR IPHONE (+225 07 78 02 42 85)
+  whatsappPhone: '2250161443637', // Numéro officiel OUMAR IPHONE (+225 01 61 44 36 37)
   storeName: 'OUMAR IPHONE',
   tagline: 'Boutique Apple d’Excellence à Abidjan',
   city: 'Abidjan, Côte d’Ivoire',
@@ -23,7 +23,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
     {
       name: 'Boutique OUMAR IPHONE Abidjan',
       location: 'Abidjan, Côte d’Ivoire (Retrait en boutique)',
-      phone: '+225 07 78 02 42 85',
+      phone: '+225 01 61 44 36 37',
       hours: 'Lun - Sam : 08h30 - 19h30'
     }
   ],

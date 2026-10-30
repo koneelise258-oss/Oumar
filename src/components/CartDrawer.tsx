@@ -284,7 +284,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
               <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 text-center">
                 <ShieldCheck className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300 shrink-0" />
-                <span>Contact direct & échanges sur WhatsApp (+225 07 78 02 42 85)</span>
+                <span>Contact direct & échanges sur WhatsApp (+225 01 61 44 36 37)</span>
               </div>
             </div>
           )}

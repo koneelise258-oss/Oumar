@@ -77,13 +77,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     ? (matchingVariant.inStock !== false)
     : product.inStock;
 
-  // Liste des conditions à proposer si configurées
+  // Liste des 4 états normalisés
   const availableConditions = [
-    'Neuf Scellé',
-    'Neuf Original Apple',
-    'Quasi Neuf',
+    'Neuf scellé',
+    'Quasi neuf',
     'Occasion',
-    'Reconditionné A+'
+    'Reconditionné'
   ];
 
   // Gestion du changement de couleur avec changement dynamique de la photo

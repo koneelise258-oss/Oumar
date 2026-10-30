@@ -1,12 +1,10 @@
 export type ProductCategory = 'iPhone' | 'iPad' | 'iPhone Duo' | 'MacBook' | 'Accessoires';
 
 export type ProductCondition = 
-  | 'Neuf Scellé' 
-  | 'Neuf Original Apple' 
-  | 'Quasi Neuf' 
+  | 'Neuf scellé' 
+  | 'Quasi neuf' 
   | 'Occasion' 
-  | 'Reconditionné A+' 
-  | 'Reconditionné Certifié';
+  | 'Reconditionné';
 
 export interface ProductColor {
   name: string;

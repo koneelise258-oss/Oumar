@@ -63,7 +63,7 @@ export const SocialSection: React.FC = () => {
 
           {/* Card WhatsApp */}
           <a
-            href="https://wa.me/2250778024285?text=Bonjour%20OUMAR%20IPHONE%2C%20je%20souhaite%20des%20informations"
+            href="https://wa.me/2250161443637?text=Bonjour%20OUMAR%20IPHONE%2C%20je%20souhaite%20des%20informations"
             target="_blank"
             rel="noopener noreferrer"
             className="group relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-6 bg-gradient-to-br from-emerald-900/90 to-emerald-950 text-white shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between border border-emerald-800/80"
@@ -81,7 +81,7 @@ export const SocialSection: React.FC = () => {
                   WhatsApp Direct
                 </span>
                 <h3 className="text-xs sm:text-lg font-bold font-['Outfit'] text-white truncate group-hover:text-emerald-300 transition-colors">
-                  +225 07 78 02 42 85
+                  +225 01 61 44 36 37
                 </h3>
               </div>
             </div>

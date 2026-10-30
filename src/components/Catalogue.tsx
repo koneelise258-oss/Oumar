@@ -311,9 +311,10 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                   className="w-full text-xs rounded-lg px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                 >
                   <option value="Tous">Tous les états</option>
-                  <option value="Neuf Scellé">Neuf Scellé</option>
-                  <option value="Reconditionné A+">Reconditionné A+</option>
-                  <option value="Reconditionné Certifié">Reconditionné Certifié</option>
+                  <option value="Neuf scellé">Neuf scellé</option>
+                  <option value="Quasi neuf">Quasi neuf</option>
+                  <option value="Occasion">Occasion</option>
+                  <option value="Reconditionné">Reconditionné</option>
                 </select>
               </div>
 

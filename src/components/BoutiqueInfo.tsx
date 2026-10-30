@@ -42,7 +42,7 @@ export const BoutiqueInfo: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Phone className="w-3.5 h-3.5" />
-                  <span>+225 07 78 02 42 85</span>
+                  <span>+225 01 61 44 36 37</span>
                 </div>
               </div>
             </div>
