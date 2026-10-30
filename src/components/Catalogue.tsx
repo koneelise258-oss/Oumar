@@ -18,6 +18,8 @@ import {
 import { WHATSAPP_URL } from '../data/products';
 import { ProductModal } from './ProductModal';
 import { deduplicateColors } from '../services/storeService';
+import { AppleProductImageViewer } from './AppleProductImageViewer';
+import { useDebounce } from '../hooks/useDebounce';
 interface CatalogueProps {
   products: Product[];
   onAddToCart: (product: Product, storage: string, color: string) => void;
@@ -42,6 +44,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
 
   // Search query
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 150);
 
   // Filters
   const [selectedCondition, setSelectedCondition] = useState<string>('Tous');
@@ -85,8 +88,8 @@ export const Catalogue: React.FC<CatalogueProps> = ({
         }
 
         // Search filter
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
+        if (debouncedSearchQuery.trim()) {
+          const q = debouncedSearchQuery.toLowerCase();
           const matchName = p.name.toLowerCase().includes(q);
           const matchModel = p.model.toLowerCase().includes(q);
           const matchDesc = p.description?.toLowerCase().includes(q) || false;
@@ -132,7 +135,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
   }, [
     products,
     selectedCategory,
-    searchQuery,
+    debouncedSearchQuery,
     selectedCondition,
     onlyInStock,
     selectedStorageFilter,
@@ -458,6 +461,11 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                 (selectedColorObj && selectedColorObj.image) ||
                 product.image;
 
+              // Preload finish images for this card
+              const cardColorImages = cleanColors
+                .map((c) => c.image)
+                .filter((img): img is string => Boolean(img && typeof img === 'string' && img.trim()));
+
               // Price adjustment based on chosen capacity or variant
               const currentPrice =
                 matchingVariant && matchingVariant.price > 0
@@ -472,15 +480,16 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                   onClick={() => onSelectProduct ? onSelectProduct(product) : setActiveModalProduct(product)}
                   className="bg-white dark:bg-[#0f172a] rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer min-w-0"
                 >
-                  {/* Product Visual Stage - Completely clean to clearly see the photos */}
+                  {/* Product Visual Stage avec transition Apple */}
                   <div className="relative aspect-[4/3] bg-gradient-to-b from-slate-50 to-slate-100/70 dark:from-slate-900/80 dark:to-[#0b0f17] p-2.5 sm:p-5 flex items-center justify-center overflow-hidden">
-                    <img
-                      src={cardImage || undefined}
-                      alt={product.name}
+                    <AppleProductImageViewer
+                      key={`card-${product.id}-${currentColor}-${cardImage}`}
+                      src={cardImage || product.image || ''}
+                      alt={`${product.name} — Finition ${currentColor}`}
+                      allImagesToPreload={cardColorImages}
+                      fallbackImage={product.image}
                       className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 select-none"
-                      loading="lazy"
-                      width="380"
-                      height="285"
+                      containerClassName="w-full h-full relative flex items-center justify-center"
                     />
 
                     {/* Quick view button overlay on hover */}
@@ -492,16 +501,43 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                     </div>
                   </div>
 
-                  {/* Product Info & Actions */}
-                  <div className="p-3 sm:p-6 flex-1 flex flex-col justify-between min-w-0">
-                    <div>
-                      {/* Condition Tag */}
-                      <div className="mb-1.5">
-                        <span className="inline-block text-[9px] sm:text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200/60 dark:border-slate-700">
-                          {product.condition}
-                        </span>
+                  {/* COLOR SWATCHES — PLACED DIRECTLY BELOW THE PHOTO */}
+                  {cleanColors.length > 0 && (
+                    <div 
+                      className="px-3 sm:px-5 py-2 bg-slate-100/70 dark:bg-slate-800/50 border-b border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {cleanColors.map((color, colorIdx) => {
+                          const isSelected = currentColor.trim().toLowerCase() === color.name.trim().toLowerCase();
+                          return (
+                            <button
+                              key={`${product.id}-card-color-${color.name || 'col'}-${colorIdx}`}
+                              type="button"
+                              onClick={(e) => handleCardColorChange(e, product.id, color.name)}
+                              aria-pressed={isSelected}
+                              className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'border-amber-500 scale-110 shadow-xs ring-2 ring-amber-500 ring-offset-1 dark:ring-offset-slate-900'
+                                  : 'border-slate-300 dark:border-slate-600 hover:scale-105'
+                              }`}
+                              style={{ backgroundColor: color.hex }}
+                              title={`Changer la photo pour la finition ${color.name}`}
+                              aria-label={`Couleur ${color.name}`}
+                            />
+                          );
+                        })}
                       </div>
 
+                      <span className="text-[10px] sm:text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
+                        {currentColor}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Product Info & Actions */}
+                  <div className="p-3 sm:p-5 flex-1 flex flex-col justify-between min-w-0">
+                    <div>
                       {/* Name & Live Price Stacked Vertically */}
                       <div className="flex flex-col gap-1 mb-2 min-w-0">
                         <h3 className="text-xs sm:text-base font-bold text-slate-950 dark:text-white font-['Outfit'] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors leading-snug">
@@ -520,7 +556,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       </div>
 
                       {/* Model & Reassurance */}
-                      <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 mb-2 sm:mb-4 flex items-center gap-1 min-w-0 truncate">
+                      <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 mb-2 sm:mb-3 flex items-center gap-1 min-w-0 truncate">
                         <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <span className="truncate">{product.warranty}</span>
                       </p>
@@ -546,36 +582,6 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                                 {cap}
                               </button>
                             ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Color Swatches */}
-                      {cleanColors.length > 0 && (
-                        <div className="mb-2 sm:mb-5">
-                          <div className="text-[9px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 truncate">
-                            <span className="hidden sm:inline">Finition : </span><span className="font-normal text-slate-800 dark:text-slate-200">{currentColor}</span>
-                          </div>
-                          <div className="flex items-center gap-1 sm:gap-1.5">
-                            {cleanColors.map((color, colorIdx) => {
-                              const isSelected = currentColor.trim().toLowerCase() === color.name.trim().toLowerCase();
-                              return (
-                                <button
-                                  key={`${product.id}-color-${color.name || 'col'}-${colorIdx}`}
-                                  type="button"
-                                  onClick={(e) => handleCardColorChange(e, product.id, color.name)}
-                                  aria-pressed={isSelected}
-                                  className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border transition-transform cursor-pointer ${
-                                    isSelected
-                                      ? 'border-slate-950 dark:border-white scale-110 shadow-xs ring-2 ring-slate-950 dark:ring-white ring-offset-1 dark:ring-offset-slate-900'
-                                      : 'border-slate-300 dark:border-slate-600 hover:scale-105'
-                                  }`}
-                                  style={{ backgroundColor: color.hex }}
-                                  title={color.name}
-                                  aria-label={color.name}
-                                />
-                              );
-                            })}
                           </div>
                         </div>
                       )}

@@ -1,22 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
-import { VideosSection } from './components/VideosSection';
 import { Catalogue } from './components/Catalogue';
-import { SocialSection } from './components/SocialSection';
-import { BoutiqueInfo } from './components/BoutiqueInfo';
-import { ProductDetailPage } from './components/ProductDetailPage';
 import { Footer } from './components/Footer';
-import { CartDrawer } from './components/CartDrawer';
-import { GlobalSearchModal } from './components/GlobalSearchModal';
-import { AdminAuthModal } from './components/AdminAuthModal';
-import { AdminDashboard } from './components/AdminDashboard';
 import { loadProducts } from './data/products';
 import { loadVideos } from './data/videos';
 import { fetchProductsRemote, fetchVideosRemote, fetchStoreSettingsRemote } from './services/storeService';
 import { checkIsUserAdmin } from './lib/supabase';
 import { CartItem, Product, VideoItem } from './types';
 import { ThemeProvider } from './context/ThemeContext';
+
+// Chargement différé des composants secondaires et modales lourdes
+const VideosSection = lazy(() => import('./components/VideosSection').then(m => ({ default: m.VideosSection })));
+const SocialSection = lazy(() => import('./components/SocialSection').then(m => ({ default: m.SocialSection })));
+const BoutiqueInfo = lazy(() => import('./components/BoutiqueInfo').then(m => ({ default: m.BoutiqueInfo })));
+const ProductDetailPage = lazy(() => import('./components/ProductDetailPage').then(m => ({ default: m.ProductDetailPage })));
+const CartDrawer = lazy(() => import('./components/CartDrawer').then(m => ({ default: m.CartDrawer })));
+const GlobalSearchModal = lazy(() => import('./components/GlobalSearchModal').then(m => ({ default: m.GlobalSearchModal })));
+const AdminAuthModal = lazy(() => import('./components/AdminAuthModal').then(m => ({ default: m.AdminAuthModal })));
+const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 
 function StoreApp() {
   const [activeSection, setActiveSection] = useState<string>('home');
@@ -28,21 +30,31 @@ function StoreApp() {
   // Dedicated Product Detail Page State
   const [activeDetailProduct, setActiveDetailProduct] = useState<Product | null>(null);
 
-  // Background sync with Supabase on mount
+  // Synchronisation en arrière-plan différée pour libérer le fil principal au démarrage
   useEffect(() => {
-    fetchProductsRemote().then((remoteProds) => {
-      if (Array.isArray(remoteProds) && remoteProds.length > 0) {
-        setProducts(remoteProds);
-      }
-    }).catch(() => {});
+    const syncRemoteData = () => {
+      fetchProductsRemote().then((remoteProds) => {
+        if (Array.isArray(remoteProds) && remoteProds.length > 0) {
+          setProducts(remoteProds);
+        }
+      }).catch(() => {});
 
-    fetchVideosRemote().then((remoteVideos) => {
-      if (Array.isArray(remoteVideos)) {
-        setVideos(remoteVideos);
-      }
-    }).catch(() => {});
+      fetchVideosRemote().then((remoteVideos) => {
+        if (Array.isArray(remoteVideos)) {
+          setVideos(remoteVideos);
+        }
+      }).catch(() => {});
 
-    fetchStoreSettingsRemote().catch(() => {});
+      fetchStoreSettingsRemote().catch(() => {});
+    };
+
+    if ('requestIdleCallback' in window) {
+      const id = (window as any).requestIdleCallback(syncRemoteData, { timeout: 1500 });
+      return () => (window as any).cancelIdleCallback(id);
+    } else {
+      const timer = setTimeout(syncRemoteData, 300);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
   // Search Modal state
@@ -296,85 +308,98 @@ function StoreApp() {
 
       {/* Main Content Area */}
       <main className="flex-1">
-        {activeDetailProduct ? (
-          /* Real Standalone Product Detail Page View */
-          <ProductDetailPage
-            product={activeDetailProduct}
-            onBack={handleBackToCatalog}
-            onAddToCart={handleAddToCart}
-          />
-        ) : (
-          /* Continuous Homepage Layout (Hero -> Videos -> Catalogue -> Socials -> BoutiqueInfo) */
-          <>
-            {/* 1. Hero OUMAR IPHONE */}
-            <Hero
-              featuredProduct={products[0]}
-              onAddToCart={(product) => handleAddToCart(product)}
-            />
-
-            {/* 2. Section des Vidéos (immédiatement après la Hero, avant le catalogue) */}
-            <VideosSection
-              id="videos"
-              videos={videos}
-            />
-
-            {/* 3. Catalogue Apple Officiel avec filtres et fiches */}
-            <Catalogue
-              products={products}
+        <Suspense fallback={
+          <div className="min-h-[300px] flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        }>
+          {activeDetailProduct ? (
+            /* Real Standalone Product Detail Page View */
+            <ProductDetailPage
+              product={activeDetailProduct}
+              onBack={handleBackToCatalog}
               onAddToCart={handleAddToCart}
-              onProductsUpdated={(newProducts) => setProducts(newProducts)}
-              onSelectProduct={handleSelectProduct}
             />
+          ) : (
+            /* Continuous Homepage Layout (Hero -> Videos -> Catalogue -> Socials -> BoutiqueInfo) */
+            <>
+              {/* 1. Hero OUMAR IPHONE */}
+              <Hero
+                featuredProduct={products[0]}
+                onAddToCart={(product) => handleAddToCart(product)}
+              />
 
-            {/* 4. Nos Réseaux Sociaux (TikTok & WhatsApp - après le catalogue) */}
-            <SocialSection />
+              {/* 2. Section des Vidéos (immédiatement après la Hero, avant le catalogue) */}
+              <VideosSection
+                id="videos"
+                videos={videos}
+              />
 
-            {/* 5. Informations boutique, SAV & garantie */}
-            <BoutiqueInfo />
-          </>
-        )}
+              {/* 3. Catalogue Apple Officiel avec filtres et fiches */}
+              <Catalogue
+                products={products}
+                onAddToCart={handleAddToCart}
+                onProductsUpdated={(newProducts) => setProducts(newProducts)}
+                onSelectProduct={handleSelectProduct}
+              />
+
+              {/* 4. Nos Réseaux Sociaux (TikTok & WhatsApp - après le catalogue) */}
+              <SocialSection />
+
+              {/* 5. Informations boutique, SAV & garantie */}
+              <BoutiqueInfo />
+            </>
+          )}
+        </Suspense>
       </main>
 
       {/* Footer with discreet Admin Portal Trigger */}
       <Footer onOpenAdmin={handleTriggerAdmin} />
 
-      {/* Cart Drawer */}
-      <CartDrawer
-        isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
-        items={cartItems}
-        onUpdateQuantity={handleUpdateQuantity}
-        onRemoveItem={handleRemoveItem}
-        onClearCart={handleClearCart}
-      />
+      {/* Modales & Tiroir de Panier avec Suspense */}
+      <Suspense fallback={null}>
+        {isCartOpen && (
+          <CartDrawer
+            isOpen={isCartOpen}
+            onClose={() => setIsCartOpen(false)}
+            items={cartItems}
+            onUpdateQuantity={handleUpdateQuantity}
+            onRemoveItem={handleRemoveItem}
+            onClearCart={handleClearCart}
+          />
+        )}
 
-      {/* Global Real-Time Search Modal */}
-      <GlobalSearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        products={products}
-        onSelectProduct={(p) => {
-          setIsSearchOpen(false);
-          handleSelectProduct(p);
-        }}
-      />
+        {isSearchOpen && (
+          <GlobalSearchModal
+            isOpen={isSearchOpen}
+            onClose={() => setIsSearchOpen(false)}
+            products={products}
+            onSelectProduct={(p) => {
+              setIsSearchOpen(false);
+              handleSelectProduct(p);
+            }}
+          />
+        )}
 
-      {/* Secure Admin PIN/Password Gate Modal */}
-      <AdminAuthModal
-        isOpen={isAdminAuthOpen}
-        onClose={() => setIsAdminAuthOpen(false)}
-        onSuccess={handleAuthSuccess}
-      />
+        {isAdminAuthOpen && (
+          <AdminAuthModal
+            isOpen={isAdminAuthOpen}
+            onClose={() => setIsAdminAuthOpen(false)}
+            onSuccess={handleAuthSuccess}
+          />
+        )}
 
-      {/* Complete Unified Admin Dashboard */}
-      <AdminDashboard
-        isOpen={isAdminDashboardOpen}
-        onClose={() => setIsAdminDashboardOpen(false)}
-        products={products}
-        onProductsUpdated={(updated) => setProducts(updated)}
-        videos={videos}
-        onVideosUpdated={(updated) => setVideos(updated)}
-      />
+        {isAdminDashboardOpen && (
+          <AdminDashboard
+            isOpen={isAdminDashboardOpen}
+            onClose={() => setIsAdminDashboardOpen(false)}
+            products={products}
+            onProductsUpdated={(updated) => setProducts(updated)}
+            videos={videos}
+            onVideosUpdated={(updated) => setVideos(updated)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

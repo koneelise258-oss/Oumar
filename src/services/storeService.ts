@@ -142,9 +142,20 @@ export function productToRow(prod: Product): any {
 // ==============================================================================
 // STORE SERVICE: PRODUCTS & VARIANTS
 // ==============================================================================
-export async function fetchProductsRemote(): Promise<Product[]> {
+let cachedRemoteProducts: { data: Product[]; timestamp: number } | null = null;
+const REMOTE_CACHE_TTL_MS = 15000; // 15 secondes de cache mémoire
+
+export function clearStoreServiceCache(): void {
+  cachedRemoteProducts = null;
+}
+
+export async function fetchProductsRemote(forceRefresh: boolean = false): Promise<Product[]> {
   if (!isSupabaseConfigured) {
     return loadProducts();
+  }
+
+  if (!forceRefresh && cachedRemoteProducts && (Date.now() - cachedRemoteProducts.timestamp < REMOTE_CACHE_TTL_MS)) {
+    return cachedRemoteProducts.data;
   }
 
   try {
@@ -178,6 +189,7 @@ export async function fetchProductsRemote(): Promise<Product[]> {
         prod.variants = variantsList.filter((v) => v.productId === prod.id);
         return prod;
       });
+      cachedRemoteProducts = { data: mapped, timestamp: Date.now() };
       saveProducts(mapped);
       return mapped;
     }
@@ -273,6 +285,7 @@ export async function upsertProductRemote(product: Product): Promise<{ success: 
     const updatedList = existingIdx >= 0
       ? localList.map((p) => (p.id === product.id ? product : p))
       : [product, ...localList];
+    clearStoreServiceCache();
     saveProducts(updatedList);
     return { success: true };
   } catch (err: any) {
@@ -299,6 +312,7 @@ export async function deleteProductRemote(productId: string): Promise<{ success:
       return { success: false, message: `Échec de la suppression en ligne: ${error.message}` };
     }
 
+    clearStoreServiceCache();
     const localList = loadProducts().filter((p) => p.id !== productId);
     saveProducts(localList);
     return { success: true };

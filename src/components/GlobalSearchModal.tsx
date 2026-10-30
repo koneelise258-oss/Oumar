@@ -13,6 +13,7 @@ import {
   Clock
 } from 'lucide-react';
 import { getWhatsAppUrl } from '../data/storeSettings';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   onSelectProduct
 }) => {
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 120);
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -60,7 +62,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   // Search filter
   const results = useMemo(() => {
     const published = products.filter((p) => p.published !== false);
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
 
     return published.filter((p) => {
       // Category filter
@@ -92,7 +94,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         matchPrice
       );
     });
-  }, [products, query, selectedCategory]);
+  }, [products, debouncedQuery, selectedCategory]);
 
   if (!isOpen) return null;
 

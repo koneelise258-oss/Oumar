@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
 import { deduplicateColors } from '../services/storeService';
+import { AppleProductImageViewer } from './AppleProductImageViewer';
 
 interface ProductModalProps {
   product: Product | null;
@@ -71,6 +72,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const currentColorObj = product.colors?.find(
     (c) => c.name.toLowerCase().trim() === selectedColor.toLowerCase().trim()
   );
+
+  // Liste de toutes les images des finitions pour le préchargement ultra-fluide
+  const allColorImages = (product.colors || [])
+    .map((c) => c.image)
+    .filter((img): img is string => Boolean(img && typeof img === 'string' && img.trim()));
 
   // Build gallery images array based on selected color
   const galleryImages = [
@@ -146,18 +152,65 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                 )}
               </div>
 
-              {/* Main Image Stage */}
-              <div className="relative aspect-square w-full flex items-center justify-center my-auto py-4 flex-col">
-                <img
-                  src={activeImage || product.image || undefined}
-                  alt={`${product.name} — ${selectedColor}`}
-                  className="max-h-[85%] max-w-full object-contain drop-shadow-md select-none transition-all duration-300"
-                  loading="eager"
-                />
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 block text-center mt-2.5 font-medium">
-                  Appareil inspecté en boutique OUMAR IPHONE
-                </span>
-              </div>
+              {/* Main Image Stage avec transition fluide Apple */}
+              <AppleProductImageViewer
+                key={`modal-${product.id}-${selectedColor}-${activeImage}`}
+                src={activeImage || product.image || ''}
+                alt={`${product.name} — ${selectedColor}`}
+                allImagesToPreload={allColorImages}
+                fallbackImage={product.image}
+                priority={true}
+                className="max-h-[85%] max-w-full object-contain drop-shadow-md select-none"
+                containerClassName="relative aspect-square w-full flex items-center justify-center my-auto py-3 overflow-hidden"
+              />
+
+              {/* COLOR SELECTOR — PLACED DIRECTLY BELOW THE PHOTO */}
+              {product.colors && product.colors.length > 0 && (
+                <div className="my-2.5 p-3 bg-white/80 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs backdrop-blur-sm">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      <span>Finition :</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-extrabold text-[11px]">
+                      {selectedColor}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {deduplicateColors(product.colors).map((color, colIdx) => {
+                      const isSelected = selectedColor.trim().toLowerCase() === color.name.trim().toLowerCase();
+                      return (
+                        <button
+                          key={`modal-photo-color-${color.name || 'col'}-${colIdx}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedColor(color.name);
+                            if (color.image && color.image.trim()) {
+                              setActiveImage(color.image);
+                            } else {
+                              setActiveImage(product.image);
+                            }
+                          }}
+                          aria-pressed={isSelected}
+                          className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-bold transition-all cursor-pointer ${
+                            isSelected
+                              ? 'border-amber-500 bg-slate-950 text-white dark:bg-white dark:text-slate-950 shadow-sm ring-2 ring-amber-500 ring-offset-1 dark:ring-offset-slate-900 scale-105'
+                              : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80'
+                          }`}
+                          title={`Voir en finition ${color.name}`}
+                        >
+                          <span 
+                            className="w-3.5 h-3.5 rounded-full border border-black/20 shadow-xs shrink-0" 
+                            style={{ backgroundColor: color.hex }}
+                          />
+                          <span>{color.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Thumbnails strip (if multiple gallery photos available) */}
               {galleryImages.length > 1 && (

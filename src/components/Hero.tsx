@@ -113,43 +113,53 @@ export const Hero: React.FC<HeroProps> = () => {
   useEffect(() => {
     if (!oumarPhotoSrc || imageError) return;
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = oumarPhotoSrc;
+    const sample = () => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = oumarPhotoSrc;
 
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 24;
-        canvas.height = 24;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0, 24, 24);
-        const data = ctx.getImageData(0, 0, 24, 24).data;
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 24;
+          canvas.height = 24;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0, 24, 24);
+          const data = ctx.getImageData(0, 0, 24, 24).data;
 
-        let totalR = 0, totalG = 0, totalB = 0, count = 0;
-        for (let i = 0; i < data.length; i += 4) {
-          totalR += data[i];
-          totalG += data[i + 1];
-          totalB += data[i + 2];
-          count++;
+          let totalR = 0, totalG = 0, totalB = 0, count = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            totalR += data[i];
+            totalG += data[i + 1];
+            totalB += data[i + 2];
+            count++;
+          }
+
+          const avgR = Math.round(totalR / count);
+          const avgG = Math.round(totalG / count);
+          const avgB = Math.round(totalB / count);
+          const brightness = Math.round((avgR * 299 + avgG * 587 + avgB * 114) / 1000);
+
+          setPhotoTone({
+            dominantRgb: `${avgR}, ${avgG}, ${avgB}`,
+            brightness,
+            isDark: brightness < 95,
+            isBright: brightness > 215,
+          });
+        } catch {
+          // Fallback silently if canvas access is restricted
         }
-
-        const avgR = Math.round(totalR / count);
-        const avgG = Math.round(totalG / count);
-        const avgB = Math.round(totalB / count);
-        const brightness = Math.round((avgR * 299 + avgG * 587 + avgB * 114) / 1000);
-
-        setPhotoTone({
-          dominantRgb: `${avgR}, ${avgG}, ${avgB}`,
-          brightness,
-          isDark: brightness < 95,
-          isBright: brightness > 215,
-        });
-      } catch {
-        // Fallback silently if canvas access is restricted
-      }
+      };
     };
+
+    if ('requestIdleCallback' in window) {
+      const id = (window as any).requestIdleCallback(sample, { timeout: 1000 });
+      return () => (window as any).cancelIdleCallback(id);
+    } else {
+      const timer = setTimeout(sample, 200);
+      return () => clearTimeout(timer);
+    }
   }, [oumarPhotoSrc, imageError]);
 
   // Master GSAP Coordinated Timeline & ScrollTrigger

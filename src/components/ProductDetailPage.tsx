@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
 import { deduplicateColors } from '../services/storeService';
+import { AppleProductImageViewer } from './AppleProductImageViewer';
 
 interface ProductDetailPageProps {
   product: Product;
@@ -95,6 +96,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const currentColorObj = product.colors?.find(
     (c) => c.name.toLowerCase().trim() === selectedColor.toLowerCase().trim()
   );
+
+  // Liste de toutes les images des finitions pour le préchargement ultra-fluide
+  const allColorImages = (product.colors || [])
+    .map((c) => c.image)
+    .filter((img): img is string => Boolean(img && typeof img === 'string' && img.trim()));
 
   // Gestion du changement de couleur avec changement dynamique de la photo
   const handleColorSelect = (colorObj: ProductColor) => {
@@ -202,21 +208,58 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
               )}
             </div>
 
-            {/* Main Image View */}
-            <div className="relative aspect-square w-full flex items-center justify-center my-auto py-6 flex-col">
-              <img
-                src={displayImage || product.image || undefined}
-                alt={`${product.name} — Finition ${selectedColor}`}
-                className="max-h-[88%] max-w-full object-contain drop-shadow-lg select-none transition-all duration-300"
-                loading="eager"
-              />
-              
-              <div className="mt-4 text-center">
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">
-                  Finition <strong className="font-bold text-slate-700 dark:text-slate-300">{selectedColor}</strong> · Contrôlé en boutique à Abidjan
-                </span>
+            {/* Main Image View avec transitions fluides style Apple et clé stable */}
+            <AppleProductImageViewer
+              key={`detail-${product.id}-${selectedColor}-${displayImage}`}
+              src={displayImage || product.image || ''}
+              alt={`${product.name} — Finition ${selectedColor}`}
+              allImagesToPreload={allColorImages}
+              fallbackImage={product.image}
+              priority={true}
+              className="max-h-[85%] max-w-full object-contain drop-shadow-xl select-none"
+              containerClassName="relative aspect-square w-full flex items-center justify-center my-auto py-4 overflow-hidden"
+            />
+
+            {/* COLOR SELECTOR — PLACED DIRECTLY BELOW THE PHOTO */}
+            {product.colors && product.colors.length > 0 && (
+              <div className="my-3 p-3.5 bg-white/80 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm backdrop-blur-sm">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2.5">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span>Finitions disponibles :</span>
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-extrabold text-[11px]">
+                    {selectedColor}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center gap-2.5">
+                  {deduplicateColors(product.colors).map((colorObj, colIdx) => {
+                    const isSelected = selectedColor.trim().toLowerCase() === colorObj.name.trim().toLowerCase();
+                    return (
+                      <button
+                        key={`detail-photo-color-${colorObj.name}-${colIdx}`}
+                        type="button"
+                        onClick={() => handleColorSelect(colorObj)}
+                        aria-pressed={isSelected}
+                        className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-amber-500 bg-slate-950 text-white dark:bg-white dark:text-slate-950 shadow-md ring-2 ring-amber-500 ring-offset-2 dark:ring-offset-slate-900 scale-105'
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80'
+                        }`}
+                        title={`Choisir la finition ${colorObj.name}`}
+                      >
+                        <span 
+                          className="w-4 h-4 rounded-full border border-black/20 shadow-xs shrink-0" 
+                          style={{ backgroundColor: colorObj.hex }}
+                        />
+                        <span>{colorObj.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Thumbnails Strip */}
             {galleryImages.length > 1 && (
