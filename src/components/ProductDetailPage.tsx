@@ -133,6 +133,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
   };
 
+  // Fermeture par la touche Échap
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onBack();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onBack]);
+
   const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite commander depuis la fiche produit OUMAR IPHONE :
 
 • Produit : ${product.name}
@@ -147,7 +158,7 @@ ${matchingVariant?.priceSource ? `• Référence : ${matchingVariant.priceSourc
 Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités de retrait en boutique à Abidjan !`;
 
   return (
-    <div className="min-h-screen bg-[#fafbfc] dark:bg-[#0b0f17] text-slate-900 dark:text-slate-100 transition-colors py-6 sm:py-10">
+    <div className="min-h-screen bg-[#fafbfc] dark:bg-[#0b0f17] text-slate-900 dark:text-slate-100 transition-colors py-6 sm:py-10 animate-in fade-in duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Navigation Breadcrumb & Back button */}
@@ -155,7 +166,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-xs active:scale-95"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
           >
             <ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-400" />
             <span>← Retour au catalogue</span>

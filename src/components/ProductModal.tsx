@@ -118,7 +118,7 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
       {/* Modal Dialog Container */}
       <div className="min-h-full flex items-center justify-center p-3 sm:p-4 lg:p-6 text-center">
         <div 
-          className="w-full max-w-4xl bg-white dark:bg-[#0f172a] rounded-3xl text-left overflow-hidden shadow-2xl border border-slate-200/80 dark:border-slate-800 relative z-10 transition-colors animate-in fade-in zoom-in-95 duration-200"
+          className="w-full max-w-4xl bg-white dark:bg-[#0f172a] rounded-3xl text-left overflow-hidden shadow-xl border border-slate-200/80 dark:border-slate-800 relative z-10 transition-colors animate-in fade-in duration-150"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Top Close Button */}

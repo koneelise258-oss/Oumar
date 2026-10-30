@@ -478,7 +478,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                 <div
                   key={`${product.id || 'prod'}-${pIndex}`}
                   onClick={() => onSelectProduct ? onSelectProduct(product) : setActiveModalProduct(product)}
-                  className="bg-white dark:bg-[#0f172a] rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer min-w-0"
+                  className="bg-white dark:bg-[#0f172a] rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-200 hover:shadow-md active:scale-[0.99] cursor-pointer min-w-0"
                 >
                   {/* Product Visual Stage avec transition Apple */}
                   <div className="relative aspect-[4/3] bg-gradient-to-b from-slate-50 to-slate-100/70 dark:from-slate-900/80 dark:to-[#0b0f17] p-2.5 sm:p-5 flex items-center justify-center overflow-hidden">
@@ -488,7 +488,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       alt={`${product.name} — Finition ${currentColor}`}
                       allImagesToPreload={cardColorImages}
                       fallbackImage={product.image}
-                      className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 select-none"
+                      className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-300 ease-out select-none"
                       containerClassName="w-full h-full relative flex items-center justify-center"
                     />
 

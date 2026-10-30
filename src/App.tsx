@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { Catalogue } from './components/Catalogue';
@@ -26,6 +26,9 @@ function StoreApp() {
   const [videos, setVideos] = useState<VideoItem[]>(loadVideos);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+
+  // Mémoire de la position exacte du défilement dans le catalogue
+  const savedCatalogScrollYRef = useRef<number>(0);
 
   // Dedicated Product Detail Page State
   const [activeDetailProduct, setActiveDetailProduct] = useState<Product | null>(null);
@@ -113,17 +116,22 @@ function StoreApp() {
 
           if (matched) {
             setActiveDetailProduct(matched);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
           }
         }
       }
 
-      // Default: Return to main homepage continuous layout
-      setActiveDetailProduct(null);
+      // Default: Return to main homepage layout
+      if (activeDetailProduct) {
+        setActiveDetailProduct(null);
+        document.body.style.overflow = '';
+        requestAnimationFrame(() => {
+          window.scrollTo(0, savedCatalogScrollYRef.current);
+        });
+      }
 
       const target = hash || (path === '/videos' ? 'videos' : '');
-      if (target && target !== 'home') {
+      if (target && target !== 'home' && target !== 'catalogue') {
         setActiveSection(target);
         setTimeout(() => {
           const el = document.getElementById(target);
@@ -132,7 +140,7 @@ function StoreApp() {
           }
         }, 120);
       } else {
-        setActiveSection('home');
+        setActiveSection(target || 'home');
       }
     };
 
@@ -185,6 +193,7 @@ function StoreApp() {
   const handleNavigateSection = (sectionId: string) => {
     if (activeDetailProduct) {
       setActiveDetailProduct(null);
+      document.body.style.overflow = '';
     }
 
     if (sectionId === 'home') {
@@ -201,24 +210,22 @@ function StoreApp() {
     }
   };
 
-  // Select Product & Route to Dedicated Product Page
+  // Select Product & Route to Dedicated Full-Viewport Overlay Sheet
   const handleSelectProduct = (product: Product) => {
+    savedCatalogScrollYRef.current = window.scrollY;
     setActiveDetailProduct(product);
-    window.history.pushState(null, '', `/produit/${product.id}`);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.body.style.overflow = 'hidden';
+    window.history.pushState({ isProductDetail: true }, '', `/produit/${product.id}`);
   };
 
   const handleBackToCatalog = () => {
     setActiveDetailProduct(null);
+    document.body.style.overflow = '';
     window.history.pushState(null, '', '/#catalogue');
-    setTimeout(() => {
-      const el = document.getElementById('catalogue');
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth' });
-      } else {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    }, 100);
+    // Restore exact scroll position Y without smooth scroll jump
+    requestAnimationFrame(() => {
+      window.scrollTo(0, savedCatalogScrollYRef.current);
+    });
   };
 
   // Safe Admin Access Trigger
@@ -313,42 +320,41 @@ function StoreApp() {
             <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin" />
           </div>
         }>
-          {activeDetailProduct ? (
-            /* Real Standalone Product Detail Page View */
-            <ProductDetailPage
-              product={activeDetailProduct}
-              onBack={handleBackToCatalog}
-              onAddToCart={handleAddToCart}
-            />
-          ) : (
-            /* Continuous Homepage Layout (Hero -> Videos -> Catalogue -> Socials -> BoutiqueInfo) */
-            <>
-              {/* 1. Hero OUMAR IPHONE */}
-              <Hero
-                featuredProduct={products[0]}
-                onAddToCart={(product) => handleAddToCart(product)}
-              />
+          {/* Continuous Homepage Layout (Hero -> Videos -> Catalogue -> Socials -> BoutiqueInfo) */}
+          <Hero
+            featuredProduct={products[0]}
+            onAddToCart={(product) => handleAddToCart(product)}
+          />
 
-              {/* 2. Section des Vidéos (immédiatement après la Hero, avant le catalogue) */}
-              <VideosSection
-                id="videos"
-                videos={videos}
-              />
+          {/* 2. Section des Vidéos (immédiatement après la Hero, avant le catalogue) */}
+          <VideosSection
+            id="videos"
+            videos={videos}
+          />
 
-              {/* 3. Catalogue Apple Officiel avec filtres et fiches */}
-              <Catalogue
-                products={products}
+          {/* 3. Catalogue Apple Officiel avec filtres et fiches */}
+          <Catalogue
+            products={products}
+            onAddToCart={handleAddToCart}
+            onProductsUpdated={(newProducts) => setProducts(newProducts)}
+            onSelectProduct={handleSelectProduct}
+          />
+
+          {/* 4. Nos Réseaux Sociaux (TikTok & WhatsApp - après le catalogue) */}
+          <SocialSection />
+
+          {/* 5. Informations boutique, SAV & garantie */}
+          <BoutiqueInfo />
+
+          {/* Full-screen Hyper Cool Product Detail Overlay Sheet */}
+          {activeDetailProduct && (
+            <div className="fixed inset-0 z-50 overflow-y-auto bg-[#fafbfc] dark:bg-[#0b0f17] text-slate-900 dark:text-slate-100 animate-in fade-in zoom-in-95 duration-250 ease-[cubic-bezier(0.16,1,0.3,1)]">
+              <ProductDetailPage
+                product={activeDetailProduct}
+                onBack={handleBackToCatalog}
                 onAddToCart={handleAddToCart}
-                onProductsUpdated={(newProducts) => setProducts(newProducts)}
-                onSelectProduct={handleSelectProduct}
               />
-
-              {/* 4. Nos Réseaux Sociaux (TikTok & WhatsApp - après le catalogue) */}
-              <SocialSection />
-
-              {/* 5. Informations boutique, SAV & garantie */}
-              <BoutiqueInfo />
-            </>
+            </div>
           )}
         </Suspense>
       </main>
