@@ -46,6 +46,15 @@ export function variantToRow(v: ProductVariant): any {
   return row;
 }
 
+import {
+  APPLE_COLOR_MAP,
+  getColorHexByName,
+  normalizeColorItem,
+  normalizeColors,
+  deduplicateColors,
+  hasVerifiedFinishImage
+} from '../utils/colorUtils';
+
 // Re-export des utilitaires de normalisation des finitions Apple
 export {
   APPLE_COLOR_MAP,
@@ -54,7 +63,7 @@ export {
   normalizeColors,
   deduplicateColors,
   hasVerifiedFinishImage
-} from '../utils/colorUtils';
+};
 
 export function rowToProduct(row: any): Product {
   const rawColors = Array.isArray(row.colors) ? row.colors : [];
@@ -71,7 +80,7 @@ export function rowToProduct(row: any): Product {
     batteryHealth = '100%';
   }
 
-  const defaultColor = cleanColors.find((c) => c.active !== false)?.name || cleanColors[0]?.name || '';
+  const defaultColor = cleanColors.find((c: ProductColor) => c.active !== false)?.name || cleanColors[0]?.name || '';
 
   return {
     id: row.id,
