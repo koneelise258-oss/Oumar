@@ -46,22 +46,19 @@ export function variantToRow(v: ProductVariant): any {
   return row;
 }
 
-export function deduplicateColors(colors: any[]): ProductColor[] {
-  if (!Array.isArray(colors)) return [];
-  const seen = new Set<string>();
-  return colors.filter((c) => {
-    if (!c || !c.name || typeof c.name !== 'string' || !c.name.trim()) return false;
-    if (c.active === false) return false;
-    const key = c.name.trim().toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
+// Re-export des utilitaires de normalisation des finitions Apple
+export {
+  APPLE_COLOR_MAP,
+  getColorHexByName,
+  normalizeColorItem,
+  normalizeColors,
+  deduplicateColors,
+  hasVerifiedFinishImage
+} from '../utils/colorUtils';
 
 export function rowToProduct(row: any): Product {
   const rawColors = Array.isArray(row.colors) ? row.colors : [];
-  const cleanColors = deduplicateColors(rawColors);
+  const cleanColors = normalizeColors(rawColors);
 
   let condition = row.condition;
   if (condition === 'Neuf Original Apple' || condition === 'Neuf Scellé' || condition === 'Neuf') condition = 'Neuf scellé';
@@ -73,6 +70,8 @@ export function rowToProduct(row: any): Product {
   if (!batteryHealth || batteryHealth === '100% Neuf' || batteryHealth === '100% Certifiée') {
     batteryHealth = '100%';
   }
+
+  const defaultColor = cleanColors.find((c) => c.active !== false)?.name || cleanColors[0]?.name || '';
 
   return {
     id: row.id,
@@ -86,7 +85,7 @@ export function rowToProduct(row: any): Product {
     originalPrice: row.original_price ? Number(row.original_price) : undefined,
     storagePrices: row.storage_prices || {},
     colors: cleanColors,
-    selectedColor: row.selected_color || (cleanColors[0]?.name ? cleanColors[0].name : ''),
+    selectedColor: row.selected_color || defaultColor,
     image: row.image,
     gallery: Array.isArray(row.gallery) && row.gallery.length > 0 ? row.gallery : [row.image],
     batteryHealth,

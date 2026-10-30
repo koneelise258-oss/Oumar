@@ -15,6 +15,7 @@ import imgColorRed from '../assets/images/iphone_color_red_1793352498682.jpg';
 import imgColorGreen from '../assets/images/iphone_color_green_1793352512334.jpg';
 
 import { getWhatsAppPhone, getWhatsAppUrl } from './storeSettings';
+import { normalizeColors } from '../utils/colorUtils';
 
 export const APPLE_ASSET_IMAGES = {
   iphone16ProMax: img16ProMax,
@@ -173,7 +174,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     },
     colors: [
       { name: 'Noir Sidéral', hex: '#26282A', image: imgIpadPro },
-      { name: 'Argent', hex: '#E3E4E5', image: imgIpadPro }
+      { name: 'Argent', hex: '#E3E4E5', image: undefined }
     ],
     selectedColor: 'Noir Sidéral',
     image: imgIpadPro,
@@ -212,9 +213,9 @@ export const DEFAULT_PRODUCTS: Product[] = [
     },
     colors: [
       { name: 'Gris Sidéral', hex: '#53555B', image: imgIpadPro },
-      { name: 'Lumière Stellaire', hex: '#E2D8CE', image: imgIpadPro },
-      { name: 'Bleu', hex: '#A3B9C9', image: imgIpadPro },
-      { name: 'Mauve', hex: '#C2B6D1', image: imgIpadPro }
+      { name: 'Lumière Stellaire', hex: '#E2D8CE', image: undefined },
+      { name: 'Bleu', hex: '#A3B9C9', image: undefined },
+      { name: 'Mauve', hex: '#C2B6D1', image: undefined }
     ],
     selectedColor: 'Gris Sidéral',
     image: imgIpadPro,
@@ -290,7 +291,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     },
     colors: [
       { name: 'Noir Sidéral', hex: '#242527', image: imgMacBookPro },
-      { name: 'Argent', hex: '#E3E4E6', image: imgMacBookPro }
+      { name: 'Argent', hex: '#E3E4E6', image: undefined }
     ],
     selectedColor: 'Noir Sidéral',
     image: imgMacBookPro,
@@ -372,15 +373,15 @@ export const loadProducts = (): Product[] => {
           let battery = p.batteryHealth;
           if (battery === '100% Neuf' || battery === '100% Certifiée') battery = '100%';
 
-          // Synchroniser les images réelles par finition si disponible
+          // Normaliser toutes les couleurs (anciennes chaînes et objets enrichis)
+          let colors = normalizeColors(p.colors || []);
           const defaultRef = DEFAULT_PRODUCTS.find((d) => d.id === p.id);
-          let colors = Array.isArray(p.colors) ? p.colors : [];
           if (defaultRef && Array.isArray(defaultRef.colors)) {
-            colors = colors.map((c: any) => {
+            colors = colors.map((c) => {
               const matchedDef = defaultRef.colors.find(
                 (dc) => dc.name.toLowerCase().trim() === c.name.toLowerCase().trim()
               );
-              if (matchedDef && matchedDef.image) {
+              if (matchedDef && matchedDef.image && !c.image) {
                 return { 
                   ...c, 
                   image: matchedDef.image, 
