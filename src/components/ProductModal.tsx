@@ -146,8 +146,8 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                   className="max-h-[85%] max-w-full object-contain drop-shadow-md select-none transition-all duration-300"
                   loading="eager"
                 />
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 italic block text-center mt-2.5 font-medium">
-                  Visuel de référence · Appareil inspecté en boutique OUMAR IPHONE
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block text-center mt-2.5 font-medium">
+                  Appareil inspecté en boutique OUMAR IPHONE
                 </span>
               </div>
 
@@ -176,7 +176,7 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
               <div className="mt-4 pt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                 <span className="flex items-center gap-1.5 font-medium">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  Batterie : {product.batteryHealth}
+                  Batterie vérifiée · {product.batteryHealth}
                 </span>
                 <span className="text-slate-400 dark:text-slate-600">·</span>
                 <span>{product.warranty}</span>

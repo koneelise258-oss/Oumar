@@ -42,6 +42,10 @@ export function loadStoreSettings(): StoreSettings {
     if (raw) {
       const parsed = JSON.parse(raw);
       delete parsed.adminPin; // Remove legacy PIN if cached in browser
+      // Enforce official updated WhatsApp number: 0161443637 (+225 01 61 44 36 37)
+      if (!parsed.whatsappPhone || parsed.whatsappPhone.includes('0778024285') || parsed.whatsappPhone.includes('0700000000')) {
+        parsed.whatsappPhone = '2250161443637';
+      }
       return { ...DEFAULT_SETTINGS, ...parsed };
     }
   } catch (err) {
@@ -64,7 +68,11 @@ export function saveStoreSettings(settings: StoreSettings): void {
 
 export function getWhatsAppPhone(): string {
   const settings = loadStoreSettings();
-  return settings.whatsappPhone.replace(/[^0-9]/g, '') || '2250778024285';
+  const digits = settings.whatsappPhone.replace(/[^0-9]/g, '');
+  if (!digits || digits.includes('0778024285')) {
+    return '2250161443637';
+  }
+  return digits;
 }
 
 export function getWhatsAppUrl(message: string): string {

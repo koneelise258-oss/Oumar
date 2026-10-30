@@ -472,7 +472,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                   onClick={() => onSelectProduct ? onSelectProduct(product) : setActiveModalProduct(product)}
                   className="bg-white dark:bg-[#0f172a] rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer min-w-0"
                 >
-                  {/* Product Visual Stage */}
+                  {/* Product Visual Stage - Completely clean to clearly see the photos */}
                   <div className="relative aspect-[4/3] bg-gradient-to-b from-slate-50 to-slate-100/70 dark:from-slate-900/80 dark:to-[#0b0f17] p-2.5 sm:p-5 flex items-center justify-center overflow-hidden">
                     <img
                       src={cardImage || undefined}
@@ -483,22 +483,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       height="285"
                     />
 
-                    {/* Condition badge */}
-                    <div className="absolute top-2 left-2 sm:top-3.5 sm:left-3.5 text-[9px] sm:text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-xs">
-                      {product.condition}
-                    </div>
-
-                    {/* Battery or Warranty badge */}
-                    <div className="absolute top-2 right-2 sm:top-3.5 sm:right-3.5 text-[9px] sm:text-[11px] font-medium text-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded-full bg-white/90 dark:bg-slate-800/90 backdrop-blur-xs border border-slate-200/60 dark:border-slate-700 shadow-xs truncate max-w-[85px] sm:max-w-none">
-                      {product.batteryHealth}
-                    </div>
-
-                    {/* Reference visual badge */}
-                    <div className="absolute bottom-1.5 left-1.5 text-[8px] sm:text-[9px] font-medium text-slate-500 dark:text-slate-400 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xs px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-slate-800 hidden xs:block">
-                      Visuel de référence
-                    </div>
-
-                    {/* Quick view button overlay */}
+                    {/* Quick view button overlay on hover */}
                     <div className="absolute inset-x-0 bottom-3 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none hidden sm:flex">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950/80 dark:bg-white/90 text-white dark:text-slate-950 text-xs font-semibold backdrop-blur-sm shadow-md">
                         <Eye className="w-3.5 h-3.5" />
@@ -510,6 +495,13 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                   {/* Product Info & Actions */}
                   <div className="p-3 sm:p-6 flex-1 flex flex-col justify-between min-w-0">
                     <div>
+                      {/* Condition Tag */}
+                      <div className="mb-1.5">
+                        <span className="inline-block text-[9px] sm:text-[11px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200/60 dark:border-slate-700">
+                          {product.condition}
+                        </span>
+                      </div>
+
                       {/* Name & Live Price Stacked Vertically */}
                       <div className="flex flex-col gap-1 mb-2 min-w-0">
                         <h3 className="text-xs sm:text-base font-bold text-slate-950 dark:text-white font-['Outfit'] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors leading-snug">

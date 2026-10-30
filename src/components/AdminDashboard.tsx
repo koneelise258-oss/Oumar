@@ -314,7 +314,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       selectedColor: 'Titane Noir',
       image: APPLE_ASSET_IMAGES.iphone16ProMax,
       gallery: [],
-      batteryHealth: '100% Neuf',
+      batteryHealth: '100%',
       warranty: 'Garantie Apple 1 an',
       inStock: true,
       stockLocation: 'Boutique Cocody & Plateau',
@@ -2572,16 +2572,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div>
                   <label className="block font-semibold mb-1">État du produit</label>
                   <select
-                    value={formProduct.condition || 'Neuf Scellé'}
+                    value={formProduct.condition || 'Neuf scellé'}
                     onChange={(e) => setFormProduct({ ...formProduct, condition: e.target.value as any })}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none cursor-pointer"
                   >
-                    <option value="Neuf Scellé">Neuf Scellé</option>
-                    <option value="Neuf Original Apple">Neuf Original Apple</option>
-                    <option value="Quasi Neuf">Quasi Neuf</option>
+                    <option value="Neuf scellé">Neuf scellé</option>
+                    <option value="Quasi neuf">Quasi neuf</option>
                     <option value="Occasion">Occasion</option>
-                    <option value="Reconditionné A+">Reconditionné A+</option>
-                    <option value="Reconditionné Certifié">Reconditionné Certifié</option>
+                    <option value="Reconditionné">Reconditionné</option>
                   </select>
                 </div>
 
@@ -2615,7 +2613,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="text"
                     value={formProduct.batteryHealth || ''}
                     onChange={(e) => setFormProduct({ ...formProduct, batteryHealth: e.target.value })}
-                    placeholder="100% Neuf ou 92% Optimale"
+                    placeholder="100% ou 92% Optimale"
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
                   />
                 </div>

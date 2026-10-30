@@ -62,12 +62,23 @@ export function rowToProduct(row: any): Product {
   const rawColors = Array.isArray(row.colors) ? row.colors : [];
   const cleanColors = deduplicateColors(rawColors);
 
+  let condition = row.condition;
+  if (condition === 'Neuf Original Apple' || condition === 'Neuf Scellé' || condition === 'Neuf') condition = 'Neuf scellé';
+  else if (condition === 'Quasi Neuf') condition = 'Quasi neuf';
+  else if (condition === 'Reconditionné A+' || condition === 'Reconditionné Certifié') condition = 'Reconditionné';
+  else if (!condition) condition = 'Neuf scellé';
+
+  let batteryHealth = row.battery_health;
+  if (!batteryHealth || batteryHealth === '100% Neuf' || batteryHealth === '100% Certifiée') {
+    batteryHealth = '100%';
+  }
+
   return {
     id: row.id,
     name: row.name,
     model: row.model,
     category: row.category,
-    condition: row.condition,
+    condition: condition as any,
     storage: Array.isArray(row.storage) ? row.storage : [],
     selectedStorage: row.selected_storage || (Array.isArray(row.storage) ? row.storage[0] : ''),
     price: Number(row.price),
@@ -77,7 +88,7 @@ export function rowToProduct(row: any): Product {
     selectedColor: row.selected_color || (cleanColors[0]?.name ? cleanColors[0].name : ''),
     image: row.image,
     gallery: Array.isArray(row.gallery) && row.gallery.length > 0 ? row.gallery : [row.image],
-    batteryHealth: row.battery_health || '100% Neuf',
+    batteryHealth,
     warranty: row.warranty || 'Garantie boutique OUMAR IPHONE',
     inStock: Boolean(row.in_stock),
     stockLocation: row.stock_location || 'Boutique Cocody & Plateau',

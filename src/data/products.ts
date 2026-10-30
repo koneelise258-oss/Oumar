@@ -46,7 +46,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     selectedColor: 'Titane Naturel',
     image: img16ProMax,
     gallery: [img16ProMax, imgTitanium],
-    batteryHealth: '100% Neuf',
+    batteryHealth: '100%',
     warranty: 'Garantie boutique OUMAR IPHONE',
     inStock: true,
     stockLocation: 'Boutique Cocody & Plateau',
@@ -87,7 +87,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     selectedColor: 'Titane Désert',
     image: imgTitanium,
     gallery: [imgTitanium, img16ProMax],
-    batteryHealth: '100% Neuf',
+    batteryHealth: '100%',
     warranty: 'Garantie boutique OUMAR IPHONE',
     inStock: true,
     stockLocation: 'Boutique Cocody',
@@ -125,7 +125,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     selectedColor: 'Titane Naturel & Noir',
     image: img16ProMax,
     gallery: [img16ProMax, imgTitanium],
-    batteryHealth: '100% Neuf',
+    batteryHealth: '100%',
     warranty: 'Garantie boutique OUMAR IPHONE',
     inStock: true,
     stockLocation: 'Boutique Cocody & Plateau',
@@ -164,7 +164,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     selectedColor: 'Noir Sidéral',
     image: imgIpadPro,
     gallery: [imgIpadPro],
-    batteryHealth: '100% Neuf',
+    batteryHealth: '100%',
     warranty: 'Garantie boutique OUMAR IPHONE',
     inStock: true,
     stockLocation: 'Boutique Cocody & Plateau',
@@ -205,7 +205,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     selectedColor: 'Gris Sidéral',
     image: imgIpadPro,
     gallery: [imgIpadPro],
-    batteryHealth: '100% Neuf',
+    batteryHealth: '100%',
     warranty: 'Garantie boutique OUMAR IPHONE',
     inStock: true,
     stockLocation: 'Boutique Cocody',
@@ -244,7 +244,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     selectedColor: 'Titane Naturel',
     image: img15Pro,
     gallery: [img15Pro, imgTitanium],
-    batteryHealth: '100% Certifiée',
+    batteryHealth: '100%',
     warranty: 'Garantie Oumar 6 mois',
     inStock: true,
     stockLocation: 'Boutique Plateau',
@@ -281,7 +281,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     selectedColor: 'Noir Sidéral',
     image: imgMacBookPro,
     gallery: [imgMacBookPro],
-    batteryHealth: '100% Neuf',
+    batteryHealth: '100%',
     warranty: 'Garantie boutique OUMAR IPHONE',
     inStock: true,
     stockLocation: 'Boutique Cocody',
@@ -317,7 +317,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     selectedColor: 'Blanc Pur',
     image: imgAirPodsPro,
     gallery: [imgAirPodsPro],
-    batteryHealth: '100% Neuf',
+    batteryHealth: '100%',
     warranty: 'Garantie boutique OUMAR IPHONE',
     inStock: true,
     stockLocation: 'En stock dans toutes les boutiques',
@@ -340,7 +340,7 @@ export const PRODUCTS: Product[] = DEFAULT_PRODUCTS;
 
 const STORAGE_KEY = 'oumar_products_catalog';
 
-// Safe loader that synchronizes with localStorage
+// Safe loader that synchronizes with localStorage and cleans legacy states
 export const loadProducts = (): Product[] => {
   if (typeof window === 'undefined') return [];
   try {
@@ -348,7 +348,22 @@ export const loadProducts = (): Product[] => {
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.map((p: any) => {
+          let cond = p.condition;
+          if (cond === 'Neuf Original Apple' || cond === 'Neuf Scellé' || cond === 'Neuf') cond = 'Neuf scellé';
+          else if (cond === 'Quasi Neuf') cond = 'Quasi neuf';
+          else if (cond === 'Reconditionné A+' || cond === 'Reconditionné Certifié') cond = 'Reconditionné';
+          else if (!cond) cond = 'Neuf scellé';
+
+          let battery = p.batteryHealth;
+          if (battery === '100% Neuf' || battery === '100% Certifiée') battery = '100%';
+
+          return {
+            ...p,
+            condition: cond,
+            batteryHealth: battery || '100%'
+          };
+        });
       }
     }
   } catch (err) {
