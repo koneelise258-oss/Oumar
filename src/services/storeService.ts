@@ -51,6 +51,7 @@ export function deduplicateColors(colors: any[]): ProductColor[] {
   const seen = new Set<string>();
   return colors.filter((c) => {
     if (!c || !c.name || typeof c.name !== 'string' || !c.name.trim()) return false;
+    if (c.active === false) return false;
     const key = c.name.trim().toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
@@ -445,7 +446,8 @@ export async function fetchStoreSettingsRemote(): Promise<StoreSettings> {
         addresses: Array.isArray(data.addresses) ? data.addresses : [],
         openingHours: data.opening_hours,
         warrantyText: data.warranty_text,
-        deliveryFee: data.delivery_fee
+        deliveryFee: data.delivery_fee,
+        heroSettings: data.hero_settings || data.heroSettings || undefined
       };
 
       // Si Supabase contient une photo personnalisée pour le Hero, la synchroniser localement
@@ -466,13 +468,15 @@ export async function fetchStoreSettingsRemote(): Promise<StoreSettings> {
 export async function saveStoreSettingsRemote(settings: StoreSettings): Promise<{ success: boolean; message?: string }> {
   const currentHeroPhoto = getHeroCustomPhoto();
 
+  // Always persist locally
+  saveStoreSettings(settings);
+
   if (!isSupabaseConfigured) {
-    saveStoreSettings(settings);
     return { success: true };
   }
 
   try {
-    const row = {
+    const row: any = {
       id: 'default',
       store_name: settings.storeName,
       whatsapp_phone: settings.whatsappPhone,
@@ -486,16 +490,30 @@ export async function saveStoreSettingsRemote(settings: StoreSettings): Promise<
       updated_at: new Date().toISOString()
     };
 
+    if (settings.heroSettings) {
+      row.hero_settings = settings.heroSettings;
+    }
+
     const { error } = await supabase
       .from('store_settings')
       .upsert(row, { onConflict: 'id' });
 
     if (error) {
-      console.error('Error saving store settings to Supabase:', error);
-      return { success: false, message: `Échec de l'enregistrement en ligne: ${error.message}` };
+      // If error is due to missing hero_settings column in DB, retry without that field
+      if (error.message?.includes('hero_settings')) {
+        delete row.hero_settings;
+        const { error: retryErr } = await supabase
+          .from('store_settings')
+          .upsert(row, { onConflict: 'id' });
+        if (retryErr) {
+          console.error('Error saving store settings retry:', retryErr);
+        }
+      } else {
+        console.error('Error saving store settings to Supabase:', error);
+        return { success: false, message: `Échec de l'enregistrement en ligne: ${error.message}` };
+      }
     }
 
-    saveStoreSettings(settings);
     return { success: true };
   } catch (err: any) {
     console.error('Network error saving store settings to Supabase:', err);

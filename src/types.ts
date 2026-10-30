@@ -10,7 +10,9 @@ export interface ProductColor {
   name: string;
   hex: string;
   image?: string;
+  gallery?: string[];
   inStock?: boolean;
+  active?: boolean;
 }
 
 export interface ProductSpec {

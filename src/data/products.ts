@@ -7,6 +7,13 @@ import imgIpadPro from '../assets/images/product_ipad_pro_m4_1792434382801.jpg';
 import imgMacBookPro from '../assets/images/product_macbook_pro_m3_1792434368716.jpg';
 import imgAirPodsPro from '../assets/images/product_airpods_pro_2_1792434397170.jpg';
 
+import imgTitaniumBlack from '../assets/images/iphone_titanium_black_1793352446100.jpg';
+import imgTitaniumWhite from '../assets/images/iphone_titanium_white_1793352458322.jpg';
+import imgTitaniumDesert from '../assets/images/iphone_titanium_desert_1793352471968.jpg';
+import imgTitaniumBlue from '../assets/images/iphone_titanium_blue_1793352485208.jpg';
+import imgColorRed from '../assets/images/iphone_color_red_1793352498682.jpg';
+import imgColorGreen from '../assets/images/iphone_color_green_1793352512334.jpg';
+
 import { getWhatsAppPhone, getWhatsAppUrl } from './storeSettings';
 
 export const APPLE_ASSET_IMAGES = {
@@ -15,7 +22,14 @@ export const APPLE_ASSET_IMAGES = {
   iphone15Pro: img15Pro,
   ipadProM4: imgIpadPro,
   macbookProM3: imgMacBookPro,
-  airpodsPro2: imgAirPodsPro
+  airpodsPro2: imgAirPodsPro,
+  titaniumNatural: img16ProMax,
+  titaniumBlack: imgTitaniumBlack,
+  titaniumWhite: imgTitaniumWhite,
+  titaniumDesert: imgTitaniumDesert,
+  titaniumBlue: imgTitaniumBlue,
+  colorRed: imgColorRed,
+  colorGreen: imgColorGreen
 };
 
 export const WHATSAPP_PHONE = getWhatsAppPhone();
@@ -38,10 +52,10 @@ export const DEFAULT_PRODUCTS: Product[] = [
       '1 To': 1490000
     },
     colors: [
-      { name: 'Titane Naturel', hex: '#BEB8AE', image: img16ProMax },
-      { name: 'Titane Désert', hex: '#D4C4B5', image: imgTitanium },
-      { name: 'Titane Blanc', hex: '#F2F1ED', image: img16ProMax },
-      { name: 'Titane Noir', hex: '#3C3B37', image: imgTitanium }
+      { name: 'Titane Naturel', hex: '#BEB8AE', image: img16ProMax, gallery: [img16ProMax, imgTitanium] },
+      { name: 'Titane Désert', hex: '#D4C4B5', image: imgTitaniumDesert, gallery: [imgTitaniumDesert] },
+      { name: 'Titane Blanc', hex: '#F2F1ED', image: imgTitaniumWhite, gallery: [imgTitaniumWhite] },
+      { name: 'Titane Noir', hex: '#3C3B37', image: imgTitaniumBlack, gallery: [imgTitaniumBlack] }
     ],
     selectedColor: 'Titane Naturel',
     image: img16ProMax,
@@ -79,14 +93,14 @@ export const DEFAULT_PRODUCTS: Product[] = [
       '512 Go': 1160000
     },
     colors: [
-      { name: 'Titane Désert', hex: '#D4C4B5', image: imgTitanium },
-      { name: 'Titane Naturel', hex: '#BEB8AE', image: imgTitanium },
-      { name: 'Titane Noir', hex: '#3C3B37', image: img16ProMax },
-      { name: 'Titane Blanc', hex: '#F2F1ED', image: img16ProMax }
+      { name: 'Titane Désert', hex: '#D4C4B5', image: imgTitaniumDesert, gallery: [imgTitaniumDesert] },
+      { name: 'Titane Naturel', hex: '#BEB8AE', image: img16ProMax, gallery: [img16ProMax] },
+      { name: 'Titane Noir', hex: '#3C3B37', image: imgTitaniumBlack, gallery: [imgTitaniumBlack] },
+      { name: 'Titane Blanc', hex: '#F2F1ED', image: imgTitaniumWhite, gallery: [imgTitaniumWhite] }
     ],
     selectedColor: 'Titane Désert',
-    image: imgTitanium,
-    gallery: [imgTitanium, img16ProMax],
+    image: imgTitaniumDesert,
+    gallery: [imgTitaniumDesert, img16ProMax],
     batteryHealth: '100%',
     warranty: 'Garantie boutique OUMAR IPHONE',
     inStock: true,
@@ -119,8 +133,8 @@ export const DEFAULT_PRODUCTS: Product[] = [
       '512 Go + 256 Go': 1590000
     },
     colors: [
-      { name: 'Titane Naturel & Noir', hex: '#BEB8AE', image: img16ProMax },
-      { name: 'Titane Désert & Blanc', hex: '#D4C4B5', image: imgTitanium }
+      { name: 'Titane Naturel & Noir', hex: '#BEB8AE', image: img16ProMax, gallery: [img16ProMax, imgTitaniumBlack] },
+      { name: 'Titane Désert & Blanc', hex: '#D4C4B5', image: imgTitaniumDesert, gallery: [imgTitaniumDesert, imgTitaniumWhite] }
     ],
     selectedColor: 'Titane Naturel & Noir',
     image: img16ProMax,
@@ -237,13 +251,13 @@ export const DEFAULT_PRODUCTS: Product[] = [
       '512 Go': 895000
     },
     colors: [
-      { name: 'Titane Naturel', hex: '#BEB8AE', image: img15Pro },
-      { name: 'Titane Noir', hex: '#3C3B37', image: img15Pro },
-      { name: 'Titane Bleu', hex: '#2B3545', image: img15Pro }
+      { name: 'Titane Naturel', hex: '#BEB8AE', image: img15Pro, gallery: [img15Pro] },
+      { name: 'Titane Noir', hex: '#3C3B37', image: imgTitaniumBlack, gallery: [imgTitaniumBlack] },
+      { name: 'Titane Bleu', hex: '#2B3545', image: imgTitaniumBlue, gallery: [imgTitaniumBlue] }
     ],
     selectedColor: 'Titane Naturel',
     image: img15Pro,
-    gallery: [img15Pro, imgTitanium],
+    gallery: [img15Pro, imgTitaniumBlue],
     batteryHealth: '100%',
     warranty: 'Garantie Oumar 6 mois',
     inStock: true,
@@ -358,9 +372,29 @@ export const loadProducts = (): Product[] => {
           let battery = p.batteryHealth;
           if (battery === '100% Neuf' || battery === '100% Certifiée') battery = '100%';
 
+          // Synchroniser les images réelles par finition si disponible
+          const defaultRef = DEFAULT_PRODUCTS.find((d) => d.id === p.id);
+          let colors = Array.isArray(p.colors) ? p.colors : [];
+          if (defaultRef && Array.isArray(defaultRef.colors)) {
+            colors = colors.map((c: any) => {
+              const matchedDef = defaultRef.colors.find(
+                (dc) => dc.name.toLowerCase().trim() === c.name.toLowerCase().trim()
+              );
+              if (matchedDef && matchedDef.image) {
+                return { 
+                  ...c, 
+                  image: matchedDef.image, 
+                  gallery: (c.gallery && c.gallery.length > 0) ? c.gallery : matchedDef.gallery 
+                };
+              }
+              return c;
+            });
+          }
+
           return {
             ...p,
             condition: cond,
+            colors,
             batteryHealth: battery || '100%'
           };
         });

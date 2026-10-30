@@ -1,3 +1,31 @@
+export interface HeroSettings {
+  kickerBrand: string;
+  kickerLocation: string;
+  titleLine1: string;
+  titleLine2: string;
+  description: string;
+  primaryButtonText: string;
+  secondaryButtonText: string;
+  badgeProof1: string;
+  badgeProof2: string;
+  badgeProof3: string;
+  photoAltText: string;
+}
+
+export const DEFAULT_HERO_SETTINGS: HeroSettings = {
+  kickerBrand: 'OUMAR IPHONE',
+  kickerLocation: 'BOUTIQUE OFFICIELLE · ABIDJAN',
+  titleLine1: "L'art du titane.",
+  titleLine2: 'La pureté du verre.',
+  description: "La référence des iPhone neufs scellés et reconditionnés certifiés en Côte d'Ivoire. Sous la direction d'Oumar, profitez d'une sélection rigoureusement inspectée, garantie 12 mois et disponible en boutique à Abidjan.",
+  primaryButtonText: 'EXPLORER LE CATALOGUE',
+  secondaryButtonText: 'CONTACTER SUR WHATSAPP',
+  badgeProof1: 'Garantie 12 Mois Oumar',
+  badgeProof2: 'Test & Retrait en Boutique',
+  badgeProof3: 'Échange Direct WhatsApp',
+  photoAltText: 'Oumar — Fondateur OUMAR IPHONE Abidjan'
+};
+
 export interface StoreSettings {
   whatsappPhone: string;
   storeName: string;
@@ -12,6 +40,7 @@ export interface StoreSettings {
   openingHours: string;
   warrantyText: string;
   deliveryFee: number;
+  heroSettings?: HeroSettings;
 }
 
 export const DEFAULT_SETTINGS: StoreSettings = {
@@ -29,7 +58,8 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   ],
   openingHours: 'Lundi au Samedi : 08h30 - 19h30 | Dimanche : Sur rendez-vous',
   warrantyText: 'Tous nos iPhone, iPad et MacBook sont vendus avec facture certifiée, numéro IMEI et garantie officielle.',
-  deliveryFee: 0 // Aucune livraison : retrait gratuit en boutique
+  deliveryFee: 0, // Aucune livraison : retrait gratuit en boutique
+  heroSettings: DEFAULT_HERO_SETTINGS
 };
 
 export const SETTINGS_STORAGE_KEY = 'oumar_store_settings';
@@ -46,7 +76,14 @@ export function loadStoreSettings(): StoreSettings {
       if (!parsed.whatsappPhone || parsed.whatsappPhone.includes('0778024285') || parsed.whatsappPhone.includes('0700000000')) {
         parsed.whatsappPhone = '2250161443637';
       }
-      return { ...DEFAULT_SETTINGS, ...parsed };
+      return {
+        ...DEFAULT_SETTINGS,
+        ...parsed,
+        heroSettings: {
+          ...DEFAULT_HERO_SETTINGS,
+          ...(parsed.heroSettings || {})
+        }
+      };
     }
   } catch (err) {
     console.error('Error loading store settings', err);
@@ -63,6 +100,26 @@ export function saveStoreSettings(settings: StoreSettings): void {
     window.dispatchEvent(new CustomEvent('oumar_settings_updated', { detail: cleanSettings }));
   } catch (err) {
     console.error('Error saving store settings', err);
+  }
+}
+
+export function getHeroSettings(): HeroSettings {
+  const settings = loadStoreSettings();
+  return {
+    ...DEFAULT_HERO_SETTINGS,
+    ...(settings.heroSettings || {})
+  };
+}
+
+export function saveHeroSettings(hero: HeroSettings): void {
+  const current = loadStoreSettings();
+  const updated: StoreSettings = {
+    ...current,
+    heroSettings: hero
+  };
+  saveStoreSettings(updated);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('oumar_hero_settings_updated', { detail: hero }));
   }
 }
 

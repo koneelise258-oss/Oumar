@@ -48,10 +48,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   // Synchronise les états par défaut si le produit change
   useEffect(() => {
+    const initColor = product.selectedColor || product.colors[0]?.name || 'Standard';
+    const initColorObj = product.colors?.find((c) => c.name === initColor) || product.colors[0];
     setSelectedStorage(product.selectedStorage || product.storage[0] || 'Standard');
-    setSelectedColor(product.selectedColor || product.colors[0]?.name || 'Standard');
+    setSelectedColor(initColor);
     setSelectedCondition(product.condition || 'Neuf scellé');
-    setActiveImage(product.image);
+    setActiveImage(initColorObj?.image || product.image);
     setAdded(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [product]);
@@ -89,6 +91,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     'Reconditionné'
   ];
 
+  // Couleur actuellement sélectionnée
+  const currentColorObj = product.colors?.find(
+    (c) => c.name.toLowerCase().trim() === selectedColor.toLowerCase().trim()
+  );
+
   // Gestion du changement de couleur avec changement dynamique de la photo
   const handleColorSelect = (colorObj: ProductColor) => {
     setSelectedColor(colorObj.name);
@@ -99,11 +106,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
   };
 
-  // Liste des miniatures dans la galerie
+  // Liste des miniatures dans la galerie dynamique pour la finition sélectionnée
   const galleryImages = [
-    product.image,
+    currentColorObj?.image || product.image,
+    ...(currentColorObj?.gallery ? currentColorObj.gallery : []),
     ...(product.gallery ? product.gallery.filter((img) => img !== product.image) : [])
-  ];
+  ].filter((img, idx, arr) => img && arr.indexOf(img) === idx);
 
   const handleAdd = () => {
     onAddToCart(product, selectedStorage, selectedColor);

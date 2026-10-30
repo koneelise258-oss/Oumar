@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Product, 
   ProductCategory, 
+  ProductColor,
   VideoItem 
 } from '../types';
 import { 
@@ -21,7 +22,11 @@ import {
   getAdminEmail,
   getWhatsAppUrl,
   getHeroCustomPhoto,
-  saveHeroCustomPhoto
+  saveHeroCustomPhoto,
+  getHeroSettings,
+  saveHeroSettings,
+  HeroSettings,
+  DEFAULT_HERO_SETTINGS
 } from '../data/storeSettings';
 import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
 import { loadProducts, saveProducts, resetProducts } from '../data/products';
@@ -89,7 +94,11 @@ import {
   Users,
   UserPlus,
   UserCheck,
-  UserX
+  UserX,
+  Palette,
+  Image as ImageIcon,
+  Monitor,
+  Save
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -101,7 +110,7 @@ interface AdminDashboardProps {
   onVideosUpdated: (videos: VideoItem[]) => void;
 }
 
-type AdminTab = 'products' | 'videos' | 'orders' | 'settings' | 'admins';
+type AdminTab = 'products' | 'videos' | 'orders' | 'hero' | 'settings' | 'admins';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   isOpen,
@@ -495,15 +504,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
 
+  // Presets de finitions certifiées Apple pour sélection rapide
+  const APPLE_COLOR_PRESETS: { name: string; hex: string; image: string }[] = [
+    { name: 'Titane Naturel', hex: '#BEB8AE', image: APPLE_ASSET_IMAGES.titaniumNatural },
+    { name: 'Titane Désert', hex: '#D4C4B5', image: APPLE_ASSET_IMAGES.titaniumDesert },
+    { name: 'Titane Noir', hex: '#3C3B37', image: APPLE_ASSET_IMAGES.titaniumBlack },
+    { name: 'Titane Blanc', hex: '#F2F1ED', image: APPLE_ASSET_IMAGES.titaniumWhite },
+    { name: 'Titane Bleu', hex: '#2B3545', image: APPLE_ASSET_IMAGES.titaniumBlue },
+    { name: 'Rouge (Product RED)', hex: '#D62828', image: APPLE_ASSET_IMAGES.colorRed },
+    { name: 'Vert Alpin', hex: '#3B5340', image: APPLE_ASSET_IMAGES.colorGreen },
+  ];
+
+  const [newColorImage, setNewColorImage] = useState<string>('');
+  const colorFileInputRef = useRef<HTMLInputElement>(null);
+  const [activeColorImageUploadIdx, setActiveColorImageUploadIdx] = useState<number | null>(null);
+
   // Add color to form
   const handleAddColor = () => {
     if (!newColorName.trim()) return;
-    const colorObj = { name: newColorName.trim(), hex: newColorHex };
+    const colorObj: ProductColor = { 
+      name: newColorName.trim(), 
+      hex: newColorHex,
+      image: newColorImage.trim() || undefined,
+      active: true
+    };
     setFormProduct((prev) => ({
       ...prev,
       colors: [...(prev?.colors || []), colorObj]
     }));
     setNewColorName('');
+    setNewColorImage('');
+  };
+
+  const handleApplyColorPreset = (preset: { name: string; hex: string; image: string }) => {
+    setNewColorName(preset.name);
+    setNewColorHex(preset.hex);
+    setNewColorImage(preset.image);
+  };
+
+  const handleUpdateColor = (index: number, updatedFields: Partial<ProductColor>) => {
+    setFormProduct((prev) => {
+      const clone = [...(prev?.colors || [])];
+      if (clone[index]) {
+        clone[index] = { ...clone[index], ...updatedFields };
+      }
+      return { ...prev, colors: clone };
+    });
+  };
+
+  const handleToggleColorActive = (index: number) => {
+    setFormProduct((prev) => {
+      const clone = [...(prev?.colors || [])];
+      if (clone[index]) {
+        const isCurrentlyActive = clone[index].active !== false;
+        clone[index] = { ...clone[index], active: !isCurrentlyActive };
+      }
+      return { ...prev, colors: clone };
+    });
+  };
+
+  const handleMoveColor = (index: number, direction: 'up' | 'down') => {
+    setFormProduct((prev) => {
+      const clone = [...(prev?.colors || [])];
+      const targetIdx = direction === 'up' ? index - 1 : index + 1;
+      if (targetIdx < 0 || targetIdx >= clone.length) return prev;
+      const [moved] = clone.splice(index, 1);
+      clone.splice(targetIdx, 0, moved);
+      return { ...prev, colors: clone };
+    });
   };
 
   const handleRemoveColor = (index: number) => {
@@ -511,6 +579,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       ...prev,
       colors: (prev?.colors || []).filter((_, i) => i !== index)
     }));
+  };
+
+  const handleColorImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const res = await processAndUploadProductImage(file);
+      if (activeColorImageUploadIdx !== null && activeColorImageUploadIdx >= 0) {
+        handleUpdateColor(activeColorImageUploadIdx, { image: res.url });
+        triggerNotification('Photo de la finition mise à jour avec succès.');
+      } else {
+        setNewColorImage(res.url);
+        triggerNotification('Photo prête pour la nouvelle couleur.');
+      }
+    } catch (err: any) {
+      triggerNotification(`Erreur d'import : ${err?.message || 'Échec de traitement'}`);
+    } finally {
+      setActiveColorImageUploadIdx(null);
+      if (e.target) e.target.value = '';
+    }
   };
 
   // Filtered products in admin
@@ -733,6 +821,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       triggerNotification(`Échec de l'enregistrement : ${res.message}`);
     }
   };
+
+  // ==========================================
+  // TAB: PERSONNALISATION DU SITE → HERO SECTION
+  // ==========================================
+  const [heroForm, setHeroForm] = useState<HeroSettings>(getHeroSettings);
+  const [heroFormSnapshot, setHeroFormSnapshot] = useState<HeroSettings>(getHeroSettings);
+  const [heroPreviewMode, setHeroPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+  const [heroSaving, setHeroSaving] = useState(false);
+  const [heroSaveSuccess, setHeroSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    const current = getHeroSettings();
+    setHeroForm(current);
+    setHeroFormSnapshot(current);
+  }, [isOpen]);
+
+  const handleSaveHeroSettings = async () => {
+    setHeroSaving(true);
+    setHeroSaveSuccess(false);
+    try {
+      saveHeroSettings(heroForm);
+      setHeroFormSnapshot(heroForm);
+      await saveStoreSettingsRemote({
+        ...settingsForm,
+        heroSettings: heroForm
+      });
+      setHeroSaveSuccess(true);
+      triggerNotification('Hero Section mise à jour et publiée avec succès !');
+      setTimeout(() => setHeroSaveSuccess(false), 5000);
+    } catch (err: any) {
+      triggerNotification(`Erreur lors de l'enregistrement : ${err?.message || 'Erreur'}`);
+    } finally {
+      setHeroSaving(false);
+    }
+  };
+
+  const handleCancelHeroSettings = () => {
+    setHeroForm(heroFormSnapshot);
+    triggerNotification('Modifications non enregistrées annulées.');
+  };
+
+  const handleResetHeroSettingsToDefault = () => {
+    if (window.confirm("Rétablir tous les textes d'origine de la Hero Section ?")) {
+      setHeroForm({ ...DEFAULT_HERO_SETTINGS });
+      triggerNotification("Textes d'origine de la Hero Section restaurés.");
+    }
+  };
+
 
   // ==========================================
   // TAB 5: TEAM & ADMINISTRATORS (SUPABASE AUTH RBAC)
@@ -966,6 +1102,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('hero')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'hero'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            <span>Personnalisation du site → Hero Section</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('settings')}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'settings'
@@ -974,7 +1122,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             }`}
           >
             <Settings className="w-3.5 h-3.5" />
-            <span>Visuels Hero, Boutique & Paramètres</span>
+            <span>Boutique & Serveur Supabase</span>
           </button>
 
           <button
@@ -1670,6 +1818,437 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Aucune commande enregistrée pour ce statut.
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* TAB: PERSONNALISATION DU SITE → HERO SECTION */}
+          {/* ========================================================= */}
+          {activeTab === 'hero' && (
+            <div className="space-y-6 max-w-7xl mx-auto">
+              {/* Header Bar with Breadcrumb and Actions */}
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">
+                    <span>Administration</span>
+                    <span>→</span>
+                    <span>Personnalisation du site</span>
+                    <span>→</span>
+                    <span className="bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 rounded-md">Hero Section</span>
+                  </div>
+                  <h2 className="text-lg font-extrabold text-slate-900 dark:text-white font-['Outfit']">
+                    Édition Complète de la Hero Section
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Modifiez chaque texte, bouton, badge de réassurance et visuel avec aperçu interactif en temps réel.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleResetHeroSettingsToDefault}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    title="Rétablir les textes d'origine Apple"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Rétablir d'origine</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCancelHeroSettings}
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveHeroSettings}
+                    disabled={heroSaving}
+                    className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-md hover:shadow-lg transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className={`w-3.5 h-3.5 ${heroSaving ? 'animate-spin' : ''}`} />
+                    <span>{heroSaving ? 'Enregistrement...' : 'Enregistrer les modifications'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Success Notification Alert */}
+              {heroSaveSuccess && (
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center gap-3 text-emerald-900 dark:text-emerald-200 text-xs font-semibold animate-in fade-in duration-300">
+                  <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>
+                    Vos modifications de la Hero Section ont été enregistrées avec succès et sont publiées en direct sur le site !
+                  </span>
+                </div>
+              )}
+
+              {/* Grid: Editor Inputs (Left) & Live Preview (Right) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* LEFT COLUMN: Input Fields */}
+                <div className="lg:col-span-6 space-y-5">
+                  
+                  {/* Card 1: Kicker & Badges */}
+                  <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <span>1. Accroche supérieure & Localisation</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Nom de Marque / Kicker
+                        </label>
+                        <input
+                          type="text"
+                          value={heroForm.kickerBrand}
+                          onChange={(e) => setHeroForm({ ...heroForm, kickerBrand: e.target.value })}
+                          placeholder="OUMAR IPHONE"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Badge de Localisation
+                        </label>
+                        <input
+                          type="text"
+                          value={heroForm.kickerLocation}
+                          onChange={(e) => setHeroForm({ ...heroForm, kickerLocation: e.target.value })}
+                          placeholder="BOUTIQUE OFFICIELLE · ABIDJAN"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Main Titles & Description */}
+                  <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <Edit3 className="w-4 h-4 text-amber-500" />
+                      <span>2. Titres d'impact & Description</span>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Titre Principal — Première ligne
+                        </label>
+                        <input
+                          type="text"
+                          value={heroForm.titleLine1}
+                          onChange={(e) => setHeroForm({ ...heroForm, titleLine1: e.target.value })}
+                          placeholder="L'art du titane."
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Titre Principal — Deuxième ligne (Effet dégradé titane)
+                        </label>
+                        <input
+                          type="text"
+                          value={heroForm.titleLine2}
+                          onChange={(e) => setHeroForm({ ...heroForm, titleLine2: e.target.value })}
+                          placeholder="La pureté du verre."
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Sous-titre / Paragraphe de présentation
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={heroForm.description}
+                          onChange={(e) => setHeroForm({ ...heroForm, description: e.target.value })}
+                          placeholder="La référence des iPhone neufs scellés et reconditionnés certifiés en Côte d'Ivoire..."
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Call to Action Buttons */}
+                  <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <ShoppingBag className="w-4 h-4 text-amber-500" />
+                      <span>3. Boutons d'Action (Call To Action)</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Bouton Principal (Catalogue)
+                        </label>
+                        <input
+                          type="text"
+                          value={heroForm.primaryButtonText}
+                          onChange={(e) => setHeroForm({ ...heroForm, primaryButtonText: e.target.value })}
+                          placeholder="EXPLORER LE CATALOGUE"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Bouton Secondaire (WhatsApp)
+                        </label>
+                        <input
+                          type="text"
+                          value={heroForm.secondaryButtonText}
+                          onChange={(e) => setHeroForm({ ...heroForm, secondaryButtonText: e.target.value })}
+                          placeholder="CONTACTER SUR WHATSAPP"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Proof & Trust Badges */}
+                  <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                      <span>4. Badges de Réassurance & Preuves de Confiance</span>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Badge 1 — Garantie & Authenticité
+                        </label>
+                        <input
+                          type="text"
+                          value={heroForm.badgeProof1}
+                          onChange={(e) => setHeroForm({ ...heroForm, badgeProof1: e.target.value })}
+                          placeholder="Garantie 12 Mois Oumar"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Badge 2 — Retrait physique & Essai
+                        </label>
+                        <input
+                          type="text"
+                          value={heroForm.badgeProof2}
+                          onChange={(e) => setHeroForm({ ...heroForm, badgeProof2: e.target.value })}
+                          placeholder="Test & Retrait en Boutique"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Badge 3 — Contact direct & Réactivité
+                        </label>
+                        <input
+                          type="text"
+                          value={heroForm.badgeProof3}
+                          onChange={(e) => setHeroForm({ ...heroForm, badgeProof3: e.target.value })}
+                          placeholder="Échange Direct WhatsApp"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 5: Photo & Accessibility */}
+                  <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <ImageIcon className="w-4 h-4 text-indigo-500" />
+                      <span>5. Visuel Principal & Accessibilité</span>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Texte alternatif de l'image (Balise Alt pour le référencement)
+                        </label>
+                        <input
+                          type="text"
+                          value={heroForm.photoAltText}
+                          onChange={(e) => setHeroForm({ ...heroForm, photoAltText: e.target.value })}
+                          placeholder="Oumar — Fondateur OUMAR IPHONE Abidjan"
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={heroPhotoPreview || heroPhotoSrc || heroTitaniumSample}
+                            alt="Aperçu miniature"
+                            className="w-12 h-14 object-cover rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs"
+                          />
+                          <div>
+                            <span className="font-semibold block text-slate-900 dark:text-white">Photo d'Oumar actuelle</span>
+                            <span className="text-[11px] text-slate-400">Gère automatiquement l'ambiance lumineuse</span>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => heroPhotoInputRef.current?.click()}
+                            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-semibold text-slate-800 dark:text-white transition-colors"
+                          >
+                            Remplacer
+                          </button>
+                          {heroPhotoSrc && (
+                            <button
+                              type="button"
+                              onClick={handleResetHeroPhoto}
+                              className="px-3 py-1.5 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-semibold transition-colors"
+                            >
+                              Réinitialiser
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* RIGHT COLUMN: Live Interactive Preview */}
+                <div className="lg:col-span-6 lg:sticky lg:top-4 space-y-3">
+                  
+                  {/* Preview Toolbar */}
+                  <div className="flex items-center justify-between bg-slate-900 text-white px-4 py-2.5 rounded-2xl shadow-sm">
+                    <div className="flex items-center gap-2 text-xs font-bold">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                      <span>Aperçu en direct (Simulation client)</span>
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-slate-800 p-0.5 rounded-xl text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setHeroPreviewMode('desktop')}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold transition-all ${
+                          heroPreviewMode === 'desktop'
+                            ? 'bg-white text-slate-950 shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Monitor className="w-3 h-3" />
+                        <span>Ordinateur</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setHeroPreviewMode('mobile')}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold transition-all ${
+                          heroPreviewMode === 'mobile'
+                            ? 'bg-white text-slate-950 shadow-xs'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Smartphone className="w-3 h-3" />
+                        <span>Mobile</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Frame Container */}
+                  <div className={`mx-auto transition-all duration-300 ${
+                    heroPreviewMode === 'mobile' ? 'max-w-[340px]' : 'w-full'
+                  }`}>
+                    <div className="relative rounded-3xl overflow-hidden border border-amber-500/30 bg-[#06080F] text-white p-5 shadow-2xl">
+                      
+                      {/* Background Atmospheric Glow */}
+                      <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+                      <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+                      {/* Content inside simulated hero */}
+                      <div className="relative z-10 space-y-4">
+                        
+                        {/* Badges */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] font-extrabold text-amber-400 uppercase tracking-wider">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            {heroForm.kickerBrand || 'OUMAR IPHONE'}
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-semibold text-slate-300 uppercase tracking-wider">
+                            <MapPin className="w-2.5 h-2.5 text-amber-400" />
+                            {heroForm.kickerLocation || 'BOUTIQUE OFFICIELLE · ABIDJAN'}
+                          </span>
+                        </div>
+
+                        {/* Titles */}
+                        <div>
+                          <h1 className="text-xl sm:text-2xl font-bold font-['Outfit'] tracking-tight leading-tight text-white">
+                            {heroForm.titleLine1 || "L'art du titane."}
+                          </h1>
+                          <h2 className="text-xl sm:text-2xl font-bold font-['Outfit'] tracking-tight leading-tight bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-400 bg-clip-text text-transparent">
+                            {heroForm.titleLine2 || 'La pureté du verre.'}
+                          </h2>
+                        </div>
+
+                        {/* Description */}
+                        <p className="text-xs text-slate-300/90 leading-relaxed">
+                          {heroForm.description || "La référence des iPhone neufs scellés et reconditionnés..."}
+                        </p>
+
+                        {/* Simulated Photo */}
+                        <div className="relative w-full aspect-[16/9] rounded-2xl overflow-hidden border border-white/10 bg-slate-900 group">
+                          <img
+                            src={heroPhotoPreview || heroPhotoSrc || heroTitaniumSample}
+                            alt={heroForm.photoAltText || 'Oumar'}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-3">
+                            <span className="text-[10px] text-amber-300 font-semibold tracking-wide">
+                              {heroForm.photoAltText}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* CTA Buttons */}
+                        <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                          <div className="flex-1 py-2 rounded-xl bg-amber-500 text-slate-950 text-center text-xs font-bold shadow-md cursor-pointer">
+                            {heroForm.primaryButtonText || 'EXPLORER LE CATALOGUE'}
+                          </div>
+                          <div className="flex-1 py-2 rounded-xl bg-white/10 border border-white/20 text-white text-center text-xs font-semibold cursor-pointer">
+                            {heroForm.secondaryButtonText || 'CONTACTER SUR WHATSAPP'}
+                          </div>
+                        </div>
+
+                        {/* Proof Badges */}
+                        <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-white/10 text-[9px] text-center text-slate-300">
+                          <div className="p-1.5 rounded-lg bg-white/5 border border-white/5">
+                            <ShieldCheck className="w-3 h-3 text-emerald-400 mx-auto mb-0.5" />
+                            <span className="line-clamp-2">{heroForm.badgeProof1}</span>
+                          </div>
+                          <div className="p-1.5 rounded-lg bg-white/5 border border-white/5">
+                            <MapPin className="w-3 h-3 text-amber-400 mx-auto mb-0.5" />
+                            <span className="line-clamp-2">{heroForm.badgeProof2}</span>
+                          </div>
+                          <div className="p-1.5 rounded-lg bg-white/5 border border-white/5">
+                            <MessageCircle className="w-3 h-3 text-emerald-400 mx-auto mb-0.5" />
+                            <span className="line-clamp-2">{heroForm.badgeProof3}</span>
+                          </div>
+                        </div>
+
+                      </div>
+
+                    </div>
+                    <p className="text-[11px] text-center text-slate-400 mt-2">
+                      Cet aperçu réagit en temps réel à chaque frappe dans le formulaire.
+                    </p>
+                  </div>
+
+                </div>
+
               </div>
             </div>
           )}
@@ -2800,53 +3379,228 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* Colors Management */}
-                <div className="sm:col-span-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
-                  <span className="font-bold text-slate-900 dark:text-white block">
-                    Finitions & Couleurs
-                  </span>
+                {/* Hidden file input for color image upload */}
+                <input
+                  ref={colorFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleColorImageUpload}
+                  className="hidden"
+                />
 
-                  <div className="flex flex-wrap gap-2">
-                    {(formProduct.colors || []).map((col, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold"
-                      >
-                        <span className="w-3 h-3 rounded-full border border-black/20" style={{ backgroundColor: col.hex }} />
-                        <span>{col.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveColor(idx)}
-                          className="text-slate-400 hover:text-rose-500"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                {/* Colors Management — Advanced Apple Color Manager */}
+                <div className="sm:col-span-2 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700 pb-2.5">
+                    <div>
+                      <span className="font-bold text-slate-900 dark:text-white flex items-center gap-2 text-xs">
+                        <Palette className="w-4 h-4 text-amber-500" />
+                        <span>Finitions & Couleurs Interactives de l'iPhone</span>
                       </span>
-                    ))}
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Chaque finition dispose de sa pastille visuelle, de sa photo Apple dédiée et de son statut actif/masqué.
+                      </p>
+                    </div>
+                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+                      {(formProduct.colors || []).length} finition(s) configurée(s)
+                    </span>
                   </div>
 
-                  <div className="flex gap-2 pt-2 items-center">
-                    <input
-                      type="text"
-                      value={newColorName}
-                      onChange={(e) => setNewColorName(e.target.value)}
-                      placeholder="Nom de la couleur (ex: Titane Désert)"
-                      className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-slate-900 dark:text-white"
-                    />
-                    <input
-                      type="color"
-                      value={newColorHex}
-                      onChange={(e) => setNewColorHex(e.target.value)}
-                      className="w-10 h-8 p-0 bg-transparent border-0 cursor-pointer rounded-lg"
-                      title="Choisir le code couleur HEX"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddColor}
-                      className="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold"
-                    >
-                      Ajouter
-                    </button>
+                  {/* Quick Presets Apple Finishes */}
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1.5">
+                      Finitions Apple certifiées (cliquez pour pré-remplir l'ajout) :
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {APPLE_COLOR_PRESETS.map((preset) => (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() => handleApplyColorPreset(preset)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-amber-500 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full border border-black/20 shrink-0" style={{ backgroundColor: preset.hex }} />
+                          <span>{preset.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Configured Colors List */}
+                  <div className="space-y-2 pt-1">
+                    {(formProduct.colors || []).length === 0 ? (
+                      <div className="p-3 text-center text-xs text-slate-400 bg-white dark:bg-slate-800/80 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                        Aucune couleur configurée. Ajoutez au moins une couleur pour activer le sélecteur interactif.
+                      </div>
+                    ) : (
+                      (formProduct.colors || []).map((col, idx) => {
+                        const isActive = col.active !== false;
+                        const hasImg = Boolean(col.image);
+                        return (
+                          <div
+                            key={idx}
+                            className={`p-2.5 rounded-xl border transition-all flex flex-wrap sm:flex-nowrap items-center gap-2.5 ${
+                              isActive
+                                ? 'bg-white dark:bg-slate-800/90 border-slate-200 dark:border-slate-700'
+                                : 'bg-slate-100/60 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 opacity-75'
+                            }`}
+                          >
+                            {/* Reorder Buttons */}
+                            <div className="flex flex-col gap-0.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleMoveColor(idx, 'up')}
+                                disabled={idx === 0}
+                                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-800 dark:hover:text-white disabled:opacity-20 cursor-pointer"
+                                title="Monter cette couleur"
+                              >
+                                <ArrowUp className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleMoveColor(idx, 'down')}
+                                disabled={idx === (formProduct.colors || []).length - 1}
+                                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-800 dark:hover:text-white disabled:opacity-20 cursor-pointer"
+                                title="Descendre cette couleur"
+                              >
+                                <ArrowDown className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            {/* Color Picker Swatch */}
+                            <div className="relative shrink-0" title="Changer la nuance de couleur">
+                              <input
+                                type="color"
+                                value={col.hex}
+                                onChange={(e) => handleUpdateColor(idx, { hex: e.target.value })}
+                                className="w-8 h-8 rounded-full border border-black/20 cursor-pointer p-0 bg-transparent"
+                              />
+                            </div>
+
+                            {/* Color Name Input */}
+                            <input
+                              type="text"
+                              value={col.name}
+                              onChange={(e) => handleUpdateColor(idx, { name: e.target.value })}
+                              placeholder="Nom de la couleur"
+                              className="flex-1 min-w-[120px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+
+                            {/* Dedicated Color Image Thumbnail & Replace Button */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {hasImg ? (
+                                <img
+                                  src={col.image}
+                                  alt={col.name}
+                                  className="w-8 h-8 object-cover rounded-lg border border-slate-200 dark:border-slate-700 shrink-0"
+                                  title="Photo authentique associée à cette finition"
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[9px] text-slate-400 text-center font-bold shrink-0">
+                                  Défaut
+                                </div>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveColorImageUploadIdx(idx);
+                                  colorFileInputRef.current?.click();
+                                }}
+                                className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
+                                title="Changer la photo pour cette finition"
+                              >
+                                <Upload className="w-3 h-3" />
+                                <span className="hidden sm:inline">Photo</span>
+                              </button>
+                            </div>
+
+                            {/* Active / Inactive Toggle */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleColorActive(idx)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0 ${
+                                isActive
+                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                  : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                              }`}
+                              title={isActive ? 'Couleur active et visible en boutique' : 'Couleur masquée sur le site public'}
+                            >
+                              {isActive ? (
+                                <>
+                                  <Eye className="w-3 h-3" />
+                                  <span>Active</span>
+                                </>
+                              ) : (
+                                <>
+                                  <EyeOff className="w-3 h-3" />
+                                  <span>Masquée</span>
+                                </>
+                              )}
+                            </button>
+
+                            {/* Delete Color Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveColor(idx)}
+                              className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer shrink-0"
+                              title="Supprimer cette finition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Add New Color Row */}
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                      Ajouter une nouvelle finition :
+                    </span>
+                    <div className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
+                      <input
+                        type="color"
+                        value={newColorHex}
+                        onChange={(e) => setNewColorHex(e.target.value)}
+                        className="w-9 h-8 p-0 bg-transparent border-0 cursor-pointer rounded-lg shrink-0"
+                        title="Choisir la teinte HEX"
+                      />
+                      <input
+                        type="text"
+                        value={newColorName}
+                        onChange={(e) => setNewColorName(e.target.value)}
+                        placeholder="Nom de la finition (ex: Titane Désert)"
+                        className="flex-1 min-w-[140px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                      
+                      {/* Optional Photo Attachment */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveColorImageUploadIdx(-1);
+                          colorFileInputRef.current?.click();
+                        }}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                          newColorImage
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}
+                        title="Attacher une photo pour cette nouvelle couleur"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        <span>{newColorImage ? 'Photo prête' : 'Ajouter photo'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleAddColor}
+                        disabled={!newColorName.trim()}
+                        className="px-4 py-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold text-xs hover:opacity-90 disabled:opacity-40 transition-all cursor-pointer shrink-0"
+                      >
+                        Ajouter
+                      </button>
+                    </div>
                   </div>
                 </div>
 

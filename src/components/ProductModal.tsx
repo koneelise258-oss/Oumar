@@ -40,9 +40,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   // Initialize or reset variants when product changes
   useEffect(() => {
     if (product) {
+      const initColor = product.selectedColor || product.colors[0]?.name || 'Standard';
+      const initColorObj = product.colors?.find(c => c.name === initColor) || product.colors[0];
       setSelectedStorage(product.selectedStorage || product.storage[0] || 'Standard');
-      setSelectedColor(product.selectedColor || product.colors[0]?.name || 'Standard');
-      setActiveImage(product.image);
+      setSelectedColor(initColor);
+      setActiveImage(initColorObj?.image || product.image);
       setAdded(false);
     }
   }, [product]);
@@ -65,11 +67,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     ? product.storagePrices[selectedStorage]
     : product.price;
 
-  // Build gallery images array
+  // Current color object
+  const currentColorObj = product.colors?.find(
+    (c) => c.name.toLowerCase().trim() === selectedColor.toLowerCase().trim()
+  );
+
+  // Build gallery images array based on selected color
   const galleryImages = [
-    product.image,
+    currentColorObj?.image || product.image,
+    ...(currentColorObj?.gallery ? currentColorObj.gallery : []),
     ...(product.gallery ? product.gallery.filter(img => img !== product.image) : [])
-  ];
+  ].filter((img, idx, arr) => img && arr.indexOf(img) === idx);
 
   const handleAdd = () => {
     onAddToCart(product, selectedStorage, selectedColor);

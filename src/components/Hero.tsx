@@ -3,7 +3,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ArrowDown, MessageCircle, ShieldCheck, Zap, Sparkles } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
-import { getHeroCustomPhoto } from '../data/storeSettings';
+import { getHeroCustomPhoto, getHeroSettings, HeroSettings, DEFAULT_HERO_SETTINGS } from '../data/storeSettings';
 import { Product } from '../types';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { LiquidGlassIcon } from './LiquidGlassIcon';
@@ -26,6 +26,26 @@ export const Hero: React.FC<HeroProps> = () => {
   const contentRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState<number | null>(null);
+
+  // Dynamic editorial texts controlled from the Admin Dashboard
+  const [heroContent, setHeroContent] = useState<HeroSettings>(() => getHeroSettings());
+
+  useEffect(() => {
+    const handleSettingsUpdated = (e: any) => {
+      if (e.detail && typeof e.detail === 'object' && ('titleLine1' in e.detail || 'heroSettings' in e.detail)) {
+        setHeroContent(e.detail.heroSettings || e.detail);
+      } else {
+        setHeroContent(getHeroSettings());
+      }
+    };
+
+    window.addEventListener('oumar_hero_settings_updated', handleSettingsUpdated);
+    window.addEventListener('oumar_settings_updated', handleSettingsUpdated);
+    return () => {
+      window.removeEventListener('oumar_hero_settings_updated', handleSettingsUpdated);
+      window.removeEventListener('oumar_settings_updated', handleSettingsUpdated);
+    };
+  }, []);
 
   // Synchronize visual height strictly from text top to action buttons bottom on desktop
   useEffect(() => {
@@ -318,28 +338,30 @@ export const Hero: React.FC<HeroProps> = () => {
           
           {/* Identity Kicker */}
           <div className="hero-kicker flex items-center gap-2 text-xs font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-5">
-            <span className="font-['Outfit'] tracking-[0.2em] text-slate-900 dark:text-white font-bold">OUMAR IPHONE</span>
+            <span className="font-['Outfit'] tracking-[0.2em] text-slate-900 dark:text-white font-bold">
+              {heroContent.kickerBrand || 'OUMAR IPHONE'}
+            </span>
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">/</span>
-            <span>BOUTIQUE OFFICIELLE · ABIDJAN</span>
+            <span>{heroContent.kickerLocation || 'BOUTIQUE OFFICIELLE · ABIDJAN'}</span>
           </div>
 
           {/* Phase B: Main Headline with Clean Masked Line Reveals (No accent clipping) */}
           <h1 className="text-4xl sm:text-5xl lg:text-[3.75rem] font-bold tracking-tight text-slate-950 dark:text-white font-['Outfit'] leading-[1.08] mb-6 [text-wrap:balance]">
             <div className="overflow-hidden pb-1 pt-0.5">
               <span className="hero-masked-line block">
-                L'art du titane.
+                {heroContent.titleLine1 || "L'art du titane."}
               </span>
             </div>
             <div className="overflow-hidden pb-2.5 pt-0.5">
               <span className="hero-masked-line block text-slate-500 dark:text-slate-400 font-light">
-                La pureté du verre.
+                {heroContent.titleLine2 || 'La pureté du verre.'}
               </span>
             </div>
           </h1>
 
           {/* Phase B bis: Concise Supporting Description */}
           <p className="hero-desc text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl mb-9">
-            La référence des iPhone neufs scellés et reconditionnés certifiés en Côte d'Ivoire. Sous la direction d'Oumar, profitez d'une sélection rigoureusement inspectée, garantie 12 mois et disponible en boutique à Abidjan.
+            {heroContent.description || "La référence des iPhone neufs scellés et reconditionnés certifiés en Côte d'Ivoire. Sous la direction d'Oumar, profitez d'une sélection rigoureusement inspectée, garantie 12 mois et disponible en boutique à Abidjan."}
           </p>
 
           {/* Phase E: Action Buttons avec Interactions Élastiques */}
@@ -365,7 +387,7 @@ export const Hero: React.FC<HeroProps> = () => {
                 boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.4)'
               }}
             >
-              <span>EXPLORER LE CATALOGUE</span>
+              <span>{heroContent.primaryButtonText || 'EXPLORER LE CATALOGUE'}</span>
               <ArrowDown className="w-4 h-4 text-slate-300 dark:text-slate-700 group-hover:translate-y-0.5 transition-transform" />
             </LiquidGlassSurface>
 
@@ -385,7 +407,7 @@ export const Hero: React.FC<HeroProps> = () => {
               className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:text-emerald-950 dark:hover:text-emerald-400 transition-all whitespace-nowrap shrink-0 group focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
             >
               <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
-              <span>CONTACTER SUR WHATSAPP</span>
+              <span>{heroContent.secondaryButtonText || 'CONTACTER SUR WHATSAPP'}</span>
             </LiquidGlassSurface>
           </div>
 
@@ -395,21 +417,21 @@ export const Hero: React.FC<HeroProps> = () => {
               <LiquidGlassIcon size="sm">
                 <ShieldCheck className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
               </LiquidGlassIcon>
-              <span>Garantie 12 Mois Oumar</span>
+              <span>{heroContent.badgeProof1 || 'Garantie 12 Mois Oumar'}</span>
             </div>
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
             <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
               <LiquidGlassIcon size="sm">
                 <Zap className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
               </LiquidGlassIcon>
-              <span>Test & Retrait en Boutique</span>
+              <span>{heroContent.badgeProof2 || 'Test & Retrait en Boutique'}</span>
             </div>
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
             <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
               <LiquidGlassIcon size="sm">
                 <Sparkles className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
               </LiquidGlassIcon>
-              <span>Échange Direct WhatsApp</span>
+              <span>{heroContent.badgeProof3 || 'Échange Direct WhatsApp'}</span>
             </div>
           </div>
 
@@ -430,7 +452,7 @@ export const Hero: React.FC<HeroProps> = () => {
               <div className="relative flex items-center justify-center w-full h-full max-h-full">
                 <img
                   src={oumarPhotoSrc}
-                  alt="Oumar — Fondateur OUMAR IPHONE Abidjan"
+                  alt={heroContent.photoAltText || 'Oumar — Fondateur OUMAR IPHONE Abidjan'}
                   onError={handleImageError}
                   className="hero__photo hero-portrait-img select-none transition-transform duration-700 ease-out"
                   loading="eager"
@@ -441,7 +463,7 @@ export const Hero: React.FC<HeroProps> = () => {
               <div className="relative flex items-center justify-center w-full h-full max-h-full">
                 <img
                   src={DEFAULT_OUMAR_PHOTO_PATH}
-                  alt="Oumar — Fondateur OUMAR IPHONE Abidjan"
+                  alt={heroContent.photoAltText || 'Oumar — Fondateur OUMAR IPHONE Abidjan'}
                   className="hero__photo hero-portrait-img select-none transition-transform duration-700 ease-out"
                   loading="eager"
                   fetchPriority="high"
