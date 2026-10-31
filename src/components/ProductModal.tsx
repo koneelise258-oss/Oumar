@@ -19,12 +19,19 @@ import {
 import { WHATSAPP_URL } from '../data/products';
 import { deduplicateColors } from '../services/storeService';
 import { AppleProductImageViewer } from './AppleProductImageViewer';
+import { 
+  formatProductPrice, 
+  formatWhatsAppPrice, 
+  getCombinationPrice, 
+  normalizeConditionName,
+  STANDARD_CONDITIONS 
+} from '../utils/pricingUtils';
 
 interface ProductModalProps {
   product: Product | null;
   isOpen: boolean;
   onClose: () => void;
-  onAddToCart: (product: Product, storage: string, color: string) => void;
+  onAddToCart: (product: Product, storage: string, color: string, condition?: string, unitPrice?: number | null) => void;
 }
 
 export const ProductModal: React.FC<ProductModalProps> = ({
@@ -35,6 +42,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 }) => {
   const [selectedStorage, setSelectedStorage] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
+  const [selectedCondition, setSelectedCondition] = useState<string>('Neuf');
   const [activeImage, setActiveImage] = useState<string>('');
   const [added, setAdded] = useState(false);
 
@@ -45,6 +53,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       const initColorObj = product.colors?.find(c => c.name === initColor) || product.colors[0];
       setSelectedStorage(product.selectedStorage || product.storage[0] || 'Standard');
       setSelectedColor(initColor);
+      setSelectedCondition(normalizeConditionName(product.condition));
       setActiveImage(initColorObj?.image || product.image);
       setAdded(false);
     }
@@ -63,10 +72,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
   if (!isOpen || !product) return null;
 
-  // Calculate current price based on selected storage
-  const currentPrice = (product.storagePrices && product.storagePrices[selectedStorage])
-    ? product.storagePrices[selectedStorage]
-    : product.price;
+  // Calculate current price strictly based on combination (Storage, Condition, Color)
+  const priceResult = getCombinationPrice(product, selectedStorage, selectedCondition, selectedColor);
+  const currentPrice = priceResult.price;
 
   // Current color object
   const currentColorObj = product.colors?.find(
@@ -86,7 +94,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   ].filter((img, idx, arr) => img && arr.indexOf(img) === idx);
 
   const handleAdd = () => {
-    onAddToCart(product, selectedStorage, selectedColor);
+    onAddToCart(product, selectedStorage, selectedColor, selectedCondition, currentPrice);
     setAdded(true);
     setTimeout(() => setAdded(false), 2200);
   };
@@ -95,10 +103,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
 • Produit : ${product.name}
 • Modèle : ${product.model}
+• État : ${selectedCondition}
 • Capacité : ${selectedStorage}
 • Finition : ${selectedColor}
-• État : ${product.condition}
-• Prix affiché : ${currentPrice.toLocaleString('fr-FR')} FCFA
+• Prix affiché : ${formatWhatsAppPrice(currentPrice)}
 
 Pourriez-vous me confirmer la disponibilité et les modalités de retrait en boutique à Abidjan ? Merci !`;
 
@@ -138,14 +146,14 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
               {/* Badges Bar */}
               <div className="flex flex-wrap items-center gap-2 mb-4">
                 <span className="text-[11px] font-bold tracking-wider uppercase px-3 py-1 rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-xs">
-                  {product.condition}
+                  {selectedCondition}
                 </span>
                 {product.isNew && (
                   <span className="text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                     Nouveauté
                   </span>
                 )}
-                {product.originalPrice && product.originalPrice > currentPrice && (
+                {typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice && (
                   <span className="text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                     -{(product.originalPrice - currentPrice).toLocaleString('fr-FR')} FCFA
                   </span>
@@ -264,14 +272,45 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
 
                 {/* Price Display */}
                 <div className="flex items-baseline gap-3 mb-6 pb-5 border-b border-slate-200/70 dark:border-slate-800">
-                  <span className="text-2xl sm:text-3xl font-bold text-slate-950 dark:text-white font-['Outfit'] tabular-nums tracking-tight">
-                    {currentPrice.toLocaleString('fr-FR')} FCFA
+                  <span className={`text-2xl sm:text-3xl font-bold font-['Outfit'] tabular-nums tracking-tight ${
+                    currentPrice === null || currentPrice === 0
+                      ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                      : 'text-slate-950 dark:text-white'
+                  }`}>
+                    {formatProductPrice(currentPrice)}
                   </span>
-                  {product.originalPrice && product.originalPrice > currentPrice && (
+                  {typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice && (
                     <span className="text-sm sm:text-base text-slate-400 dark:text-slate-500 line-through tabular-nums">
                       {product.originalPrice.toLocaleString('fr-FR')} FCFA
                     </span>
                   )}
+                </div>
+
+                {/* Condition Selector */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                    <span>État du produit</span>
+                    <span className="text-slate-900 dark:text-white font-bold">{selectedCondition}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {STANDARD_CONDITIONS.map((cond) => {
+                      const isSelected = selectedCondition === cond;
+                      return (
+                        <button
+                          key={`modal-cond-${cond}`}
+                          type="button"
+                          onClick={() => setSelectedCondition(cond)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950 shadow-sm ring-2 ring-slate-950 dark:ring-white ring-offset-1 dark:ring-offset-slate-900'
+                              : 'bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {cond}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Description */}
@@ -291,25 +330,27 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                     <div className="flex flex-wrap gap-2.5">
                       {product.storage.map((cap, capIdx) => {
                         const isSelected = selectedStorage === cap;
-                        const capPrice = product.storagePrices ? product.storagePrices[cap] : undefined;
+                        const capPrice = getCombinationPrice(product, cap, selectedCondition, selectedColor).price;
 
                         return (
                           <button
                             key={`modal-storage-${cap}-${capIdx}`}
                             type="button"
                             onClick={() => setSelectedStorage(cap)}
-                            className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-start ${
+                            className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-start cursor-pointer ${
                               isSelected
                                 ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950 shadow-sm ring-2 ring-slate-950 dark:ring-white ring-offset-2 dark:ring-offset-slate-900'
                                 : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
                             }`}
                           >
                             <span>{cap}</span>
-                            {capPrice && (
-                              <span className={`text-[10px] font-normal ${isSelected ? 'text-slate-300 dark:text-slate-600' : 'text-slate-500 dark:text-slate-400'}`}>
-                                {capPrice.toLocaleString('fr-FR')} FCFA
-                              </span>
-                            )}
+                            <span className={`text-[10px] font-medium ${
+                              isSelected 
+                                ? 'text-slate-300 dark:text-slate-400' 
+                                : (capPrice ? 'text-slate-500 dark:text-slate-400' : 'text-amber-600 dark:text-amber-400')
+                            }`}>
+                              {formatProductPrice(capPrice)}
+                            </span>
                           </button>
                         );
                       })}

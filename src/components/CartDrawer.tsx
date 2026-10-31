@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CartItem } from '../types';
 import { X, Plus, Minus, Trash2, MessageCircle, ShieldCheck, CheckCircle2, Store, AlertTriangle } from 'lucide-react';
 import { getWhatsAppUrl } from '../data/storeSettings';
+import { formatProductPrice, formatWhatsAppPrice, normalizeConditionName } from '../utils/pricingUtils';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -28,9 +29,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  const subtotal = items.reduce(
-    (acc, item) => acc + (item.unitPrice || item.product.price) * item.quantity,
-    0
+  // Items with defined prices contribute to numerical subtotal
+  const subtotal = items.reduce((acc, item) => {
+    const price = typeof item.unitPrice === 'number' && item.unitPrice > 0 
+      ? item.unitPrice 
+      : (typeof item.product.price === 'number' ? item.product.price : 0);
+    return acc + price * item.quantity;
+  }, 0);
+
+  const hasItemsOnDemand = items.some(
+    (item) => !item.unitPrice || item.unitPrice <= 0
   );
 
   // La boutique ne propose AUCUNE livraison : retrait gratuit en boutique
@@ -50,19 +58,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setIsSubmitting(true);
 
     try {
-      // Construction du message WhatsApp direct avec les détails du panier
+      // Construction du message WhatsApp direct avec les détails précis (état, stockage, couleur, prix)
       const itemListText = items
-        .map(
-          (it) =>
-            `• ${it.product.name} (${it.chosenStorage}, ${it.chosenColor}) x${it.quantity} - ${(
-              (it.unitPrice || it.product.price) * it.quantity
-            ).toLocaleString('fr-FR')} FCFA`
-        )
+        .map((it) => {
+          const cond = normalizeConditionName(it.chosenCondition || it.product.condition);
+          const priceLabel = it.unitPrice && it.unitPrice > 0
+            ? `${(it.unitPrice * it.quantity).toLocaleString('fr-FR')} FCFA`
+            : 'Prix sur demande';
+          return `• ${it.product.name} [État: ${cond}] (${it.chosenStorage}, ${it.chosenColor}) x${it.quantity} — ${priceLabel}`;
+        })
         .join('\n');
 
-      const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite me renseigner pour réserver et acheter en magasin :\n\n${itemListText}\n\nTotal estimé : ${total.toLocaleString(
-        'fr-FR'
-      )} FCFA\n\nNom du client : ${customerName.trim()}${customerPhone.trim() ? `\nTéléphone de contact : ${customerPhone.trim()}` : ''}\nMode de retrait : En boutique OUMAR IPHONE (Abidjan)\n\nMerci de me confirmer la disponibilité des articles en boutique.`;
+      const totalSummary = total > 0
+        ? `${total.toLocaleString('fr-FR')} FCFA${hasItemsOnDemand ? ' (+ articles sur demande)' : ''}`
+        : 'Prix sur demande';
+
+      const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite me renseigner pour réserver et acheter en magasin :\n\n${itemListText}\n\nTotal estimé : ${totalSummary}\n\nNom du client : ${customerName.trim()}${customerPhone.trim() ? `\nTéléphone de contact : ${customerPhone.trim()}` : ''}\nMode de retrait : En boutique OUMAR IPHONE (Abidjan)\n\nMerci de me confirmer la disponibilité des articles en boutique.`;
 
       // Ouvrir WhatsApp via le lien wa.me sécurisé
       const whatsappUrl = getWhatsAppUrl(whatsappMessage);
@@ -138,17 +149,23 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     className="w-16 h-16 object-cover rounded-lg bg-white dark:bg-slate-850 p-1 border border-slate-200/60 dark:border-slate-700/60"
                   />
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                      {item.product.name}
-                    </h3>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {item.product.name}
+                      </h3>
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-sm bg-slate-200/80 dark:bg-slate-750 text-slate-700 dark:text-slate-300">
+                        {normalizeConditionName(item.chosenCondition || item.product.condition)}
+                      </span>
+                    </div>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       {item.chosenStorage} · {item.chosenColor}
                     </p>
-                    <p className="text-xs font-bold text-slate-950 dark:text-white mt-1">
-                      {((item.unitPrice || item.product.price) * item.quantity).toLocaleString(
-                        'fr-FR'
-                      )}{' '}
-                      FCFA
+                    <p className={`text-xs font-bold mt-1 ${
+                      !item.unitPrice || item.unitPrice <= 0
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-slate-950 dark:text-white'
+                    }`}>
+                      {formatProductPrice(item.unitPrice ? item.unitPrice * item.quantity : null)}
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-2">

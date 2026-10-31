@@ -13,7 +13,7 @@ import {
   Clock
 } from 'lucide-react';
 import { getWhatsAppUrl } from '../data/storeSettings';
-import { useDebounce } from '../hooks/useDebounce';
+import { formatProductPrice, normalizeConditionName } from '../utils/pricingUtils';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -29,7 +29,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   onSelectProduct
 }) => {
   const [query, setQuery] = useState('');
-  const debouncedQuery = useDebounce(query, 120);
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -59,10 +58,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   // Categories list
   const categories = ['Tous', 'iPhone', 'iPad', 'MacBook', 'Accessoires'];
 
-  // Search filter
+  // Search filter - Recherche en temps réel complètement sécurisée contre les valeurs nulles
   const results = useMemo(() => {
-    const published = products.filter((p) => p.published !== false);
-    const q = debouncedQuery.trim().toLowerCase();
+    const published = (products || []).filter((p) => p && p.published !== false);
+    const q = (query || '').trim().toLowerCase();
 
     return published.filter((p) => {
       // Category filter
@@ -72,15 +71,21 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
       if (!q) return true; // Show all / suggestions if empty
 
-      const matchName = p.name.toLowerCase().includes(q);
-      const matchModel = p.model.toLowerCase().includes(q);
-      const matchCategory = p.category.toLowerCase().includes(q);
-      const matchDesc = p.description?.toLowerCase().includes(q) || false;
-      const matchCondition = p.condition.toLowerCase().includes(q);
-      const matchStorage = p.storage.some((s) => s.toLowerCase().includes(q));
-      const matchColors = p.colors.some((c) => c.name.toLowerCase().includes(q));
-      const matchSpecs = p.specs ? Object.values(p.specs).some((val) => val?.toLowerCase().includes(q)) : false;
-      const matchPrice = p.price.toString().includes(q);
+      const matchName = typeof p.name === 'string' && p.name.toLowerCase().includes(q);
+      const matchModel = typeof p.model === 'string' && p.model.toLowerCase().includes(q);
+      const matchCategory = typeof p.category === 'string' && p.category.toLowerCase().includes(q);
+      const matchDesc = typeof p.description === 'string' && p.description.toLowerCase().includes(q);
+      const matchCondition = typeof p.condition === 'string' && p.condition.toLowerCase().includes(q);
+      const matchStorage = Array.isArray(p.storage) && p.storage.some((s) => typeof s === 'string' && s.toLowerCase().includes(q));
+      const matchColors = Array.isArray(p.colors) && p.colors.some((c: any) => {
+        if (!c) return false;
+        const colorName = typeof c === 'string' ? c : (typeof c.name === 'string' ? c.name : '');
+        return colorName.toLowerCase().includes(q);
+      });
+      const matchSpecs = p.specs && typeof p.specs === 'object'
+        ? Object.values(p.specs).some((val) => typeof val === 'string' && val.toLowerCase().includes(q))
+        : false;
+      const matchPrice = p.price != null ? p.price.toString().includes(q) : false;
 
       return (
         matchName ||
@@ -94,7 +99,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         matchPrice
       );
     });
-  }, [products, debouncedQuery, selectedCategory]);
+  }, [products, query, selectedCategory]);
 
   if (!isOpen) return null;
 
@@ -201,7 +206,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                     <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60">
-                      {product.condition}
+                      {normalizeConditionName(product.condition)}
                     </span>
                     {product.inStock ? (
                       <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
@@ -220,16 +225,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   </h4>
 
                   <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                    {product.model} · {product.storage.join(' · ')}
+                    {product.model} · {(Array.isArray(product.storage) ? product.storage : []).join(' · ')}
                   </p>
                 </div>
 
                 {/* Price & Action Arrow */}
                 <div className="text-right shrink-0">
                   <div className="text-sm sm:text-base font-extrabold text-slate-950 dark:text-white tabular-nums">
-                    {product.price.toLocaleString('fr-FR')} FCFA
+                    {formatProductPrice(product.price)}
                   </div>
-                  {product.originalPrice && product.originalPrice > product.price && (
+                  {product.price && product.originalPrice && product.originalPrice > product.price && (
                     <div className="text-[11px] text-slate-400 line-through tabular-nums">
                       {product.originalPrice.toLocaleString('fr-FR')} FCFA
                     </div>

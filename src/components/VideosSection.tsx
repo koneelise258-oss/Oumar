@@ -110,6 +110,9 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
   };
 
   // 1. RENDU DES VIDÉOS TIKTOK (Lecteur officiel compatible player/v1)
+  // NOTE TECHNIQUE SUR TIKTOK : L'API standard du lecteur intégré TikTok (player/v1 iframe)
+  // ne supporte pas de paramètre "loop=1" dans sa query string et isole la lecture dans un sandbox cross-origin.
+  // Les vidéos HTML5 directes ci-dessous bouclent quant à elles de façon native et ininterrompue.
   if (isTikTok) {
     const fallbackUrl = tikTokId
       ? `https://www.tiktok.com/@oumar_iphone.0/video/${tikTokId}`
@@ -173,7 +176,7 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
     );
   }
 
-  // 2. RENDU DES VIDÉOS DIRECTES (HTML5 MP4 / WebM)
+  // 2. RENDU DES VIDÉOS DIRECTES (HTML5 MP4 / WebM) — LECTURE EN BOUCLE CONTINUE
   return (
     <div
       ref={containerRef}
@@ -219,6 +222,13 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
             setIsPlaying(true);
           }}
           onPause={() => setIsPlaying(false)}
+          onEnded={() => {
+            // Sécurité boucle continue ininterrompue
+            if (videoRef.current) {
+              videoRef.current.currentTime = 0;
+              videoRef.current.play().catch(() => {});
+            }
+          }}
           onError={() => {
             setHasError(true);
             setIsBuffering(false);

@@ -9,6 +9,8 @@ import { fetchProductsRemote, fetchVideosRemote, fetchStoreSettingsRemote } from
 import { checkIsUserAdmin } from './lib/supabase';
 import { CartItem, Product, VideoItem } from './types';
 import { ThemeProvider } from './context/ThemeContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { getCombinationPrice, normalizeConditionName } from './utils/pricingUtils';
 
 // Chargement différé des composants secondaires et modales lourdes
 const VideosSection = lazy(() => import('./components/VideosSection').then(m => ({ default: m.VideosSection })));
@@ -244,20 +246,30 @@ function StoreApp() {
     setIsAdminDashboardOpen(true);
   };
 
-  // Add to cart
-  const handleAddToCart = (product: Product, storage?: string, color?: string) => {
-    const chosenStorage = storage || product.selectedStorage || product.storage[0] || 'Standard';
-    const chosenColor = color || product.selectedColor || product.colors[0]?.name || 'Standard';
-    const unitPrice = (product.storagePrices && product.storagePrices[chosenStorage])
-      ? product.storagePrices[chosenStorage]
-      : product.price;
+  // Add to cart with independent combination pricing and condition tracking
+  const handleAddToCart = (
+    product: Product, 
+    storage?: string, 
+    color?: string, 
+    condition?: string, 
+    customPrice?: number | null
+  ) => {
+    const chosenStorage = storage || product.selectedStorage || (Array.isArray(product.storage) ? product.storage[0] : '') || 'Standard';
+    const chosenColor = color || product.selectedColor || (product.colors && product.colors[0]?.name) || 'Standard';
+    const chosenCondition = condition || normalizeConditionName(product.condition);
+
+    // Exact independent unit price (never auto-copied across conditions)
+    const resolvedPrice = typeof customPrice === 'number' && customPrice >= 0
+      ? customPrice
+      : (getCombinationPrice(product, chosenStorage, chosenCondition, chosenColor).price || 0);
 
     setCartItems((prev) => {
       const existingIndex = prev.findIndex(
         (it) =>
           it.product.id === product.id &&
           it.chosenStorage === chosenStorage &&
-          it.chosenColor === chosenColor
+          it.chosenColor === chosenColor &&
+          (it.chosenCondition || '') === (chosenCondition || '')
       );
 
       if (existingIndex > -1) {
@@ -272,7 +284,8 @@ function StoreApp() {
             quantity: 1,
             chosenStorage,
             chosenColor,
-            unitPrice
+            chosenCondition,
+            unitPrice: resolvedPrice
           }
         ];
       }
@@ -412,8 +425,10 @@ function StoreApp() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <StoreApp />
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <StoreApp />
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

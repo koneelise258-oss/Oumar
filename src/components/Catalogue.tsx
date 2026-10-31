@@ -19,10 +19,17 @@ import { WHATSAPP_URL } from '../data/products';
 import { ProductModal } from './ProductModal';
 import { deduplicateColors } from '../services/storeService';
 import { AppleProductImageViewer } from './AppleProductImageViewer';
-import { useDebounce } from '../hooks/useDebounce';
+import { 
+  formatProductPrice, 
+  formatWhatsAppPrice, 
+  getCombinationPrice, 
+  normalizeConditionName,
+  STANDARD_CONDITIONS 
+} from '../utils/pricingUtils';
+
 interface CatalogueProps {
   products: Product[];
-  onAddToCart: (product: Product, storage: string, color: string) => void;
+  onAddToCart: (product: Product, storage: string, color: string, condition?: string, unitPrice?: number | null) => void;
   onProductsUpdated?: (products: Product[]) => void;
   onSelectProduct?: (product: Product) => void;
   externalActiveProduct?: Product | null;
@@ -44,7 +51,6 @@ export const Catalogue: React.FC<CatalogueProps> = ({
 
   // Search query
   const [searchQuery, setSearchQuery] = useState('');
-  const debouncedSearchQuery = useDebounce(searchQuery, 150);
 
   // Filters
   const [selectedCondition, setSelectedCondition] = useState<string>('Tous');
@@ -77,32 +83,47 @@ export const Catalogue: React.FC<CatalogueProps> = ({
     return list;
   }, []);
 
-  // Filter & Sort Logic
+  // Filter & Sort Logic - 100% sécurisé contre les valeurs nulles et crashs
   const filteredProducts = useMemo(() => {
-    return products
-      .filter((p) => p.published !== false)
+    const q = (searchQuery || '').trim().toLowerCase();
+
+    return (products || [])
+      .filter((p) => p && p.published !== false)
       .filter((p) => {
         // Category filter
         if (selectedCategory !== 'Tous' && p.category !== selectedCategory) {
           return false;
         }
 
-        // Search filter
-        if (debouncedSearchQuery.trim()) {
-          const q = debouncedSearchQuery.toLowerCase();
-          const matchName = p.name.toLowerCase().includes(q);
-          const matchModel = p.model.toLowerCase().includes(q);
-          const matchDesc = p.description?.toLowerCase().includes(q) || false;
-          const matchStorage = p.storage.some((s) => s.toLowerCase().includes(q));
-          const matchColor = p.colors.some((c) => c.name.toLowerCase().includes(q));
-          if (!matchName && !matchModel && !matchDesc && !matchStorage && !matchColor) {
+        // Search filter complet et sécurisé
+        if (q) {
+          const matchName = typeof p.name === 'string' && p.name.toLowerCase().includes(q);
+          const matchModel = typeof p.model === 'string' && p.model.toLowerCase().includes(q);
+          const matchCategory = typeof p.category === 'string' && p.category.toLowerCase().includes(q);
+          const matchDesc = typeof p.description === 'string' && p.description.toLowerCase().includes(q);
+          const matchCondition = typeof p.condition === 'string' && p.condition.toLowerCase().includes(q);
+          const matchStorage = Array.isArray(p.storage) && p.storage.some((s) => typeof s === 'string' && s.toLowerCase().includes(q));
+          const matchColor = Array.isArray(p.colors) && p.colors.some((c: any) => {
+            if (!c) return false;
+            const colorName = typeof c === 'string' ? c : (typeof c.name === 'string' ? c.name : '');
+            return colorName.toLowerCase().includes(q);
+          });
+          const matchSpecs = p.specs && typeof p.specs === 'object'
+            ? Object.values(p.specs).some((val) => typeof val === 'string' && val.toLowerCase().includes(q))
+            : false;
+
+          if (!matchName && !matchModel && !matchCategory && !matchDesc && !matchCondition && !matchStorage && !matchColor && !matchSpecs) {
             return false;
           }
         }
 
-        // Condition filter
-        if (selectedCondition !== 'Tous' && p.condition !== selectedCondition) {
-          return false;
+        // Condition filter normalisé
+        if (selectedCondition !== 'Tous') {
+          const pCond = normalizeConditionName(p.condition);
+          const targetCond = normalizeConditionName(selectedCondition);
+          if (pCond !== targetCond) {
+            return false;
+          }
         }
 
         // Stock filter
@@ -111,22 +132,25 @@ export const Catalogue: React.FC<CatalogueProps> = ({
         }
 
         // Storage filter
-        if (selectedStorageFilter !== 'Tous' && !p.storage.includes(selectedStorageFilter)) {
+        if (selectedStorageFilter !== 'Tous' && (!Array.isArray(p.storage) || !p.storage.includes(selectedStorageFilter))) {
           return false;
         }
 
         // Price range filter
-        if (priceRange === 'under-500k' && p.price >= 500000) return false;
-        if (priceRange === '500k-1m' && (p.price < 500000 || p.price > 1000000)) return false;
-        if (priceRange === 'over-1m' && p.price <= 1000000) return false;
+        const priceVal = typeof p.price === 'number' ? p.price : 0;
+        if (priceRange === 'under-500k' && priceVal >= 500000) return false;
+        if (priceRange === '500k-1m' && (priceVal < 500000 || priceVal > 1000000)) return false;
+        if (priceRange === 'over-1m' && priceVal <= 1000000) return false;
 
         return true;
       })
       .sort((a, b) => {
-        if (sortBy === 'price-asc') return a.price - b.price;
-        if (sortBy === 'price-desc') return b.price - a.price;
+        const priceA = typeof a.price === 'number' ? a.price : 0;
+        const priceB = typeof b.price === 'number' ? b.price : 0;
+        if (sortBy === 'price-asc') return priceA - priceB;
+        if (sortBy === 'price-desc') return priceB - priceA;
         if (sortBy === 'newest') return (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0);
-        if (sortBy === 'name') return a.name.localeCompare(b.name);
+        if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
         // Default: featured first, then original order
         if (a.featured && !b.featured) return -1;
         if (!a.featured && b.featured) return 1;
@@ -135,7 +159,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
   }, [
     products,
     selectedCategory,
-    debouncedSearchQuery,
+    searchQuery,
     selectedCondition,
     onlyInStock,
     selectedStorageFilter,
@@ -174,9 +198,11 @@ export const Catalogue: React.FC<CatalogueProps> = ({
 
   const handleQuickAdd = (e: React.MouseEvent, product: Product) => {
     e.stopPropagation();
-    const storage = cardStorages[product.id] || product.storage[0] || 'Standard';
-    const color = cardColors[product.id] || product.colors[0]?.name || 'Standard';
-    onAddToCart(product, storage, color);
+    const storage = cardStorages[product.id] || (Array.isArray(product.storage) ? product.storage[0] : '') || 'Standard';
+    const color = cardColors[product.id] || (product.colors && product.colors[0]?.name) || 'Standard';
+    const condition = normalizeConditionName(product.condition);
+    const { price } = getCombinationPrice(product, storage, condition, color);
+    onAddToCart(product, storage, color, condition, price);
 
     setAddedIds((prev) => ({ ...prev, [product.id]: true }));
     setTimeout(() => {
@@ -314,9 +340,8 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                   className="w-full text-xs rounded-lg px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                 >
                   <option value="Tous">Tous les états</option>
-                  <option value="Neuf scellé">Neuf scellé</option>
-                  <option value="Quasi neuf">Quasi neuf</option>
-                  <option value="Occasion">Occasion</option>
+                  <option value="Neuf">Neuf</option>
+                  <option value="Quasi-occasion">Quasi-occasion</option>
                   <option value="Reconditionné">Reconditionné</option>
                 </select>
               </div>
@@ -466,13 +491,10 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                 .map((c) => c.image)
                 .filter((img): img is string => Boolean(img && typeof img === 'string' && img.trim()));
 
-              // Price adjustment based on chosen capacity or variant
-              const currentPrice =
-                matchingVariant && matchingVariant.price > 0
-                  ? matchingVariant.price
-                  : product.storagePrices && product.storagePrices[currentStorage]
-                  ? product.storagePrices[currentStorage]
-                  : product.price;
+              // Strict independent pricing by combination (Storage, Condition, Color)
+              const conditionName = normalizeConditionName(product.condition);
+              const priceResult = getCombinationPrice(product, currentStorage, conditionName, currentColor);
+              const currentPrice = priceResult.price;
 
               return (
                 <div
@@ -491,14 +513,6 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-300 ease-out select-none"
                       containerClassName="w-full h-full relative flex items-center justify-center"
                     />
-
-                    {/* Quick view button overlay on hover */}
-                    <div className="absolute inset-x-0 bottom-3 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none hidden sm:flex">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950/80 dark:bg-white/90 text-white dark:text-slate-950 text-xs font-semibold backdrop-blur-sm shadow-md">
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Fiche détaillée</span>
-                      </span>
-                    </div>
                   </div>
 
                   {/* COLOR SWATCHES — PLACED DIRECTLY BELOW THE PHOTO */}
@@ -538,16 +552,26 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                   {/* Product Info & Actions */}
                   <div className="p-3 sm:p-5 flex-1 flex flex-col justify-between min-w-0">
                     <div>
-                      {/* Name & Live Price Stacked Vertically */}
+                      {/* Name, Condition Badge & Live Price */}
                       <div className="flex flex-col gap-1 mb-2 min-w-0">
-                        <h3 className="text-xs sm:text-base font-bold text-slate-950 dark:text-white font-['Outfit'] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors leading-snug">
-                          {product.name}
-                        </h3>
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <h3 className="text-xs sm:text-base font-bold text-slate-950 dark:text-white font-['Outfit'] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors leading-snug">
+                            {product.name}
+                          </h3>
+                          <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 shrink-0">
+                            {conditionName}
+                          </span>
+                        </div>
+
                         <div className="flex items-baseline gap-2 flex-wrap">
-                          <div className="text-xs sm:text-base font-extrabold text-slate-950 dark:text-white font-['Outfit'] tabular-nums tracking-tight">
-                            {currentPrice.toLocaleString('fr-FR')} FCFA
+                          <div className={`text-xs sm:text-base font-extrabold font-['Outfit'] tabular-nums tracking-tight ${
+                            currentPrice === null || currentPrice === 0
+                              ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                              : 'text-slate-950 dark:text-white'
+                          }`}>
+                            {formatProductPrice(currentPrice)}
                           </div>
-                          {product.originalPrice && product.originalPrice > currentPrice && (
+                          {typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice && (
                             <div className="text-[10px] sm:text-xs text-slate-400 line-through tabular-nums">
                               {product.originalPrice.toLocaleString('fr-FR')} FCFA
                             </div>
@@ -615,7 +639,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       {/* WhatsApp Order */}
                       <a
                         href={WHATSAPP_URL(
-                          `Bonjour Oumar iPhone, je souhaite commander : ${product.name} (${currentStorage}, ${currentColor}) au prix de ${currentPrice.toLocaleString('fr-FR')} FCFA.`
+                          `Bonjour Oumar iPhone, je souhaite commander : ${product.name} (${conditionName}, ${currentStorage}, ${currentColor}) — Prix : ${formatWhatsAppPrice(currentPrice)}.`
                         )}
                         target="_blank"
                         rel="noopener noreferrer"

@@ -22,11 +22,18 @@ import {
 import { WHATSAPP_URL } from '../data/products';
 import { deduplicateColors } from '../services/storeService';
 import { AppleProductImageViewer } from './AppleProductImageViewer';
+import { 
+  formatProductPrice, 
+  formatWhatsAppPrice, 
+  getCombinationPrice, 
+  normalizeConditionName,
+  STANDARD_CONDITIONS 
+} from '../utils/pricingUtils';
 
 interface ProductDetailPageProps {
   product: Product;
   onBack: () => void;
-  onAddToCart: (product: Product, storage: string, color: string) => void;
+  onAddToCart: (product: Product, storage: string, color: string, condition?: string, unitPrice?: number | null) => void;
 }
 
 export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
@@ -41,7 +48,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     product.selectedColor || product.colors[0]?.name || 'Standard'
   );
   const [selectedCondition, setSelectedCondition] = useState<string>(
-    product.condition || 'Neuf scellé'
+    normalizeConditionName(product.condition)
   );
   const [activeImage, setActiveImage] = useState<string>(product.image);
   const [added, setAdded] = useState(false);
@@ -53,27 +60,16 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     const initColorObj = product.colors?.find((c) => c.name === initColor) || product.colors[0];
     setSelectedStorage(product.selectedStorage || product.storage[0] || 'Standard');
     setSelectedColor(initColor);
-    setSelectedCondition(product.condition || 'Neuf scellé');
+    setSelectedCondition(normalizeConditionName(product.condition));
     setActiveImage(initColorObj?.image || product.image);
     setAdded(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [product]);
 
-  // Recherche d'une variante exacte dans public.store_product_variants
-  const matchingVariant = product.variants?.find((v) => {
-    if (v.published === false) return false;
-    const matchColor = !v.color || v.color.toLowerCase() === selectedColor.toLowerCase();
-    const matchStorage = !v.storage || v.storage.toLowerCase() === selectedStorage.toLowerCase();
-    const matchCond = !v.condition || v.condition.toLowerCase() === selectedCondition.toLowerCase();
-    return matchColor && matchStorage && matchCond;
-  });
-
-  // Détermination fiable du prix : variante prioritaire, sinon tarif de capacité, sinon prix de base du produit
-  const currentPrice: number = (matchingVariant && matchingVariant.price > 0)
-    ? matchingVariant.price
-    : ((product.storagePrices && product.storagePrices[selectedStorage])
-      ? product.storagePrices[selectedStorage]
-      : product.price);
+  // Détermination stricte du prix indépendant selon la combinaison (Stockage, État, Couleur)
+  const priceResult = getCombinationPrice(product, selectedStorage, selectedCondition, selectedColor);
+  const currentPrice: number | null = priceResult.price;
+  const matchingVariant = priceResult.matchedVariant;
 
   // Image et stock associés à la variante
   const displayImage = (matchingVariant && matchingVariant.imageUrl)
@@ -84,13 +80,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     ? (matchingVariant.inStock !== false)
     : product.inStock;
 
-  // Liste des 4 états normalisés
-  const availableConditions = [
-    'Neuf scellé',
-    'Quasi neuf',
-    'Occasion',
-    'Reconditionné'
-  ];
+  // 3 états standards stricts définis par le brief
+  const availableConditions = STANDARD_CONDITIONS;
 
   // Couleur actuellement sélectionnée
   const currentColorObj = product.colors?.find(
@@ -120,7 +111,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   ].filter((img, idx, arr) => img && arr.indexOf(img) === idx);
 
   const handleAdd = () => {
-    onAddToCart(product, selectedStorage, selectedColor);
+    onAddToCart(product, selectedStorage, selectedColor, selectedCondition, currentPrice);
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   };
@@ -152,7 +143,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 • État sélectionné : ${selectedCondition}
 • Capacité : ${selectedStorage}
 • Finition : ${selectedColor}
-• Prix affiché : ${currentPrice.toLocaleString('fr-FR')} FCFA
+• Prix affiché : ${formatWhatsAppPrice(currentPrice)}
 ${matchingVariant?.priceSource ? `• Référence : ${matchingVariant.priceSource}` : ''}
 
 Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités de retrait en boutique à Abidjan !`;
@@ -325,10 +316,14 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
               {/* Price Tag & Source Reference note */}
               <div className="flex flex-col mb-6 pb-6 border-b border-slate-200/80 dark:border-slate-800 space-y-1">
                 <div className="flex items-baseline gap-3">
-                  <span className="text-3xl sm:text-4xl font-extrabold text-slate-950 dark:text-white font-['Outfit'] tabular-nums tracking-tight">
-                    {currentPrice.toLocaleString('fr-FR')} FCFA
+                  <span className={`text-3xl sm:text-4xl font-extrabold font-['Outfit'] tabular-nums tracking-tight ${
+                    currentPrice === null || currentPrice === 0
+                      ? 'text-amber-600 dark:text-amber-400 font-bold'
+                      : 'text-slate-950 dark:text-white'
+                  }`}>
+                    {formatProductPrice(currentPrice)}
                   </span>
-                  {product.originalPrice && product.originalPrice > currentPrice && (
+                  {typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice && (
                     <span className="text-lg text-slate-400 dark:text-slate-500 line-through tabular-nums">
                       {product.originalPrice.toLocaleString('fr-FR')} FCFA
                     </span>
@@ -426,7 +421,8 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {product.storage.map((cap, capIdx) => {
                       const isSelected = selectedStorage === cap;
-                      const capPrice = product.storagePrices ? product.storagePrices[cap] : undefined;
+                      const capPriceResult = getCombinationPrice(product, cap, selectedCondition, selectedColor);
+                      const capPrice = capPriceResult.price;
 
                       return (
                         <button
@@ -440,11 +436,13 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                           }`}
                         >
                           <span className="text-sm font-bold">{cap}</span>
-                          {capPrice && (
-                            <span className={`text-[11px] mt-1 font-medium ${isSelected ? 'text-slate-300 dark:text-slate-600' : 'text-slate-500 dark:text-slate-400'}`}>
-                              {capPrice.toLocaleString('fr-FR')} FCFA
-                            </span>
-                          )}
+                          <span className={`text-[11px] mt-1 font-medium ${
+                            isSelected 
+                              ? 'text-slate-300 dark:text-slate-400' 
+                              : (capPrice ? 'text-slate-500 dark:text-slate-400' : 'text-amber-600 dark:text-amber-400')
+                          }`}>
+                            {formatProductPrice(capPrice)}
+                          </span>
                         </button>
                       );
                     })}
