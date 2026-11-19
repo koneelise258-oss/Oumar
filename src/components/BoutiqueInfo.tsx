@@ -4,15 +4,15 @@ import { WHATSAPP_URL } from '../data/products';
 
 export const BoutiqueInfo: React.FC = () => {
   return (
-    <section id="boutique" className="py-20 bg-white dark:bg-[#0b0f17] border-t border-slate-200/80 dark:border-slate-800 transition-colors">
+    <section id="boutique" className="perf-section py-14 sm:py-20 bg-white dark:bg-[#0b0f17] border-t border-slate-200/80 dark:border-slate-800 transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
+
         {/* Section Header */}
-        <div className="text-center max-w-2xl mx-auto mb-16">
-          <div className="text-xs font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-2">
+        <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-14">
+          <div className="text-[11px] font-bold tracking-[0.18em] text-slate-500 dark:text-slate-400 uppercase mb-2">
             BOUTIQUE & SERVICE APRÈS-VENTE
           </div>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-950 dark:text-white font-['Outfit'] mb-4">
+          <h2 className="text-2xl sm:text-4xl font-bold tracking-tight text-slate-950 dark:text-white font-['Outfit'] mb-3 sm:mb-4">
             Venez tester nos appareils en boutique
           </h2>
           <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
@@ -21,7 +21,7 @@ export const BoutiqueInfo: React.FC = () => {
         </div>
 
         {/* 3-Column Info Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-7">
           
           {/* Card 1: Boutique Cocody */}
           <div className="liquid-glass-card p-6 rounded-2xl flex flex-col justify-between">
@@ -94,7 +94,9 @@ export const BoutiqueInfo: React.FC = () => {
           <div className="liquid-glass-card p-6 rounded-2xl flex flex-col justify-between">
             <div>
               <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-900 dark:text-slate-100 mb-4">
-                <span className="text-base font-extrabold font-['Outfit']">TT</span>
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 3 15.68 6.34 6.34 0 0 0 9.34 22a6.33 6.33 0 0 0 6.33-6.33V9a8.16 8.16 0 0 0 4.92 1.64V7.19a4.85 4.85 0 0 1-1-.5z" />
+                </svg>
               </div>
               <h3 className="text-lg font-bold text-slate-950 dark:text-white font-['Outfit'] mb-2">
                 Rejoignez la Communauté

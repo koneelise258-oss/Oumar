@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
+import { purgeSensitiveClientStorage } from '../utils/security';
 
 export const SUPABASE_PROJECT_ID = 'orjbwpbyiqscbbvaukrz';
 export const DEFAULT_SUPABASE_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co`;
@@ -10,20 +11,21 @@ export const supabaseUrl: string = (envUrl && envUrl.trim() !== '') ? envUrl.tri
 export const supabaseAnonKey: string = (envAnonKey && envAnonKey.trim() !== '' && !envAnonKey.includes('votre_cle')) ? envAnonKey.trim() : '';
 
 export const isSupabaseConfigured = Boolean(
-  supabaseUrl && 
-  supabaseAnonKey && 
+  supabaseUrl &&
+  supabaseAnonKey &&
   supabaseAnonKey.length > 20
 );
 
-// Graceful singleton: if not configured, client is created with empty dummy key to prevent crash,
-// but all operations check isSupabaseConfigured first.
+// Graceful singleton with PKCE auth flow and auto-refresh
 export const supabase: SupabaseClient = createClient(
   supabaseUrl,
   supabaseAnonKey || 'dummy-anon-key-prevent-init-crash',
   {
     auth: {
       persistSession: true,
-      autoRefreshToken: true
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+      flowType: 'pkce'
     }
   }
 );
@@ -60,6 +62,13 @@ export async function testSupabaseHealth(): Promise<SupabaseHealthResult> {
     return result;
   }
 
+  // Exiger un administrateur authentifié pour les diagnostics complets
+  const adminCheck = await checkIsUserAdmin();
+  if (!adminCheck.isAdmin) {
+    result.message = "Accès au diagnostic réservé aux administrateurs authentifiés.";
+    return result;
+  }
+
   try {
     const [prodRes, vidRes, admRes, ordRes] = await Promise.all([
       supabase.from('store_products').select('id', { count: 'exact', head: true }),
@@ -75,7 +84,7 @@ export async function testSupabaseHealth(): Promise<SupabaseHealthResult> {
         result.message = "Connexion établie avec le serveur. Initialisation des rubriques de la boutique requise.";
       } else {
         result.isConnected = false;
-        result.message = `Vérification du catalogue : ${prodRes.error.message}`;
+        result.message = "Vérification du catalogue interrompue par le serveur.";
       }
       return result;
     }
@@ -88,16 +97,16 @@ export async function testSupabaseHealth(): Promise<SupabaseHealthResult> {
     result.ordersCount = ordRes.count ?? 0;
 
     result.message = `Serveur en ligne connecté : ${result.productsCount} modèle(s) au catalogue, ${result.videosCount} vidéo(s) et ${result.adminsCount} accès d'équipe configuré(s).`;
-  } catch (err: any) {
+  } catch {
     result.isConnected = false;
-    result.message = `Connexion au serveur momentanément inaccessible : ${err?.message || 'Veuillez réessayer'}`;
+    result.message = "Connexion au serveur momentanément inaccessible. Veuillez réessayer.";
   }
 
   return result;
 }
 
 // ==============================================================================
-// SUPABASE AUTH & ADMIN AUTHORIZATION (RBAC)
+// SUPABASE AUTH & ADMIN AUTHORIZATION (RBAC) — FAIL-CLOSED & ANTI-ENUMERATION
 // ==============================================================================
 export interface StoreAdminRecord {
   id: string;
@@ -107,79 +116,77 @@ export interface StoreAdminRecord {
   is_active?: boolean;
 }
 
+const GENERIC_AUTH_ERROR = "Identifiants invalides ou accès non autorisé.";
+
 export async function checkIsUserAdmin(expectedUserId?: string): Promise<{
   isAdmin: boolean;
   record?: StoreAdminRecord;
   error?: string;
 }> {
   if (!isSupabaseConfigured) {
-    return { isAdmin: false, error: 'Connexion au serveur non configurée.' };
+    return { isAdmin: false, error: 'Service momentanément indisponible.' };
   }
 
   try {
-    // 1. Obtenir l'utilisateur authentifié réel
+    // 1. Validation JWT côté serveur Supabase (jamais uniquement le cache local)
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
     if (authErr || !user) {
-      return { isAdmin: false, error: 'Session non authentifiée ou expirée.' };
+      return { isAdmin: false, error: 'Session expirée ou non authentifiée.' };
     }
 
     if (expectedUserId && expectedUserId !== user.id) {
-      return { isAdmin: false, error: 'Identifiant utilisateur non correspondant.' };
+      return { isAdmin: false, error: GENERIC_AUTH_ERROR };
     }
 
-    // 2. Vérification par user_id
+    // 2. Vérification stricte par user_id avec projection minimale de colonnes
     const { data: byUserId, error: errUserId } = await supabase
       .from('store_admins')
-      .select('*')
+      .select('id, user_id, email, role, is_active')
       .eq('user_id', user.id)
       .maybeSingle();
 
     if (!errUserId && byUserId) {
-      if (!byUserId.is_active) {
-        return { 
-          isAdmin: false, 
-          error: 'Accès désactivé : Ce compte d\'administration a été suspendu par la direction.' 
-        };
+      if (byUserId.is_active !== true) {
+        return { isAdmin: false, error: GENERIC_AUTH_ERROR };
       }
       return { isAdmin: true, record: byUserId as StoreAdminRecord };
     }
 
-    // 3. Si non trouvé par user_id, vérifier par email pour associer user_id
-    if (user.email) {
+    // 3. Repli par e-mail UNIQUEMENT si l'e-mail est vérifié/confirmé dans Supabase Auth
+    if (user.email && user.email_confirmed_at) {
       const { data: byEmail, error: errEmail } = await supabase
         .from('store_admins')
-        .select('*')
+        .select('id, user_id, email, role, is_active')
         .ilike('email', user.email.trim())
         .maybeSingle();
 
       if (!errEmail && byEmail) {
-        if (!byEmail.is_active) {
-          return { 
-            isAdmin: false, 
-            error: 'Accès désactivé : Ce compte d\'administration a été suspendu par la direction.' 
-          };
+        if (byEmail.is_active !== true) {
+          return { isAdmin: false, error: GENERIC_AUTH_ERROR };
         }
-        // Associer user_id si ce n'était pas encore fait
+        // Associer user_id si manquant (protégé côté serveur par RLS)
         if (!byEmail.user_id) {
           try {
             await supabase
               .from('store_admins')
               .update({ user_id: user.id })
-              .eq('id', byEmail.id);
+              .eq('id', byEmail.id)
+              .is('user_id', null);
           } catch {
-            // Ignorer si les règles de sécurité restreignent la mise à jour directe
+            // Ignorer si RLS restreint la mise à jour directe
           }
         }
         return { isAdmin: true, record: { ...byEmail, user_id: user.id } as StoreAdminRecord };
       }
     }
-  } catch (e: any) {
-    console.warn('Erreur lors de la vérification des droits administrateur:', e?.message);
+  } catch {
+    // Fail-closed strict sur toute erreur réseau ou exception
+    return { isAdmin: false, error: GENERIC_AUTH_ERROR };
   }
 
-  return { 
-    isAdmin: false, 
-    error: 'Accès refusé : Ce compte n’est pas répertorié parmi les collaborateurs autorisés de la boutique OUMAR IPHONE.' 
+  return {
+    isAdmin: false,
+    error: GENERIC_AUTH_ERROR
   };
 }
 
@@ -192,57 +199,61 @@ export async function signInAdminWithPassword(email: string, password: string): 
     return {
       user: null,
       isAdmin: false,
-      error: "La connexion au serveur distant n'est pas encore initialisée. Veuillez contacter l'assistance de la boutique."
+      error: "Service d'authentification momentanément indisponible."
     };
   }
 
   const cleanEmail = email.trim().toLowerCase();
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: cleanEmail,
-    password: password.trim()
-  });
-
-  if (error || !data.user) {
-    const errorMsg = error?.message || '';
-    if (errorMsg.includes('Invalid login credentials')) {
-      return {
-        user: null,
-        isAdmin: false,
-        error: "Adresse e-mail ou mot de passe incorrect. Veuillez vérifier vos identifiants."
-      };
-    }
+  if (!cleanEmail || !password || cleanEmail.length > 254 || password.length > 128) {
     return {
       user: null,
       isAdmin: false,
-      error: errorMsg || "Identifiants de connexion invalides ou compte inactif."
+      error: GENERIC_AUTH_ERROR
     };
   }
 
-  // Vérification stricte des droits administrateur actifs
+  // Ne jamais modifier (trim) le mot de passe saisi par l'utilisateur
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: cleanEmail,
+    password
+  });
+
+  if (error || !data.user) {
+    // Message volontairement uniforme (protection anti-énumération de comptes)
+    return {
+      user: null,
+      isAdmin: false,
+      error: GENERIC_AUTH_ERROR
+    };
+  }
+
+  // Vérification stricte des droits administrateur actifs dans store_admins
   const adminCheck = await checkIsUserAdmin(data.user.id);
-  if (adminCheck.isAdmin) {
+  if (adminCheck.isAdmin && adminCheck.record) {
     return {
       user: data.user,
       isAdmin: true
     };
   }
 
-  // Si non autorisé ou inactif, déconnecter immédiatement la session
-  await supabase.auth.signOut();
+  // Si non autorisé ou inactif, révoquer immédiatement la session et purger le stockage
+  await supabase.auth.signOut().catch(() => {});
+  purgeSensitiveClientStorage();
+
   return {
     user: null,
     isAdmin: false,
-    error: adminCheck.error || `Accès refusé : Le compte "${data.user.email}" n'est pas autorisé pour la gestion de la boutique OUMAR IPHONE.`
+    error: GENERIC_AUTH_ERROR
   };
 }
 
 export async function signOutAdmin(): Promise<void> {
+  purgeSensitiveClientStorage();
   if (isSupabaseConfigured) {
     try {
       await supabase.auth.signOut();
-    } catch (e) {
-      console.warn('Erreur lors de la déconnexion Supabase:', e);
+    } catch {
+      // Ignore signout network errors; local tokens are cleared
     }
   }
 }

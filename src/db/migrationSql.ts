@@ -76,41 +76,45 @@ CREATE TABLE IF NOT EXISTS public.store_videos (
 CREATE INDEX IF NOT EXISTS idx_store_videos_order ON public.store_videos (display_order ASC);
 CREATE INDEX IF NOT EXISTS idx_store_videos_published ON public.store_videos (published);
 
--- 4. TABLE DES PARAMÈTRES BOUTIQUE ABIDJAN (Retrait boutique & WhatsApp normalisé)
+-- 4. TABLE DES PARAMÈTRES BOUTIQUE ABIDJAN (Retrait boutique & WhatsApp normalisé — sans admin_pin)
 CREATE TABLE IF NOT EXISTS public.store_settings (
   id TEXT PRIMARY KEY DEFAULT 'default',
   store_name TEXT NOT NULL DEFAULT 'OUMAR IPHONE',
-  whatsapp_phone TEXT NOT NULL DEFAULT '2250778024285',
+  whatsapp_phone TEXT NOT NULL DEFAULT '2250161443637',
   tagline TEXT DEFAULT 'Boutique Apple d’Excellence à Abidjan',
   city TEXT DEFAULT 'Abidjan, Côte d’Ivoire',
   addresses JSONB DEFAULT '[]'::jsonb,
   opening_hours TEXT DEFAULT 'Lundi au Samedi : 08h30 - 19h30 | Dimanche : Sur rendez-vous',
   warranty_text TEXT,
   delivery_fee INTEGER NOT NULL DEFAULT 0,
-  admin_pin TEXT NOT NULL DEFAULT '2025',
   hero_photo_custom TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Suppression définitive de l'ancienne colonne admin_pin si elle existait
+DO $$ BEGIN
+  ALTER TABLE public.store_settings DROP COLUMN IF EXISTS admin_pin;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
 INSERT INTO public.store_settings (
-  id, store_name, whatsapp_phone, tagline, city, addresses, opening_hours, warranty_text, delivery_fee, admin_pin
+  id, store_name, whatsapp_phone, tagline, city, addresses, opening_hours, warranty_text, delivery_fee
 )
 VALUES (
   'default',
   'OUMAR IPHONE',
-  '2250778024285',
+  '2250161443637',
   'Boutique Apple d’Excellence à Abidjan',
   'Abidjan, Côte d’Ivoire',
   '[
-    {"name": "Boutique OUMAR IPHONE Abidjan", "location": "Abidjan, Côte d’Ivoire (Retrait en boutique)", "phone": "+225 07 78 02 42 85", "hours": "Lun - Sam : 08h30 - 19h30"}
+    {"name": "Boutique OUMAR IPHONE Abidjan", "location": "Abidjan, Côte d’Ivoire (Retrait en boutique)", "phone": "+225 01 61 44 36 37", "hours": "Lun - Sam : 08h30 - 19h30"}
   ]'::jsonb,
   'Lundi au Samedi : 08h30 - 19h30 | Dimanche : Sur rendez-vous',
   'Tous nos iPhone, iPad et MacBook sont vendus avec facture certifiée, numéro IMEI et garantie officielle.',
-  0,
-  '2025'
+  0
 )
 ON CONFLICT (id) DO UPDATE SET
-  whatsapp_phone = '2250778024285',
+  whatsapp_phone = '2250161443637',
   delivery_fee = 0;
 
 -- 5. TABLE DES COMMANDES CLIENTS (Aucune donnée fictive)
@@ -156,16 +160,23 @@ RETURNS BOOLEAN
 LANGUAGE sql
 SECURITY DEFINER
 STABLE
-SET search_path = public, private, pg_temp
+SET search_path = public, private, auth, pg_temp
 AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.store_admins
     WHERE auth.uid() IS NOT NULL
+      AND is_active = true
       AND (
         user_id = auth.uid()
-        OR (user_id IS NULL AND LOWER(email) = LOWER(auth.jwt()->>'email'))
+        OR (
+          user_id IS NULL
+          AND LOWER(email) = LOWER(COALESCE(auth.jwt()->>'email', ''))
+          AND EXISTS (
+            SELECT 1 FROM auth.users u
+            WHERE u.id = auth.uid() AND u.email_confirmed_at IS NOT NULL
+          )
+        )
       )
-      AND is_active = true
   );
 $$;
 
@@ -174,17 +185,24 @@ RETURNS BOOLEAN
 LANGUAGE sql
 SECURITY DEFINER
 STABLE
-SET search_path = public, private, pg_temp
+SET search_path = public, private, auth, pg_temp
 AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.store_admins
     WHERE auth.uid() IS NOT NULL
-      AND (
-        user_id = auth.uid()
-        OR (user_id IS NULL AND LOWER(email) = LOWER(auth.jwt()->>'email'))
-      )
       AND role = 'superadmin'
       AND is_active = true
+      AND (
+        user_id = auth.uid()
+        OR (
+          user_id IS NULL
+          AND LOWER(email) = LOWER(COALESCE(auth.jwt()->>'email', ''))
+          AND EXISTS (
+            SELECT 1 FROM auth.users u
+            WHERE u.id = auth.uid() AND u.email_confirmed_at IS NOT NULL
+          )
+        )
+      )
   );
 $$;
 
@@ -193,6 +211,7 @@ RETURNS BOOLEAN
 LANGUAGE sql
 SECURITY DEFINER
 STABLE
+SET search_path = public, private, pg_temp
 AS $$
   SELECT private.is_store_admin();
 $$;
@@ -202,9 +221,15 @@ RETURNS BOOLEAN
 LANGUAGE sql
 SECURITY DEFINER
 STABLE
+SET search_path = public, private, pg_temp
 AS $$
   SELECT private.is_store_superadmin();
 $$;
+
+REVOKE ALL ON FUNCTION private.is_store_admin() FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.is_store_superadmin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_store_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_store_superadmin() TO authenticated;
 
 -- 8. FONCTION RPC SÉCURISÉE DE CRÉATION DE COMMANDE (TRANSACTION ATOMIQUE)
 CREATE OR REPLACE FUNCTION public.create_store_order(
@@ -495,6 +520,78 @@ DO $$ BEGIN
   CREATE POLICY "Admins can update order items" ON public.store_order_items FOR UPDATE TO authenticated USING (private.is_store_admin()) WITH CHECK (private.is_store_admin());
   DROP POLICY IF EXISTS "Admins can delete order items" ON public.store_order_items;
   CREATE POLICY "Admins can delete order items" ON public.store_order_items FOR DELETE TO authenticated USING (private.is_store_admin());
+
+  -- RLS stricte sur store_product_variants si présente
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'store_product_variants') THEN
+    ALTER TABLE public.store_product_variants ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS "Public can view published variants" ON public.store_product_variants;
+    CREATE POLICY "Public can view published variants" ON public.store_product_variants FOR SELECT USING (published = true OR private.is_store_admin());
+    DROP POLICY IF EXISTS "Admins can manage variants" ON public.store_product_variants;
+    CREATE POLICY "Admins can manage variants" ON public.store_product_variants FOR ALL TO authenticated USING (private.is_store_admin()) WITH CHECK (private.is_store_admin());
+  END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- 11. PROTECTION ANTI-VERROUILLAGE SUPERADMIN & JOURNAL D'AUDIT DE SÉCURITÉ
+CREATE OR REPLACE FUNCTION private.protect_last_superadmin()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, private, pg_temp
+AS $$
+DECLARE
+  v_remaining INT;
+BEGIN
+  IF (TG_OP = 'DELETE' AND OLD.role = 'superadmin' AND OLD.is_active = true)
+     OR (TG_OP = 'UPDATE' AND OLD.role = 'superadmin' AND OLD.is_active = true AND (NEW.role <> 'superadmin' OR NEW.is_active = false)) THEN
+    SELECT COUNT(*) INTO v_remaining FROM public.store_admins WHERE role = 'superadmin' AND is_active = true AND id <> OLD.id;
+    IF v_remaining = 0 THEN
+      RAISE EXCEPTION 'Sécurité : impossible de supprimer ou désactiver le dernier superadministrateur actif.';
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_protect_last_superadmin ON public.store_admins;
+CREATE TRIGGER trg_protect_last_superadmin
+  BEFORE UPDATE OR DELETE ON public.store_admins
+  FOR EACH ROW EXECUTE FUNCTION private.protect_last_superadmin();
+
+CREATE TABLE IF NOT EXISTS public.store_security_audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_user_id UUID DEFAULT auth.uid(),
+  action TEXT NOT NULL,
+  target_table TEXT NOT NULL,
+  target_id TEXT,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.store_security_audit_logs ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Admins can read audit logs" ON public.store_security_audit_logs;
+  CREATE POLICY "Admins can read audit logs" ON public.store_security_audit_logs FOR SELECT TO authenticated USING (private.is_store_admin());
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- 12. SÉCURISATION SUPABASE STORAGE (store-products : blocage SVG, 10 Mo max, écriture admins uniquement)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'store-products') THEN
+    UPDATE storage.buckets
+    SET file_size_limit = 10485760, allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    WHERE id = 'store-products';
+  END IF;
+  DROP POLICY IF EXISTS "Public read store-products" ON storage.objects;
+  CREATE POLICY "Public read store-products" ON storage.objects FOR SELECT USING (bucket_id = 'store-products');
+  DROP POLICY IF EXISTS "Admins upload store-products" ON storage.objects;
+  CREATE POLICY "Admins upload store-products" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'store-products' AND private.is_store_admin());
+  DROP POLICY IF EXISTS "Admins update store-products" ON storage.objects;
+  CREATE POLICY "Admins update store-products" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'store-products' AND private.is_store_admin()) WITH CHECK (bucket_id = 'store-products' AND private.is_store_admin());
+  DROP POLICY IF EXISTS "Admins delete store-products" ON storage.objects;
+  CREATE POLICY "Admins delete store-products" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'store-products' AND private.is_store_admin());
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 `;

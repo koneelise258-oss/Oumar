@@ -215,20 +215,19 @@ export const Catalogue: React.FC<CatalogueProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-7 sm:mb-10 gap-3">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span>DISPONIBLE À ABIDJAN · RETRAIT BOUTIQUE</span>
+            <div className="text-[11px] font-bold tracking-[0.18em] text-slate-500 dark:text-slate-400 uppercase mb-1.5">
+              DISPONIBLE À ABIDJAN · RETRAIT BOUTIQUE
             </div>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-950 dark:text-white font-['Outfit']">
+            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-slate-950 dark:text-white font-['Outfit']">
               Catalogue OUMAR IPHONE
             </h2>
           </div>
-          
+
           <div className="flex items-center gap-3">
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-md hidden lg:block">
-              Appareils soigneusement vérifiés et testés. Retrait direct en boutique à Abidjan.
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-md">
+              {filteredProducts.length} appareil{filteredProducts.length > 1 ? 's' : ''} certifié{filteredProducts.length > 1 ? 's' : ''} et testé{filteredProducts.length > 1 ? 's' : ''} · Retrait direct en boutique à Abidjan.
             </p>
           </div>
         </div>
@@ -312,7 +311,8 @@ export const Catalogue: React.FC<CatalogueProps> = ({
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortOption)}
-                className="w-full sm:w-auto appearance-none pl-3 pr-8 py-2 text-xs font-semibold rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-white cursor-pointer"
+                aria-label="Trier le catalogue"
+                className="w-full sm:w-auto min-h-[42px] appearance-none pl-3 pr-8 py-2 text-xs font-semibold rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-white cursor-pointer"
               >
                 <option value="featured">Mis en avant (Oumar)</option>
                 <option value="price-asc">Prix : Moins cher d'abord</option>
@@ -323,6 +323,39 @@ export const Catalogue: React.FC<CatalogueProps> = ({
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
+          </div>
+
+          {/* Filtres rapides interactifs 1-clic (état & disponibilité) */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-3 mt-3 border-t border-slate-100 dark:border-slate-800/80">
+            <button
+              type="button"
+              onClick={() => setOnlyInStock((v) => !v)}
+              className={`min-h-[36px] px-3 py-1.5 rounded-xl text-[11px] font-semibold whitespace-nowrap border transition-all cursor-pointer active:scale-95 ${
+                onlyInStock
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                  : 'bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              En stock
+            </button>
+
+            {STANDARD_CONDITIONS.map((cond) => {
+              const active = selectedCondition === cond;
+              return (
+                <button
+                  key={cond}
+                  type="button"
+                  onClick={() => setSelectedCondition(active ? 'Tous' : cond)}
+                  className={`min-h-[36px] px-3 py-1.5 rounded-xl text-[11px] font-semibold whitespace-nowrap border transition-all cursor-pointer active:scale-95 ${
+                    active
+                      ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950 border-slate-950 dark:border-white shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {cond}
+                </button>
+              );
+            })}
           </div>
 
           {/* Expandable Filter Drawer */}
@@ -500,7 +533,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                 <div
                   key={`${product.id || 'prod'}-${pIndex}`}
                   onClick={() => onSelectProduct ? onSelectProduct(product) : setActiveModalProduct(product)}
-                  className="bg-white dark:bg-[#0f172a] rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-200 hover:shadow-md active:scale-[0.99] cursor-pointer min-w-0"
+                  className="perf-card bg-white dark:bg-[#0f172a] rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-200 hover:shadow-lg active:scale-[0.99] cursor-pointer min-w-0"
                 >
                   {/* Product Visual Stage avec transition Apple */}
                   <div className="relative aspect-[4/3] bg-gradient-to-b from-slate-50 to-slate-100/70 dark:from-slate-900/80 dark:to-[#0b0f17] p-2.5 sm:p-5 flex items-center justify-center overflow-hidden">
@@ -510,7 +543,8 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       alt={`${product.name} — Finition ${currentColor}`}
                       allImagesToPreload={cardColorImages}
                       fallbackImage={product.image}
-                      className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-300 ease-out select-none"
+                      priority={pIndex < 2}
+                      className="w-full h-full object-contain group-hover:scale-[1.03] transition-transform duration-300 ease-out select-none"
                       containerClassName="w-full h-full relative flex items-center justify-center"
                     />
                   </div>
@@ -611,13 +645,13 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       )}
                     </div>
 
-                    {/* Bottom Card Actions: Cart + WhatsApp */}
+                    {/* Bottom Card Actions: Cart + WhatsApp (Zones tactiles confortables) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2 pt-2.5 sm:pt-4 border-t border-slate-100 dark:border-slate-800/80">
                       {/* Add to cart */}
                       <button
                         type="button"
                         onClick={(e) => handleQuickAdd(e, product)}
-                        className={`w-full py-2 sm:py-2.5 px-2 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                        className={`w-full min-h-[40px] sm:min-h-[42px] py-2 sm:py-2.5 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.97] cursor-pointer min-w-0 ${
                           isAdded
                             ? 'bg-emerald-600 text-white'
                             : 'bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-950 shadow-xs'
@@ -625,13 +659,13 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                       >
                         {isAdded ? (
                           <>
-                            <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                            <span>Ajouté</span>
+                            <Check className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">Ajouté</span>
                           </>
                         ) : (
                           <>
-                            <ShoppingBag className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                            <span>Panier</span>
+                            <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">Panier</span>
                           </>
                         )}
                       </button>
@@ -644,10 +678,10 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full py-2 sm:py-2.5 px-2 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 transition-colors"
+                        className="w-full min-h-[40px] sm:min-h-[42px] py-2 sm:py-2.5 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 transition-colors active:scale-[0.97] min-w-0"
                       >
-                        <MessageCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>WhatsApp</span>
+                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span className="truncate">WhatsApp</span>
                       </a>
                     </div>
                   </div>

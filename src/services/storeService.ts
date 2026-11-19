@@ -5,6 +5,7 @@ import { StoreOrder, OrderStatus, loadOrders, saveOrders } from '../data/orders'
 import { StoreSettings, loadStoreSettings, saveStoreSettings, getHeroCustomPhoto, saveHeroCustomPhoto } from '../data/storeSettings';
 import { loadProducts, saveProducts, DEFAULT_PRODUCTS } from '../data/products';
 import { loadVideos, saveVideos } from '../data/videos';
+import { isSafeMediaUrl, isSafeTikTokUrl, sanitizeText } from '../utils/security';
 
 // ==============================================================================
 // PRODUCT & VARIANT MAPPERS (public.store_products & public.store_product_variants)
@@ -249,14 +250,31 @@ export async function deleteProductVariantRemote(variantId: string): Promise<{ s
 }
 
 export async function upsertProductRemote(product: Product): Promise<{ success: boolean; message?: string }> {
-  if (!product.name || !product.name.trim()) {
+  if (!product.name || !sanitizeText(product.name, 160)) {
     return { success: false, message: 'Le nom du produit est obligatoire.' };
   }
-  if (!product.image || !product.image.trim()) {
-    return { success: false, message: 'L’image du produit est obligatoire.' };
+  if (!product.image || !isSafeMediaUrl(product.image)) {
+    return { success: false, message: 'L’URL de l’image du produit est invalide ou non sécurisée (HTTPS requis).' };
   }
-  if (typeof product.price !== 'number' || isNaN(product.price) || product.price < 0) {
-    return { success: false, message: 'Le prix doit être un nombre positif.' };
+  if (typeof product.price !== 'number' || isNaN(product.price) || product.price < 0 || product.price > 50000000) {
+    return { success: false, message: 'Le prix doit être un nombre positif valide.' };
+  }
+  // Filtrer toute URL d'image non sécurisée dans la galerie ou les couleurs
+  if (Array.isArray(product.gallery)) {
+    product = {
+      ...product,
+      gallery: product.gallery.filter((g) => isSafeMediaUrl(g))
+    };
+  }
+  if (Array.isArray(product.colors)) {
+    product = {
+      ...product,
+      colors: product.colors.map((c) => ({
+        ...c,
+        image: c.image && isSafeMediaUrl(c.image) ? c.image : undefined,
+        gallery: Array.isArray(c.gallery) ? c.gallery.filter((g) => isSafeMediaUrl(g)) : undefined
+      }))
+    };
   }
 
   if (!isSupabaseConfigured) {
@@ -384,8 +402,19 @@ export async function fetchVideosRemote(): Promise<VideoItem[]> {
 }
 
 export async function syncVideosRemote(videos: VideoItem[]): Promise<{ success: boolean; message?: string }> {
+  // Validation stricte de chaque URL vidéo (anti-XSS / anti-injection)
+  const sanitizedVideos = videos.filter((v) => {
+    if (!v || !v.url) return false;
+    const isTikTok = v.type === 'tiktok' || v.url.includes('tiktok.com');
+    return isTikTok ? isSafeTikTokUrl(v.url) : isSafeMediaUrl(v.url);
+  });
+
+  if (sanitizedVideos.length !== videos.length) {
+    return { success: false, message: 'Une ou plusieurs URLs vidéo ne respectent pas les règles de sécurité (HTTPS ou TikTok officiel requis).' };
+  }
+
   if (!isSupabaseConfigured) {
-    saveVideos(videos);
+    saveVideos(sanitizedVideos);
     return { success: true };
   }
 
@@ -448,18 +477,22 @@ export async function fetchStoreSettingsRemote(): Promise<StoreSettings> {
   }
 
   try {
+    // Projection explicite des seules colonnes publiques (exclut toute colonne interne héritée comme admin_pin)
+    const PUBLIC_SETTINGS_COLUMNS =
+      'id, store_name, whatsapp_phone, tagline, city, addresses, opening_hours, warranty_text, delivery_fee, hero_photo_custom, updated_at';
+
     const { data, error } = await supabase
       .from('store_settings')
-      .select('*')
+      .select(PUBLIC_SETTINGS_COLUMNS)
       .eq('id', 'default')
       .maybeSingle();
 
     if (error) {
-      console.warn('Supabase fetchStoreSettings warning, using local cache:', error.message);
       return loadStoreSettings();
     }
 
     if (data) {
+      const existingLocal = loadStoreSettings();
       const mapped: StoreSettings = {
         whatsappPhone: data.whatsapp_phone,
         storeName: data.store_name,
@@ -469,19 +502,21 @@ export async function fetchStoreSettingsRemote(): Promise<StoreSettings> {
         openingHours: data.opening_hours,
         warrantyText: data.warranty_text,
         deliveryFee: data.delivery_fee,
-        heroSettings: data.hero_settings || data.heroSettings || undefined
+        heroSettings: existingLocal.heroSettings
       };
 
-      // Si Supabase contient une photo personnalisée pour le Hero, la synchroniser localement
+      // Synchroniser la photo Hero uniquement si son URL passe la validation stricte anti-XSS
       if (data.hero_photo_custom !== undefined) {
-        saveHeroCustomPhoto(data.hero_photo_custom);
+        if (data.hero_photo_custom === null || isSafeMediaUrl(data.hero_photo_custom)) {
+          saveHeroCustomPhoto(data.hero_photo_custom);
+        }
       }
 
       saveStoreSettings(mapped);
       return mapped;
     }
-  } catch (err) {
-    console.warn('Network error fetching store settings from Supabase:', err);
+  } catch {
+    // Repli silencieux sur le cache local
   }
 
   return loadStoreSettings();

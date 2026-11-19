@@ -1,76 +1,187 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { VideoItem } from '../types';
-import { ExternalLink, Play, Pause, Volume2, VolumeX, RefreshCw, Loader2 } from 'lucide-react';
+import { ExternalLink, Play, Pause, Volume2, VolumeX, RefreshCw, RotateCcw } from 'lucide-react';
+import { extractSafeTikTokId, isSafeMediaUrl, isSafeTikTokUrl } from '../utils/security';
+import { useDevicePerformance } from '../utils/devicePerformance';
 
 interface VideosSectionProps {
   id?: string;
   videos: VideoItem[];
-  onOpenAdmin?: () => void;
 }
 
 /**
- * Extrait proprement l'identifiant numérique unique d'une vidéo TikTok depuis n'importe quel format d'URL,
- * en supprimant tous les paramètres de suivi (query strings) et les ancres hash.
+ * Extrait proprement l'identifiant numérique unique d'une vidéo TikTok après validation stricte du domaine.
  */
 export const extractTikTokVideoId = (rawUrl: string): string | null => {
-  if (!rawUrl || typeof rawUrl !== 'string') return null;
-  const cleanUrl = rawUrl.trim().split('?')[0].split('#')[0];
-  const match = cleanUrl.match(/(?:video|embed(?:\/v2)?|player\/v1)\/(\d+)/i);
-  if (match && match[1]) {
-    return match[1];
-  }
-  if (/^\d+$/.test(cleanUrl)) {
-    return cleanUrl;
-  }
-  return null;
+  return extractSafeTikTokId(rawUrl);
 };
 
 /**
- * Composant individuel pour l'affichage fluide, centré et hautement optimisé d'une vidéo de la grille.
+ * Composant individuel ultra-optimisé pour mobile et desktop :
+ * - Chargement prédictif à l'approche du viewport (ne charge pas les vidéos hors-écran au démarrage)
+ * - Mise en pause automatique dès que la carte sort de l'écran (économie batterie, CPU et bande passante)
+ * - Boucle ininterrompue sans écran noir
+ * - Façade légère 1-clic pour TikTok sur connexions mobiles lentes
  */
-const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
+const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, index }) => {
+  const perf = useDevicePerformance();
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const userPausedRef = useRef<boolean>(false);
 
-  const [isInView, setIsInView] = useState(false);
+  const [isNearView, setIsNearView] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
   const [hasError, setHasError] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
+  const [tikTokKey, setTikTokKey] = useState(0);
+  // Sur mobile avec connexion lente ou faible puissance, façade interactive légère avant de charger l'iframe TikTok
+  const useLightTikTokFacade = perf.isSlowConnection || (perf.isMobile && perf.tier === 'low');
+  const [tikTokActivated, setTikTokActivated] = useState(!useLightTikTokFacade);
 
-  const isTikTok = video.type === 'tiktok' || video.url.includes('tiktok.com');
+  const isTikTok = video.type === 'tiktok' || isSafeTikTokUrl(video.url);
   const tikTokId = isTikTok ? extractTikTokVideoId(video.url) : null;
+  const safeDirectVideoUrl = !isTikTok && isSafeMediaUrl(video.url) ? video.url : undefined;
 
-  // IntersectionObserver à chargement prédictif (rootMargin: 250px)
+  useEffect(() => {
+    if (!useLightTikTokFacade) {
+      setTikTokActivated(true);
+    }
+  }, [useLightTikTokFacade]);
+
+  // 1a. Observer zone élargie pour attacher la source juste avant d'arriver sur la vidéo
   useEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
 
-    const observer = new IntersectionObserver(
+    const preloadObserver = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setIsInView(true);
-            if (!isTikTok && videoRef.current) {
-              // Tente un démarrage automatique muet
-              videoRef.current
-                .play()
-                .then(() => setIsPlaying(true))
-                .catch(() => setIsPlaying(false));
-            }
-          }
-        });
+        if (entries[0]?.isIntersecting) {
+          setIsNearView(true);
+          preloadObserver.disconnect();
+        }
       },
       {
-        rootMargin: '250px 0px',
-        threshold: 0.1
+        rootMargin: perf.isMobile ? '180px 0px' : '320px 0px',
+        threshold: 0.01
       }
     );
 
-    observer.observe(el);
-    return () => observer.disconnect();
+    preloadObserver.observe(el);
+    return () => preloadObserver.disconnect();
+  }, [perf.isMobile]);
+
+  // 1b. Observer visibilité réelle : auto-play à l'entrée, auto-pause immédiat hors-écran
+  useEffect(() => {
+    if (!containerRef.current || isTikTok) return;
+    const el = containerRef.current;
+
+    const playObserver = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        setIsVisible(entry.isIntersecting);
+      },
+      { threshold: 0.25 }
+    );
+
+    playObserver.observe(el);
+    return () => playObserver.disconnect();
   }, [isTikTok]);
+
+  // 2. Pilotage lecture/pause intelligent selon visibilité à l'écran
+  useEffect(() => {
+    if (isTikTok || !videoRef.current) return;
+    const v = videoRef.current;
+
+    if (isVisible && isNearView && !userPausedRef.current) {
+      v.defaultMuted = true;
+      v.muted = isMuted;
+
+      const playPromise = v.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+            setIsBuffering(false);
+          })
+          .catch(() => {
+            v.muted = true;
+            setIsMuted(true);
+            v.play()
+              .then(() => {
+                setIsPlaying(true);
+                setIsBuffering(false);
+              })
+              .catch(() => setIsPlaying(false));
+          });
+      }
+    } else if (!isVisible && !v.paused) {
+      v.pause();
+      setIsPlaying(false);
+    }
+  }, [isVisible, isNearView, isTikTok, isMuted]);
+
+  // 3. Reprise automatique lors du retour sur l'onglet
+  useEffect(() => {
+    if (isTikTok) return;
+    const handleVisibility = () => {
+      if (!videoRef.current) return;
+      if (document.hidden) {
+        videoRef.current.pause();
+      } else if (isVisible && !userPausedRef.current) {
+        videoRef.current.play().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isVisible, isTikTok]);
+
+  // 4. Boucle ininterrompue sans écran noir
+  const handleTimeUpdate = useCallback(() => {
+    if (!videoRef.current) return;
+    const v = videoRef.current;
+    if (v.duration > 0 && v.currentTime >= v.duration - 0.12) {
+      v.currentTime = 0;
+      if (!userPausedRef.current && isVisible) {
+        v.play().catch(() => {});
+      }
+    }
+  }, [isVisible]);
+
+  const handleEnded = useCallback(() => {
+    if (!videoRef.current || userPausedRef.current) return;
+    const v = videoRef.current;
+    v.currentTime = 0;
+    v.play().catch(() => {});
+  }, []);
+
+  // 5. Écoute sécurisée des événements TikTok postMessage
+  useEffect(() => {
+    if (!isTikTok || !tikTokActivated) return;
+    const handleMessage = (e: MessageEvent) => {
+      if (e.origin !== 'https://www.tiktok.com' && e.origin !== 'https://tiktok.com') return;
+      try {
+        const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+        if (
+          data?.type === 'ended' ||
+          (data?.event === 'onPlayerStateChange' && data?.info === 0) ||
+          data?.status === 'ended' ||
+          data?.eventName === 'video_ended'
+        ) {
+          setTikTokKey((k) => k + 1);
+        }
+      } catch {
+        // Ignorer les messages non JSON
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [isTikTok, tikTokActivated]);
 
   // Contrôles de lecture HTML5
   const togglePlay = useCallback((e: React.MouseEvent) => {
@@ -78,41 +189,47 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
     if (!videoRef.current || isTikTok) return;
 
     if (videoRef.current.paused) {
+      userPausedRef.current = false;
       videoRef.current
         .play()
         .then(() => setIsPlaying(true))
         .catch(() => setIsPlaying(false));
     } else {
+      userPausedRef.current = true;
       videoRef.current.pause();
       setIsPlaying(false);
     }
   }, [isTikTok]);
 
-  // Contrôle du son HTML5 (Bascule muet/non muet SANS réinitialiser currentTime ni impacter les autres vidéos)
+  // Contrôle du son HTML5 (sans couper la lecture)
   const toggleMute = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (!videoRef.current || isTikTok) return;
 
     const nextMuted = !videoRef.current.muted;
     videoRef.current.muted = nextMuted;
+    videoRef.current.defaultMuted = nextMuted;
     setIsMuted(nextMuted);
   }, [isTikTok]);
 
-  // Réessai manuel en cas d'erreur de chargement réseau
   const handleRetry = (e: React.MouseEvent) => {
     e.stopPropagation();
     setHasError(false);
     setIsBuffering(true);
+    userPausedRef.current = false;
     if (videoRef.current) {
       videoRef.current.load();
       videoRef.current.play().catch(() => setIsPlaying(false));
     }
   };
 
-  // 1. RENDU DES VIDÉOS TIKTOK (Lecteur officiel compatible player/v1)
-  // NOTE TECHNIQUE SUR TIKTOK : L'API standard du lecteur intégré TikTok (player/v1 iframe)
-  // ne supporte pas de paramètre "loop=1" dans sa query string et isole la lecture dans un sandbox cross-origin.
-  // Les vidéos HTML5 directes ci-dessous bouclent quant à elles de façon native et ininterrompue.
+  const handleReloadTikTok = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTikTokKey((k) => k + 1);
+    setIsBuffering(true);
+  };
+
+  // 1. RENDU DES VIDÉOS TIKTOK
   if (isTikTok) {
     const fallbackUrl = tikTokId
       ? `https://www.tiktok.com/@oumar_iphone.0/video/${tikTokId}`
@@ -121,83 +238,125 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
     return (
       <div
         ref={containerRef}
-        className="relative w-full aspect-[9/16] rounded-2xl sm:rounded-[28px] overflow-hidden bg-[#0a0f1d] shadow-lg border-0 outline-none flex items-center justify-center transition-transform duration-300 hover:scale-[1.015] select-none"
+        className="relative w-full aspect-[9/16] rounded-2xl sm:rounded-[28px] overflow-hidden bg-[#0a0f1d] shadow-md sm:shadow-lg border border-slate-200/60 dark:border-slate-800/80 flex items-center justify-center transition-transform duration-300 md:hover:scale-[1.015] select-none group"
       >
-        {/* Squelette de chargement discret pendant l'initialisation */}
-        {!isLoaded && !hasError && (
-          <div className="absolute inset-0 bg-slate-900/90 flex items-center justify-center z-10 animate-pulse">
-            <Loader2 className="w-6 h-6 text-amber-500 animate-spin opacity-80" />
-          </div>
-        )}
+        {isNearView && tikTokActivated && tikTokId && !hasError ? (
+          <>
+            {isBuffering && (
+              <div className="absolute inset-0 shimmer-surface z-10 pointer-events-none" />
+            )}
 
-        {isInView && tikTokId && !hasError ? (
-          <iframe
-            src={`https://www.tiktok.com/player/v1/${tikTokId}?autoplay=1`}
-            title={video.title || "Vidéo TikTok OUMAR IPHONE"}
-            className="w-full h-full border-0 outline-none rounded-2xl sm:rounded-[28px] block relative z-0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            loading="lazy"
-            onLoad={() => {
-              setIsLoaded(true);
-              setIsBuffering(false);
-            }}
-            onError={() => {
-              setHasError(true);
-              setIsBuffering(false);
-            }}
-          />
+            <iframe
+              key={`tiktok-${tikTokId}-${tikTokKey}`}
+              src={`https://www.tiktok.com/player/v1/${tikTokId}?autoplay=1`}
+              title={video.title || `Vidéo TikTok OUMAR IPHONE ${index + 1}`}
+              className={`w-full h-full border-0 outline-none rounded-2xl sm:rounded-[28px] block relative z-0 transition-opacity duration-300 ${
+                isLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+              loading="lazy"
+              onLoad={() => {
+                setIsLoaded(true);
+                setIsBuffering(false);
+              }}
+              onError={() => {
+                setHasError(true);
+                setIsBuffering(false);
+              }}
+            />
+
+            <button
+              type="button"
+              onClick={handleReloadTikTok}
+              className="absolute top-2.5 right-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white/90 hover:text-white backdrop-blur-sm transition-all active:scale-95 cursor-pointer shadow-md border border-white/10 z-30 opacity-85 group-hover:opacity-100"
+              title="Rejouer la vidéo"
+              aria-label="Rejouer la vidéo"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </>
         ) : (
-          /* Carte d'attente / Repli élégant TikTok */
+          /* Façade rapide 1-clic (économise les données mobiles) ou repli TikTok */
           <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-gradient-to-b from-slate-900 via-slate-950 to-black text-white space-y-3">
-            <div className="w-11 h-11 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shadow-md">
-              <Play className="w-5 h-5 ml-0.5 fill-current" />
-            </div>
-            <div className="space-y-0.5 max-w-[85%]">
+            {tikTokId && !hasError && !tikTokActivated ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBuffering(true);
+                  setTikTokActivated(true);
+                }}
+                className="w-14 h-14 rounded-full bg-white text-slate-950 flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-transform cursor-pointer"
+                aria-label={`Lire la vidéo ${video.title || 'OUMAR IPHONE'}`}
+              >
+                <Play className="w-6 h-6 ml-0.5 fill-current" />
+              </button>
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shadow-md">
+                <Play className="w-5 h-5 ml-0.5 fill-current" />
+              </div>
+            )}
+
+            <div className="space-y-0.5 max-w-[90%]">
               <span className="text-xs font-bold font-['Outfit'] block text-white truncate">
-                {video.title || "Vidéo TikTok OUMAR"}
+                {video.title || 'Déballage Boutique OUMAR'}
               </span>
               <span className="text-[11px] text-slate-400 block">
                 @oumar_iphone.0
               </span>
             </div>
-            <a
-              href={fallbackUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md transition-all active:scale-95 cursor-pointer"
-            >
-              <span>Voir sur TikTok</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
+
+            {tikTokId && !hasError && !tikTokActivated ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBuffering(true);
+                  setTikTokActivated(true);
+                }}
+                className="min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/15 transition-colors cursor-pointer"
+              >
+                Lancer la vidéo
+              </button>
+            ) : (
+              <a
+                href={fallbackUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                <span>Voir sur TikTok</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
           </div>
         )}
       </div>
     );
   }
 
-  // 2. RENDU DES VIDÉOS DIRECTES (HTML5 MP4 / WebM) — LECTURE EN BOUCLE CONTINUE
+  // 2. RENDU DES VIDÉOS DIRECTES (HTML5 MP4 / WebM) — RAPIDE, AUTO-PAUSE HORS-ÉCRAN & BOUCLE CONTINUE
+  const preloadMode = perf.isMobile || perf.isSlowConnection || perf.tier === 'low' ? 'metadata' : 'auto';
+
   return (
     <div
       ref={containerRef}
       onClick={togglePlay}
-      className="relative w-full aspect-[9/16] rounded-2xl sm:rounded-[28px] overflow-hidden bg-[#090d16] shadow-lg border-0 outline-none cursor-pointer select-none transition-transform duration-300 hover:scale-[1.015] group"
+      className="relative w-full aspect-[9/16] rounded-2xl sm:rounded-[28px] overflow-hidden bg-[#090d16] shadow-md sm:shadow-lg border border-slate-200/60 dark:border-slate-800/80 cursor-pointer select-none transition-transform duration-300 md:hover:scale-[1.015] group"
     >
-      {/* Squelette de chargement en arrière-plan */}
-      {isBuffering && !hasError && (
-        <div className="absolute inset-0 bg-slate-900/80 flex items-center justify-center z-10 backdrop-blur-[2px] transition-opacity">
-          <Loader2 className="w-6 h-6 text-amber-500 animate-spin opacity-90" />
-        </div>
+      {/* Squelette Shimmer fluide avant la première image vidéo */}
+      {(!isLoaded || isBuffering) && !hasError && (
+        <div className="absolute inset-0 shimmer-surface z-10 pointer-events-none transition-opacity duration-300" />
       )}
 
-      {/* Message d'erreur de lecture sécurisé avec bouton de réessai */}
+      {/* Repli propre en cas d'erreur réseau */}
       {hasError ? (
-        <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-slate-900 text-white space-y-2">
+        <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-slate-900 text-white space-y-2.5">
           <p className="text-xs text-slate-300">Vidéo momentanément indisponible.</p>
           <button
             type="button"
             onClick={handleRetry}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition-colors cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Réessayer</span>
@@ -206,29 +365,33 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
       ) : (
         <video
           ref={videoRef}
-          src={isInView ? (video.url || undefined) : undefined}
-          autoPlay
-          muted
+          src={isNearView ? safeDirectVideoUrl : undefined}
+          muted={isMuted}
           loop
           playsInline
-          preload="metadata"
+          webkit-playsinline="true"
+          preload={isNearView ? preloadMode : 'none'}
+          disablePictureInPicture
           onLoadedData={() => {
             setIsLoaded(true);
             setIsBuffering(false);
           }}
+          onCanPlay={() => {
+            setIsLoaded(true);
+            setIsBuffering(false);
+            if (isVisible && !userPausedRef.current && videoRef.current) {
+              videoRef.current.play().catch(() => {});
+            }
+          }}
           onWaiting={() => setIsBuffering(true)}
           onPlaying={() => {
+            setIsLoaded(true);
             setIsBuffering(false);
             setIsPlaying(true);
           }}
           onPause={() => setIsPlaying(false)}
-          onEnded={() => {
-            // Sécurité boucle continue ininterrompue
-            if (videoRef.current) {
-              videoRef.current.currentTime = 0;
-              videoRef.current.play().catch(() => {});
-            }
-          }}
+          onTimeUpdate={handleTimeUpdate}
+          onEnded={handleEnded}
           onError={() => {
             setHasError(true);
             setIsBuffering(false);
@@ -236,44 +399,46 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
           onVolumeChange={() => {
             if (videoRef.current) setIsMuted(videoRef.current.muted);
           }}
-          className="w-full h-full object-cover rounded-2xl sm:rounded-[28px] block border-0 outline-none"
+          className={`w-full h-full object-cover rounded-2xl sm:rounded-[28px] block border-0 outline-none transition-opacity duration-300 ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
         />
       )}
 
-      {/* Overlay indicateur pause quand la vidéo est suspendue */}
-      {!isPlaying && !hasError && !isBuffering && (
-        <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px] flex items-center justify-center transition-opacity z-20">
-          <div className="w-12 h-12 rounded-full bg-white/90 text-slate-950 flex items-center justify-center shadow-xl">
-            <Play className="w-6 h-6 ml-1 fill-current" />
+      {/* Overlay discret quand mis en pause manuellement */}
+      {!isPlaying && !hasError && isLoaded && !isBuffering && (
+        <div className="absolute inset-0 bg-black/30 flex items-center justify-center transition-opacity z-20">
+          <div className="w-12 h-12 rounded-full bg-white/95 text-slate-950 flex items-center justify-center shadow-xl">
+            <Play className="w-5 h-5 ml-0.5 fill-current" />
           </div>
         </div>
       )}
 
-      {/* Bouton de contrôle du Son (Active/Désactive le son SANS réinitialiser le temps) */}
+      {/* Contrôle du son (Zone tactile 44x44px) */}
       {!hasError && (
         <button
           type="button"
           onClick={toggleMute}
-          className="absolute top-3 right-3 p-2.5 rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md transition-all active:scale-90 cursor-pointer shadow-md border border-white/10 z-30"
-          title={isMuted ? "Activer le son" : "Couper le son"}
-          aria-label={isMuted ? "Activer le son" : "Couper le son"}
+          className="absolute top-2.5 right-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-sm transition-all active:scale-90 cursor-pointer shadow-md border border-white/10 z-30"
+          title={isMuted ? 'Activer le son' : 'Couper le son'}
+          aria-label={isMuted ? 'Activer le son' : 'Couper le son'}
         >
           {isMuted ? (
             <VolumeX className="w-4 h-4 text-rose-400" />
           ) : (
-            <Volume2 className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <Volume2 className="w-4 h-4 text-emerald-400" />
           )}
         </button>
       )}
 
-      {/* Bouton discret de contrôle Play/Pause en bas à gauche */}
+      {/* Contrôle Play / Pause (Zone tactile 44x44px) */}
       {!hasError && (
         <button
           type="button"
           onClick={togglePlay}
-          className="absolute bottom-3 left-3 p-2.5 rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md transition-all active:scale-90 cursor-pointer opacity-80 group-hover:opacity-100 shadow-md border border-white/10 z-30"
-          title={isPlaying ? "Mettre en pause" : "Lire"}
-          aria-label={isPlaying ? "Mettre en pause" : "Lire"}
+          className="absolute bottom-2.5 left-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-sm transition-all active:scale-90 cursor-pointer opacity-85 group-hover:opacity-100 shadow-md border border-white/10 z-30"
+          title={isPlaying ? 'Mettre en pause' : 'Lire'}
+          aria-label={isPlaying ? 'Mettre en pause' : 'Lire'}
         >
           {isPlaying ? (
             <Pause className="w-4 h-4 text-white" />
@@ -287,7 +452,7 @@ const VideoWallItem: React.FC<{ video: VideoItem }> = ({ video }) => {
 };
 
 /**
- * Mur de vidéos immersif parfaitement centré, sans texte, sans bordure et à chargement ultrarapide.
+ * Mur de vidéos immersif et ultra-rapide, structuré avec en-tête éditorial épuré.
  */
 export const VideosSection: React.FC<VideosSectionProps> = ({
   id = 'videos',
@@ -298,15 +463,37 @@ export const VideosSection: React.FC<VideosSectionProps> = ({
   if (publishedVideos.length === 0) return null;
 
   return (
-    <section 
-      id={id} 
-      className="w-full py-8 sm:py-16 px-4 sm:px-6 lg:px-8 scroll-mt-20 relative z-10 overflow-hidden flex flex-col items-center justify-center"
+    <section
+      id={id}
+      className="perf-section w-full py-10 sm:py-16 px-4 sm:px-6 lg:px-8 scroll-mt-20 relative z-10 overflow-hidden"
     >
-      {/* Conteneur de centrage parfait équilibré à gauche et à droite */}
-      <div className="w-full max-w-7xl mx-auto flex justify-center items-center">
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 lg:gap-7 w-full justify-center justify-items-center">
-          {publishedVideos.map((video) => (
-            <VideoWallItem key={video.id} video={video} />
+      <div className="w-full max-w-7xl mx-auto">
+        {/* En-tête de section propre et équilibré */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6 sm:mb-9">
+          <div>
+            <div className="text-[11px] font-bold tracking-[0.18em] uppercase text-slate-500 dark:text-slate-400 mb-1.5">
+              EN DIRECT DE LA BOUTIQUE · ABIDJAN
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-950 dark:text-white font-['Outfit']">
+              Nos Vidéos & Déballages
+            </h2>
+          </div>
+
+          <a
+            href="https://www.tiktok.com/@oumar_iphone.0"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white transition-colors self-start sm:self-auto"
+          >
+            <span>Suivre @oumar_iphone.0</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+
+        {/* Grille adaptative 2 colonnes mobile -> 4 colonnes desktop */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 lg:gap-6 w-full justify-items-center">
+          {publishedVideos.map((video, idx) => (
+            <VideoWallItem key={video.id} video={video} index={idx} />
           ))}
         </div>
       </div>

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { getWhatsAppUrl } from '../data/storeSettings';
 import { formatProductPrice, normalizeConditionName } from '../utils/pricingUtils';
+import { sanitizeText } from '../utils/security';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -108,7 +109,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     onClose();
   };
 
-  const whatsappInquiryMessage = `Bonjour OUMAR IPHONE, je recherche le modèle "${query || 'un smartphone spécifique'}" sur votre boutique. Pouvez-vous m'indiquer la disponibilité et le tarif à Abidjan ? Merci !`;
+  const safeQueryForWhatsApp = sanitizeText(query, 100);
+  const whatsappInquiryMessage = `Bonjour OUMAR IPHONE, je recherche le modèle "${safeQueryForWhatsApp || 'un smartphone spécifique'}" sur votre boutique. Pouvez-vous m'indiquer la disponibilité et le tarif à Abidjan ? Merci !`;
 
   return (
     <div 
@@ -135,6 +137,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           <input
             ref={inputRef}
             type="text"
+            maxLength={120}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher un iPhone 16 Pro, 256 Go, MacBook, Titane..."

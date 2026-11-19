@@ -21,7 +21,6 @@ interface HeaderProps {
   activeSection?: string;
   onNavigateSection?: (sectionId: string) => void;
   onOpenSearch: () => void;
-  onOpenAdmin?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
@@ -55,31 +54,32 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-50 bg-[#fafbfc]/90 dark:bg-[#0b0f17]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3 sm:gap-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4 lg:gap-3 xl:gap-6 min-w-0">
         
         {/* Zone 1: Brand Wordmark */}
         <a
           href="/"
           onClick={(e) => handleNavClick(e, 'home')}
-          className="text-lg font-bold tracking-tight text-slate-900 dark:text-white whitespace-nowrap shrink-0 flex items-center gap-2 group cursor-pointer"
+          className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white whitespace-nowrap shrink-0 flex items-center gap-1.5 sm:gap-2 group cursor-pointer"
         >
           <span className="font-extrabold tracking-wider uppercase text-slate-950 dark:text-white font-['Outfit'] transition-transform group-hover:scale-105 duration-200">
             OUMAR IPHONE
           </span>
-          <span className="text-[11px] font-medium tracking-widest text-slate-400 dark:text-slate-500 uppercase hidden sm:inline">
+          <span className="text-[11px] font-medium tracking-widest text-slate-400 dark:text-slate-500 uppercase hidden 2xl:inline">
             · Abidjan
           </span>
         </a>
 
         {/* Zone 2: Desktop Navigation Links (Strict order: Accueil, Vidéos, Catalogue, Garantie, TikTok) */}
-        <nav className="hidden lg:flex items-center gap-1 xl:gap-2 text-sm font-medium">
+        {/* Intelligently scaled for 1024px, 1280px, 1366px, 1440px and 1920px at 100% zoom */}
+        <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1.5 2xl:gap-2 text-xs xl:text-sm font-medium">
           {/* 1. Accueil */}
           <a
             href="/"
             onClick={(e) => handleNavClick(e, 'home')}
-            className={`px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
+            className={`px-2.5 xl:px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
               activeSection === 'home'
-                ? 'font-bold text-slate-950 dark:text-white bg-slate-200/70 dark:bg-slate-800 shadow-xs scale-105'
+                ? 'font-bold text-slate-950 dark:text-white bg-slate-200/70 dark:bg-slate-800 shadow-xs scale-102'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50'
             }`}
           >
@@ -90,23 +90,22 @@ export const Header: React.FC<HeaderProps> = ({
           <a
             href="#videos"
             onClick={(e) => handleNavClick(e, 'videos')}
-            className={`px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap flex items-center gap-1.5 ${
+            className={`px-2.5 xl:px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
               activeSection === 'videos'
-                ? 'font-bold text-slate-950 dark:text-white bg-slate-200/70 dark:bg-slate-800 shadow-xs scale-105'
+                ? 'font-bold text-slate-950 dark:text-white bg-slate-200/70 dark:bg-slate-800 shadow-xs'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50'
             }`}
           >
-            <span>Vidéos</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Vidéos
           </a>
 
           {/* 3. Catalogue */}
           <a
             href="#catalogue"
             onClick={(e) => handleNavClick(e, 'catalogue')}
-            className={`px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
+            className={`px-2.5 xl:px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
               activeSection === 'catalogue'
-                ? 'font-bold text-slate-950 dark:text-white bg-slate-200/70 dark:bg-slate-800 shadow-xs scale-105'
+                ? 'font-bold text-slate-950 dark:text-white bg-slate-200/70 dark:bg-slate-800 shadow-xs scale-102'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50'
             }`}
           >
@@ -117,13 +116,14 @@ export const Header: React.FC<HeaderProps> = ({
           <a
             href="#garantie"
             onClick={(e) => handleNavClick(e, 'garantie')}
-            className={`px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
+            className={`px-2.5 xl:px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
               activeSection === 'garantie'
-                ? 'font-bold text-slate-950 dark:text-white bg-slate-200/70 dark:bg-slate-800 shadow-xs scale-105'
+                ? 'font-bold text-slate-950 dark:text-white bg-slate-200/70 dark:bg-slate-800 shadow-xs scale-102'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50'
             }`}
           >
-            Garantie & SAV
+            <span>Garantie</span>
+            <span className="hidden xl:inline"> & SAV</span>
           </a>
 
           {/* 5. TikTok @oumar_iphone.0 */}
@@ -131,26 +131,29 @@ export const Header: React.FC<HeaderProps> = ({
             href="https://www.tiktok.com/@oumar_iphone.0"
             target="_blank"
             rel="noopener noreferrer"
-            className="px-3.5 py-1.5 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all duration-200 whitespace-nowrap"
+            className="px-2.5 xl:px-3.5 py-1.5 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all duration-200 whitespace-nowrap"
           >
-            TikTok @oumar_iphone.0
+            <span>TikTok</span>
+            <span className="hidden 2xl:inline"> @oumar_iphone.0</span>
           </a>
         </nav>
 
-        {/* Zone 3: Interactive Controls */}
-        {/* Desktop Controls */}
-        <div className="hidden lg:flex items-center gap-2 shrink-0">
+        {/* Zone 3: Interactive Controls (Desktop) */}
+        <div className="hidden lg:flex items-center gap-1.5 xl:gap-2 shrink-0">
           {/* Global Search Button */}
           <button
             type="button"
             onClick={onOpenSearch}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 text-xs font-medium transition-all duration-200 cursor-pointer border border-slate-200/60 dark:border-slate-700/60 shadow-xs hover:scale-105"
+            className="flex items-center gap-1.5 xl:gap-2 px-2.5 xl:px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 text-xs font-medium transition-all duration-200 cursor-pointer border border-slate-200/60 dark:border-slate-700/60 shadow-xs hover:scale-105"
             title="Rechercher sur tout le site (Ctrl+K)"
             aria-label="Rechercher sur tout le site"
           >
-            <Search className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-            <span className="text-slate-400 dark:text-slate-400">Rechercher...</span>
-            <kbd className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md">
+            <Search className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-slate-600 dark:text-slate-300 shrink-0" />
+            <span className="text-slate-400 dark:text-slate-400">
+              <span className="xl:inline hidden">Rechercher...</span>
+              <span className="xl:hidden inline">Recherche</span>
+            </span>
+            <kbd className="hidden 2xl:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md">
               ⌘K
             </kbd>
           </button>
@@ -160,76 +163,94 @@ export const Header: React.FC<HeaderProps> = ({
             href={WHATSAPP_URL("Bonjour OUMAR IPHONE, je souhaite des renseignements sur vos disponibilités à Abidjan.")}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 transition-all duration-200 hover:scale-105"
+            className="inline-flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 transition-all duration-200 hover:scale-105 whitespace-nowrap"
           >
-            <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span className="xl:inline">WhatsApp Direct</span>
+            <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>WhatsApp</span>
+            <span className="hidden xl:inline"> Direct</span>
           </a>
 
           {/* Theme Toggle Button */}
           <button
             onClick={toggleTheme}
-            className="p-2 text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/70 rounded-full transition-all duration-200 shrink-0 cursor-pointer hover:scale-110"
+            className="p-1.5 xl:p-2 text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/70 rounded-full transition-all duration-200 shrink-0 cursor-pointer hover:scale-110"
             aria-label={isDark ? 'Passer en mode clair' : 'Passer en mode sombre'}
             title={isDark ? 'Mode clair' : 'Mode sombre'}
           >
             {isDark ? (
-              <Sun className="w-5 h-5 text-amber-400 transition-transform hover:rotate-45" />
+              <Sun className="w-4 h-4 xl:w-5 xl:h-5 text-amber-400 transition-transform hover:rotate-45" />
             ) : (
-              <Moon className="w-5 h-5 text-slate-700 transition-transform hover:-rotate-12" />
+              <Moon className="w-4 h-4 xl:w-5 xl:h-5 text-slate-700 transition-transform hover:-rotate-12" />
             )}
           </button>
 
           {/* Cart Button */}
           <button
             onClick={onOpenCart}
-            className="relative p-2 text-slate-700 dark:text-slate-200 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/70 rounded-full transition-all duration-200 shrink-0 cursor-pointer hover:scale-110"
+            className="relative p-1.5 xl:p-2 text-slate-700 dark:text-slate-200 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/70 rounded-full transition-all duration-200 shrink-0 cursor-pointer hover:scale-105"
             aria-label="Voir le panier"
           >
-            <ShoppingBag className="w-5 h-5" />
+            <ShoppingBag className="w-4 h-4 xl:w-5 xl:h-5" />
             {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-slate-900 dark:bg-white text-[10px] font-bold text-white dark:text-slate-950 tabular-nums animate-bounce">
+              <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-slate-900 dark:bg-white text-[10px] font-bold text-white dark:text-slate-950 tabular-nums shadow-xs">
                 {cartCount}
               </span>
             )}
           </button>
         </div>
 
-        {/* Mobile Header Controls: ONLY Search Loupe & Hamburger Menu (as requested) */}
-        <div className="flex lg:hidden items-center gap-1.5 shrink-0">
-          {/* Cart badge on mobile header for convenience */}
-          <button
-            onClick={onOpenCart}
-            className="relative p-2 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/70 rounded-full transition-colors cursor-pointer"
-            aria-label="Panier"
-          >
-            <ShoppingBag className="w-5 h-5" />
-            {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-slate-900 dark:bg-white text-[10px] font-bold text-white dark:text-slate-950 tabular-nums">
-                {cartCount}
-              </span>
-            )}
-          </button>
-
-          {/* Search Loupe Button */}
+        {/* Mobile & Tablet Header Controls (< 1024px) — Zones tactiles >= 44px */}
+        <div className="flex lg:hidden items-center gap-0.5 sm:gap-1 shrink-0">
+          {/* Search Button */}
           <button
             type="button"
             onClick={onOpenSearch}
-            className="p-2 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/70 rounded-full transition-colors cursor-pointer"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/70 rounded-full transition-colors active:scale-95 cursor-pointer"
             aria-label="Rechercher"
             title="Rechercher"
           >
             <Search className="w-5 h-5" />
           </button>
 
-          {/* Hamburger Menu (Les trois barres) containing EVERYTHING from navbar */}
+          {/* Theme Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/70 rounded-full transition-colors active:scale-95 cursor-pointer"
+            aria-label={isDark ? 'Passer en mode clair' : 'Passer en mode sombre'}
+            title={isDark ? 'Mode clair' : 'Mode sombre'}
+          >
+            {isDark ? (
+              <Sun className="w-5 h-5 text-amber-400" />
+            ) : (
+              <Moon className="w-5 h-5 text-slate-700" />
+            )}
+          </button>
+
+          {/* Cart Button */}
+          <button
+            type="button"
+            onClick={onOpenCart}
+            className="relative min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/70 rounded-full transition-colors active:scale-95 cursor-pointer"
+            aria-label="Panier"
+          >
+            <ShoppingBag className="w-5 h-5" />
+            {cartCount > 0 && (
+              <span className="absolute top-1 right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-slate-900 dark:bg-white text-[10px] font-bold text-white dark:text-slate-950 tabular-nums">
+                {cartCount}
+              </span>
+            )}
+          </button>
+
+          {/* Hamburger Menu Toggle */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/70 rounded-full transition-colors cursor-pointer"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/70 rounded-full transition-colors active:scale-95 cursor-pointer"
             aria-label="Menu de navigation"
+            aria-expanded={mobileMenuOpen}
           >
-            {mobileMenuOpen ? <X className="w-6 h-6 animate-spin" /> : <Menu className="w-6 h-6" />}
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
 
@@ -272,17 +293,14 @@ export const Header: React.FC<HeaderProps> = ({
             <a
               href="#videos"
               onClick={(e) => handleNavClick(e, 'videos')}
-              className={`flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-semibold transition-colors ${
+              className={`flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-semibold transition-colors ${
                 activeSection === 'videos'
                   ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-sm'
                   : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <Video className="w-4 h-4" />
-                <span>Vidéos de présentation</span>
-              </div>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <Video className="w-4 h-4" />
+              <span>Vidéos de présentation</span>
             </a>
 
             {/* 3. Catalogue */}

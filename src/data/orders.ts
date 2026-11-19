@@ -28,33 +28,33 @@ export interface StoreOrder {
 
 export const ORDERS_STORAGE_KEY = 'oumar_store_orders';
 
-// Aucune donnée fictive ou commande commerciale inventée : le tableau démarre strictement vide
+// Aucune donnée fictive ou commande commerciale inventée : le tableau démarre strictement vide.
+// Sécurité vie privée (PII) : les commandes contenant noms & téléphones clients ne sont JAMAIS
+// persistées dans localStorage public — elles restent exclusivement en mémoire pendant la session admin.
 export const INITIAL_ORDERS: StoreOrder[] = [];
 
-export function loadOrders(): StoreOrder[] {
-  if (typeof window === 'undefined') return INITIAL_ORDERS;
+let memoryOrdersCache: StoreOrder[] = [];
+
+function clearLegacyOrdersStorage(): void {
+  if (typeof window === 'undefined') return;
   try {
-    const raw = localStorage.getItem(ORDERS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.sort((a, b) => b.createdAt - a.createdAt);
-      }
-    }
-  } catch (err) {
-    console.error('Error loading orders', err);
+    localStorage.removeItem(ORDERS_STORAGE_KEY);
+  } catch {
+    // Ignore storage access errors
   }
-  return INITIAL_ORDERS;
+}
+
+export function loadOrders(): StoreOrder[] {
+  clearLegacyOrdersStorage();
+  return [...memoryOrdersCache].sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export function saveOrders(orders: StoreOrder[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const sorted = [...orders].sort((a, b) => b.createdAt - a.createdAt);
-    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(sorted));
+  clearLegacyOrdersStorage();
+  const sorted = [...orders].sort((a, b) => b.createdAt - a.createdAt);
+  memoryOrdersCache = sorted;
+  if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('oumar_orders_updated', { detail: sorted }));
-  } catch (err) {
-    console.error('Error saving orders', err);
   }
 }
 
@@ -88,8 +88,9 @@ export function deleteOrder(orderId: string): void {
 }
 
 export function resetOrders(): StoreOrder[] {
+  memoryOrdersCache = [];
+  clearLegacyOrdersStorage();
   if (typeof window !== 'undefined') {
-    localStorage.removeItem(ORDERS_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent('oumar_orders_updated', { detail: INITIAL_ORDERS }));
   }
   return INITIAL_ORDERS;

@@ -250,7 +250,7 @@ export const LiquidGlassSurface: React.FC<LiquidGlassSurfaceProps> = ({
         ref={containerRef as any}
         href={href}
         target={target}
-        rel={rel}
+        rel={target === '_blank' ? (rel?.includes('noopener') ? rel : `${rel ? `${rel} ` : ''}noopener noreferrer`) : rel}
         onClick={onClick}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

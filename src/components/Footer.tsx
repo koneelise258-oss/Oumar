@@ -1,11 +1,37 @@
-import React from 'react';
-import { Lock, ShieldCheck } from 'lucide-react';
+import React, { useRef } from 'react';
 
 interface FooterProps {
-  onOpenAdmin?: () => void;
+  onSecretAccess?: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onOpenAdmin }) => {
+export const Footer: React.FC<FooterProps> = ({ onSecretAccess }) => {
+  // Geste furtif invisible : 7 clics/taps rapides (< 3 secondes) sur le texte du copyright
+  // Aucun curseur spécial, aucun titre, aucun indice visuel ou sémantique pour les visiteurs.
+  const tapCountRef = useRef(0);
+  const tapTimerRef = useRef<number | null>(null);
+
+  const handleBrandTap = () => {
+    if (!onSecretAccess) return;
+
+    tapCountRef.current += 1;
+
+    if (tapTimerRef.current !== null) {
+      window.clearTimeout(tapTimerRef.current);
+    }
+
+    if (tapCountRef.current >= 7) {
+      tapCountRef.current = 0;
+      tapTimerRef.current = null;
+      onSecretAccess();
+      return;
+    }
+
+    tapTimerRef.current = window.setTimeout(() => {
+      tapCountRef.current = 0;
+      tapTimerRef.current = null;
+    }, 3000);
+  };
+
   return (
     <footer className="bg-slate-950 text-slate-400 py-12 border-t border-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -28,25 +54,12 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin }) => {
         </div>
 
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <div>
+          <div className="select-none" onClick={handleBrandTap}>
             &copy; {new Date().getFullYear()} OUMAR IPHONE SARL. Tous droits réservés. Abidjan, Côte d'Ivoire.
           </div>
-          
+
           <div className="flex flex-wrap items-center gap-4 text-slate-400">
             <span>Appareils originaux testés & certifiés en boutique OUMAR IPHONE</span>
-
-            {/* Discreet Admin Portal Access for Boutique Owner */}
-            {onOpenAdmin && (
-              <button
-                type="button"
-                onClick={onOpenAdmin}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-slate-300 hover:bg-slate-900 transition-colors cursor-pointer"
-                title="Accès sécurisé réservé à la direction"
-              >
-                <Lock className="w-3 h-3 text-slate-500" />
-                <span>Espace Administrateur</span>
-              </button>
-            )}
           </div>
         </div>
       </div>

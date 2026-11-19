@@ -1,3 +1,5 @@
+import { isSafeMediaUrl, purgeSensitiveClientStorage } from '../utils/security';
+
 export interface HeroSettings {
   kickerBrand: string;
   kickerLocation: string;
@@ -166,8 +168,7 @@ export function setAdminAuthenticated(auth: boolean, email?: string): void {
         sessionStorage.setItem(ADMIN_EMAIL_STORAGE_KEY, email);
       }
     } else {
-      sessionStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
-      sessionStorage.removeItem(ADMIN_EMAIL_STORAGE_KEY);
+      purgeSensitiveClientStorage();
     }
     window.dispatchEvent(new CustomEvent('oumar_admin_auth_changed', { detail: auth }));
   } catch {
@@ -180,7 +181,15 @@ export const HERO_PHOTO_STORAGE_KEY = 'oumar_photo_custom';
 export function getHeroCustomPhoto(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    return localStorage.getItem(HERO_PHOTO_STORAGE_KEY);
+    const stored = localStorage.getItem(HERO_PHOTO_STORAGE_KEY);
+    if (stored && isSafeMediaUrl(stored)) {
+      return stored;
+    }
+    if (stored) {
+      // Supprimer toute URL invalide ou potentiellement malveillante
+      localStorage.removeItem(HERO_PHOTO_STORAGE_KEY);
+    }
+    return null;
   } catch {
     return null;
   }
@@ -190,6 +199,7 @@ export function saveHeroCustomPhoto(dataUrl: string | null): void {
   if (typeof window === 'undefined') return;
   try {
     if (dataUrl) {
+      if (!isSafeMediaUrl(dataUrl)) return;
       localStorage.setItem(HERO_PHOTO_STORAGE_KEY, dataUrl);
     } else {
       localStorage.removeItem(HERO_PHOTO_STORAGE_KEY);

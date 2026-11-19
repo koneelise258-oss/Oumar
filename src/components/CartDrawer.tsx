@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { CartItem } from '../types';
 import { X, Plus, Minus, Trash2, MessageCircle, ShieldCheck, CheckCircle2, Store, AlertTriangle } from 'lucide-react';
 import { getWhatsAppUrl } from '../data/storeSettings';
-import { formatProductPrice, formatWhatsAppPrice, normalizeConditionName } from '../utils/pricingUtils';
+import { formatProductPrice, normalizeConditionName } from '../utils/pricingUtils';
+import { sanitizeText, sanitizePhone, openSafeExternalUrl } from '../utils/security';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -49,8 +50,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     e.preventDefault();
     if (isSubmitting) return;
 
-    if (!customerName.trim()) {
-      setFormError('Veuillez renseigner votre Nom et Prénom pour la réservation.');
+    const cleanName = sanitizeText(customerName, 80);
+    const cleanPhone = sanitizePhone(customerPhone, 25);
+
+    if (cleanName.length < 2) {
+      setFormError('Veuillez renseigner votre Nom et Prénom (minimum 2 caractères) pour la réservation.');
+      return;
+    }
+
+    if (cleanPhone && cleanPhone.replace(/[^0-9]/g, '').length < 8) {
+      setFormError('Veuillez saisir un numéro de téléphone valide (au moins 8 chiffres) ou laisser le champ vide.');
       return;
     }
 
@@ -65,7 +74,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           const priceLabel = it.unitPrice && it.unitPrice > 0
             ? `${(it.unitPrice * it.quantity).toLocaleString('fr-FR')} FCFA`
             : 'Prix sur demande';
-          return `• ${it.product.name} [État: ${cond}] (${it.chosenStorage}, ${it.chosenColor}) x${it.quantity} — ${priceLabel}`;
+          return `• ${sanitizeText(it.product.name, 100)} [État: ${cond}] (${sanitizeText(it.chosenStorage, 30)}, ${sanitizeText(it.chosenColor, 40)}) x${it.quantity} — ${priceLabel}`;
         })
         .join('\n');
 
@@ -73,11 +82,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         ? `${total.toLocaleString('fr-FR')} FCFA${hasItemsOnDemand ? ' (+ articles sur demande)' : ''}`
         : 'Prix sur demande';
 
-      const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite me renseigner pour réserver et acheter en magasin :\n\n${itemListText}\n\nTotal estimé : ${totalSummary}\n\nNom du client : ${customerName.trim()}${customerPhone.trim() ? `\nTéléphone de contact : ${customerPhone.trim()}` : ''}\nMode de retrait : En boutique OUMAR IPHONE (Abidjan)\n\nMerci de me confirmer la disponibilité des articles en boutique.`;
+      const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite me renseigner pour réserver et acheter en magasin :\n\n${itemListText}\n\nTotal estimé : ${totalSummary}\n\nNom du client : ${cleanName}${cleanPhone ? `\nTéléphone de contact : ${cleanPhone}` : ''}\nMode de retrait : En boutique OUMAR IPHONE (Abidjan)\n\nMerci de me confirmer la disponibilité des articles en boutique.`;
 
-      // Ouvrir WhatsApp via le lien wa.me sécurisé
+      // Ouvrir WhatsApp via lien sécurisé avec rel="noopener noreferrer" (protection anti-tabnabbing)
       const whatsappUrl = getWhatsAppUrl(whatsappMessage);
-      window.open(whatsappUrl, '_blank');
+      openSafeExternalUrl(whatsappUrl);
 
       setOrderSent(true);
       setTimeout(() => {
@@ -86,8 +95,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         onClearCart();
         onClose();
       }, 2000);
-    } catch (err: any) {
-      console.error('Échec de la préparation WhatsApp:', err);
+    } catch {
       setFormError('Impossible d’ouvrir WhatsApp. Veuillez vérifier votre navigateur ou l’application WhatsApp.');
       setIsSubmitting(false);
     }
@@ -101,7 +109,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         onClick={onClose}
       />
 
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-4 sm:pl-10">
         <div className="w-screen max-w-md bg-white dark:bg-slate-900 shadow-2xl flex flex-col justify-between border-l border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white transition-colors">
           
           {/* Header */}
@@ -222,6 +230,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <input
                     type="text"
                     required
+                    maxLength={80}
+                    autoComplete="name"
                     placeholder="Ex: Jean Kouassi"
                     value={customerName}
                     onChange={(e) => {
@@ -238,7 +248,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </label>
                   <input
                     type="tel"
-                    placeholder="Ex: 07 78 02 42 85"
+                    maxLength={25}
+                    autoComplete="tel"
+                    placeholder="Ex: 01 61 44 36 37"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
                     className="w-full text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-white"

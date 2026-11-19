@@ -31,6 +31,8 @@ import {
 import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
 import { loadProducts, saveProducts, resetProducts } from '../data/products';
 import { processAndUploadProductImage, APPLE_ASSET_IMAGES } from '../services/imageService';
+import { MediaCropper, AspectPresetKey } from './MediaCropper';
+import { useTheme } from '../context/ThemeContext';
 import { saveVideos, resetVideos } from '../data/videos';
 import {
   upsertProductRemote,
@@ -55,6 +57,16 @@ import {
 import { SUPABASE_PROJECT_ID, isSupabaseConfigured, supabaseUrl, signOutAdmin, checkIsUserAdmin, StoreAdminRecord } from '../lib/supabase';
 import { SUPABASE_MIGRATION_SQL } from '../db/migrationSql';
 import {
+  isSafeMediaUrl,
+  isSafeTikTokUrl,
+  validateImageFile,
+  validateVideoFile,
+  sanitizeText,
+  getSecretPortalUrl,
+  MASKED_ADMIN_PATH,
+  purgeSensitiveClientStorage
+} from '../utils/security';
+import {
   X,
   Package,
   Video,
@@ -68,6 +80,7 @@ import {
   EyeOff,
   ArrowUp,
   ArrowDown,
+  ArrowLeft,
   Upload,
   Check,
   RotateCcw,
@@ -98,7 +111,11 @@ import {
   Palette,
   Image as ImageIcon,
   Monitor,
-  Save
+  Save,
+  Crop,
+  Sun,
+  Moon,
+  Store
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -110,7 +127,16 @@ interface AdminDashboardProps {
   onVideosUpdated: (videos: VideoItem[]) => void;
 }
 
-type AdminTab = 'products' | 'videos' | 'orders' | 'hero' | 'settings' | 'admins';
+type AdminTab = 'products' | 'media' | 'videos' | 'orders' | 'hero' | 'settings' | 'admins';
+
+interface CropperTarget {
+  src: string;
+  title: string;
+  subtitle?: string;
+  defaultAspectRatio: AspectPresetKey;
+  uploadFolder: 'products' | 'hero' | 'media';
+  onApply: (newUrl: string) => Promise<void> | void;
+}
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   isOpen,
@@ -120,12 +146,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   videos,
   onVideosUpdated
 }) => {
+  const { isDark, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<AdminTab>('products');
   const [orders, setOrders] = useState<StoreOrder[]>(loadOrders);
   const [settings, setSettings] = useState<StoreSettings>(loadStoreSettings);
+  const [cropperTarget, setCropperTarget] = useState<CropperTarget | null>(null);
+  const [mediaSearch, setMediaSearch] = useState('');
+  const mediaQuickUploadRef = useRef<HTMLInputElement>(null);
+  const [pendingMediaUploadHandler, setPendingMediaUploadHandler] = useState<((url: string) => void) | null>(null);
 
   // Success / notification message
   const [notification, setNotification] = useState<string | null>(null);
+
+  // Injecter noindex/nofollow tant que la page admin est affichée
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevTitle = document.title;
+    document.title = 'Espace Direction — OUMAR IPHONE';
+    let meta = document.querySelector('meta[name="robots"]') as HTMLMetaElement | null;
+    let created = false;
+    const prevContent = meta?.content || '';
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'robots';
+      document.head.appendChild(meta);
+      created = true;
+    }
+    meta.content = 'noindex, nofollow, noarchive';
+    return () => {
+      document.title = prevTitle;
+      if (meta) {
+        if (created) {
+          meta.remove();
+        } else {
+          meta.content = prevContent;
+        }
+      }
+    };
+  }, [isOpen]);
 
   const triggerNotification = (msg: string) => {
     setNotification(msg);
@@ -171,31 +229,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const [currentAdminRecord, setCurrentAdminRecord] = useState<StoreAdminRecord | null>(null);
   const [isSessionValidating, setIsSessionValidating] = useState<boolean>(true);
+  const [copiedPortalLink, setCopiedPortalLink] = useState(false);
 
-  // Background fetch remote orders and verify active admin session when dashboard opens
+  // Déconnexion automatique après 20 minutes d'inactivité (Idle Session Timeout)
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen || !currentAdminRecord) return;
+    const IDLE_LIMIT_MS = 20 * 60 * 1000;
+    let idleTimer = window.setTimeout(() => {
+      handleLogout();
+    }, IDLE_LIMIT_MS);
+
+    const resetIdle = () => {
+      window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(() => {
+        handleLogout();
+      }, IDLE_LIMIT_MS);
+    };
+
+    const events: (keyof WindowEventMap)[] = ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'];
+    events.forEach((ev) => window.addEventListener(ev, resetIdle, { passive: true }));
+
+    return () => {
+      window.clearTimeout(idleTimer);
+      events.forEach((ev) => window.removeEventListener(ev, resetIdle));
+    };
+  }, [isOpen, currentAdminRecord]);
+
+  // Validation Fail-Closed stricte côté serveur AVANT tout affichage ou chargement de données sensibles
+  useEffect(() => {
+    if (!isOpen) {
+      setCurrentAdminRecord(null);
       setIsSessionValidating(true);
-      checkIsUserAdmin().then((res) => {
-        setIsSessionValidating(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCurrentAdminRecord(null);
+    setIsSessionValidating(true);
+
+    checkIsUserAdmin()
+      .then((res) => {
+        if (cancelled) return;
         if (!res.isAdmin || !res.record) {
+          setIsSessionValidating(false);
           handleLogout();
-          alert(res.error || "Session administrateur expirée ou compte non autorisé.");
           return;
         }
         setCurrentAdminRecord(res.record);
-      }).catch(() => {
         setIsSessionValidating(false);
+
+        // Charger les commandes clients UNIQUEMENT après confirmation serveur des droits admin
+        fetchOrdersRemote()
+          .then((remoteOrders) => {
+            if (!cancelled && remoteOrders && remoteOrders.length > 0) {
+              setOrders(remoteOrders);
+            }
+          })
+          .catch(() => {});
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Fail-closed strict en cas d'erreur réseau
+        setIsSessionValidating(false);
+        handleLogout();
       });
 
-      fetchOrdersRemote()
-        .then((remoteOrders) => {
-          if (remoteOrders && remoteOrders.length > 0) {
-            setOrders(remoteOrders);
-          }
-        })
-        .catch(() => {});
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen]);
 
   const handleTestSupabase = async () => {
@@ -223,7 +324,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleSyncToSupabase = async () => {
     if (!isSupabaseConfigured) {
-      alert("La configuration du serveur distant n'est pas finalisée. Veuillez contacter l'administrateur.");
+      triggerNotification("La configuration du serveur distant n'est pas finalisée.");
       return;
     }
 
@@ -353,7 +454,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleSaveProductForm = async () => {
     if (!formProduct.name || !formProduct.price) {
-      alert('Veuillez renseigner au moins le nom et le prix du produit.');
+      triggerNotification('Veuillez renseigner au moins le nom et le prix du produit.');
+      return;
+    }
+    if (formProduct.image && !isSafeMediaUrl(formProduct.image)) {
+      triggerNotification('URL image refusée par sécurité : utilisez une URL HTTPS ou importez un fichier image.');
       return;
     }
 
@@ -628,13 +733,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const videoFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveVideo = async () => {
-    if (!videoUrlInput.trim()) return;
-    const detectedType = videoUrlInput.includes('tiktok.com') ? 'tiktok' : videoTypeInput;
+    const rawUrl = videoUrlInput.trim();
+    if (!rawUrl) return;
+
+    const detectedType = rawUrl.includes('tiktok.com') ? 'tiktok' : videoTypeInput;
+    const isUrlAllowed = detectedType === 'tiktok' ? isSafeTikTokUrl(rawUrl) : isSafeMediaUrl(rawUrl);
+
+    if (!isUrlAllowed) {
+      triggerNotification('Lien vidéo refusé par sécurité : utilisez une URL HTTPS (MP4/WebM) ou un lien officiel TikTok.');
+      return;
+    }
+
     const newVid: VideoItem = {
       id: `vid-${Date.now()}`,
-      url: videoUrlInput.trim(),
+      url: rawUrl,
       type: detectedType,
-      title: videoTitleInput.trim() || `Vidéo OUMAR IPHONE #${videos.length + 1}`,
+      title: sanitizeText(videoTitleInput, 120) || `Vidéo OUMAR IPHONE #${videos.length + 1}`,
       published: true,
       order: videos.length + 1,
       createdAt: Date.now()
@@ -705,16 +819,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleVideoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const check = await validateVideoFile(file);
+      if (!check.valid) {
+        triggerNotification(check.error || 'Fichier vidéo refusé par sécurité.');
+        e.target.value = '';
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
+        if (!isSafeMediaUrl(dataUrl)) {
+          triggerNotification('Format vidéo non autorisé.');
+          return;
+        }
         setVideoUrlInput(dataUrl);
         setVideoTypeInput('html5');
         if (!videoTitleInput) {
-          setVideoTitleInput(file.name.replace(/\.[^/.]+$/, ''));
+          setVideoTitleInput(sanitizeText(file.name.replace(/\.[^/.]+$/, ''), 100));
         }
       };
       reader.readAsDataURL(file);
@@ -772,31 +896,145 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => window.removeEventListener('oumar_hero_photo_updated', handlePhotoUpdated);
   }, []);
 
-  const handleHeroPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleHeroPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        triggerNotification("L'image sélectionnée est trop volumineuse (max 10 Mo).");
+    if (!file) return;
+    try {
+      const check = await validateImageFile(file);
+      if (!check.valid) {
+        triggerNotification(check.error || 'Format image refusé par sécurité.');
+        e.target.value = '';
         return;
       }
       const reader = new FileReader();
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
         if (dataUrl) {
-          setHeroPhotoPreview(dataUrl);
-          saveHeroCustomPhoto(dataUrl);
-          syncHeroPhotoRemote(dataUrl);
-          setHeroPhotoSrc(dataUrl);
-          triggerNotification("Photo de la section Hero mise à jour et synchronisée avec succès !");
+          // Ouvrir directement le Studio Média & Recadrage pour ajuster la photo Hero
+          setCropperTarget({
+            src: dataUrl,
+            title: 'Photo Principale — Hero Section',
+            subtitle: 'Ajustez le cadrage portrait, la luminosité et le zoom avant publication',
+            defaultAspectRatio: '4:5',
+            uploadFolder: 'hero',
+            onApply: (croppedUrl) => {
+              setHeroPhotoPreview(croppedUrl);
+              saveHeroCustomPhoto(croppedUrl);
+              syncHeroPhotoRemote(croppedUrl);
+              setHeroPhotoSrc(croppedUrl);
+              setCropperTarget(null);
+              triggerNotification('Photo de la section Hero recadrée, optimisée et publiée !');
+            }
+          });
         }
       };
       reader.readAsDataURL(file);
+    } finally {
+      e.target.value = '';
     }
+  };
+
+  const openHeroPhotoCropper = () => {
+    const currentSrc = heroPhotoPreview || heroPhotoSrc || heroTitaniumSample;
+    setCropperTarget({
+      src: currentSrc,
+      title: 'Photo Principale — Hero Section',
+      subtitle: 'Recadrez et optimisez le portrait principal de la page d’accueil',
+      defaultAspectRatio: '4:5',
+      uploadFolder: 'hero',
+      onApply: (croppedUrl) => {
+        setHeroPhotoPreview(croppedUrl);
+        saveHeroCustomPhoto(croppedUrl);
+        syncHeroPhotoRemote(croppedUrl);
+        setHeroPhotoSrc(croppedUrl);
+        setCropperTarget(null);
+        triggerNotification('Photo de la section Hero recadrée et synchronisée !');
+      }
+    });
+  };
+
+  const openProductMediaCropper = (
+    product: Product,
+    targetType: 'main' | 'color',
+    colorIndex?: number
+  ) => {
+    const colorObj = targetType === 'color' && typeof colorIndex === 'number' ? product.colors?.[colorIndex] : undefined;
+    const currentSrc =
+      targetType === 'color'
+        ? colorObj?.image || product.image
+        : product.image;
+
+    setCropperTarget({
+      src: currentSrc || APPLE_ASSET_IMAGES.iphone16ProMax,
+      title: targetType === 'color' && colorObj ? `${product.name} — ${colorObj.name}` : product.name,
+      subtitle:
+        targetType === 'color'
+          ? 'Recadrage de la photo dédiée à cette finition couleur'
+          : 'Recadrage de la photo principale du produit',
+      defaultAspectRatio: '4:3',
+      uploadFolder: 'products',
+      onApply: async (croppedUrl) => {
+        const updatedProduct: Product =
+          targetType === 'color' && typeof colorIndex === 'number'
+            ? {
+                ...product,
+                colors: (product.colors || []).map((c, i) =>
+                  i === colorIndex ? { ...c, image: croppedUrl } : c
+                )
+              }
+            : {
+                ...product,
+                image: croppedUrl,
+                gallery: product.gallery
+                  ? [croppedUrl, ...product.gallery.filter((g) => g !== product.image && g !== croppedUrl)]
+                  : [croppedUrl]
+              };
+
+        const res = await upsertProductRemote(updatedProduct);
+        if (res.success) {
+          onProductsUpdated(products.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)));
+          if (editingProduct?.id === updatedProduct.id) {
+            setFormProduct(updatedProduct);
+            setEditingProduct(updatedProduct);
+          }
+          setCropperTarget(null);
+          triggerNotification(`Photo de "${updatedProduct.name}" recadrée et publiée !`);
+        } else {
+          triggerNotification(`Erreur lors de l’enregistrement : ${res.message || 'Inconnue'}`);
+        }
+      }
+    });
+  };
+
+  const handleQuickMediaReplaceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !pendingMediaUploadHandler) return;
+    const check = await validateImageFile(file);
+    if (!check.valid) {
+      triggerNotification(check.error || 'Format image refusé.');
+      e.target.value = '';
+      setPendingMediaUploadHandler(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      if (dataUrl) {
+        pendingMediaUploadHandler(dataUrl);
+      }
+      setPendingMediaUploadHandler(null);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleApplyHeroPhotoUrl = () => {
     const trimmed = heroPhotoUrlInput.trim();
     if (!trimmed) return;
+    if (!isSafeMediaUrl(trimmed)) {
+      triggerNotification('URL refusée par sécurité : saisissez une URL HTTPS valide.');
+      return;
+    }
     setHeroPhotoPreview(trimmed);
     saveHeroCustomPhoto(trimmed);
     syncHeroPhotoRemote(trimmed);
@@ -937,6 +1175,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleToggleAdminStatus = async (adminId: string, currentStatus: boolean, email: string) => {
+    if (currentAdminRecord?.id === adminId && currentStatus) {
+      triggerNotification('Sécurité : vous ne pouvez pas désactiver votre propre compte administrateur.');
+      return;
+    }
     const nextStatus = !currentStatus;
     const confirmMsg = nextStatus 
       ? `Réactiver l'accès pour ${email} ?`
@@ -949,14 +1191,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         triggerNotification(`Statut de ${email} mis à jour`);
         await loadAdmins();
       } else {
-        alert('Erreur lors du changement de statut');
+        triggerNotification('Erreur lors du changement de statut');
       }
     } catch (err: any) {
-      alert(`Erreur: ${err?.message || 'Action impossible'}`);
+      triggerNotification(`Erreur: ${err?.message || 'Action impossible'}`);
     }
   };
 
   const handleDeleteAdminItem = async (adminId: string, email: string) => {
+    if (currentAdminRecord?.id === adminId) {
+      triggerNotification('Sécurité : vous ne pouvez pas supprimer votre propre compte.');
+      return;
+    }
     if (!window.confirm(`Supprimer définitivement l'administrateur ${email} ?`)) return;
     try {
       const success = await deleteStoreAdminRemote(adminId);
@@ -964,183 +1210,555 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         triggerNotification(`Administrateur ${email} retiré.`);
         await loadAdmins();
       } else {
-        alert('Erreur lors de la suppression');
+        triggerNotification('Erreur lors de la suppression');
       }
     } catch (err: any) {
-      alert(`Erreur: ${err?.message || 'Action impossible'}`);
+      triggerNotification(`Erreur: ${err?.message || 'Action impossible'}`);
+    }
+  };
+
+  const handleCopySecretPortalLink = async () => {
+    try {
+      await navigator.clipboard.writeText(getSecretPortalUrl());
+      setCopiedPortalLink(true);
+      triggerNotification('Lien privé du portail direction copié (à garder strictement confidentiel).');
+      setTimeout(() => setCopiedPortalLink(false), 3000);
+    } catch {
+      triggerNotification('Impossible de copier automatiquement le lien.');
     }
   };
 
   const handleLogout = async () => {
+    setCurrentAdminRecord(null);
+    setOrders([]);
+    setAdminsList([]);
+    resetOrders();
     await signOutAdmin();
     setAdminAuthenticated(false);
+    purgeSensitiveClientStorage();
     onClose();
   };
 
-  const currentAdminEmail = getAdminEmail();
+  const currentAdminEmail = currentAdminRecord?.email || getAdminEmail();
   const isCurrentSuperAdmin = currentAdminRecord?.role === 'superadmin';
 
   if (!isOpen) return null;
 
+  // GARDE FAIL-CLOSED : Page dédiée de vérification (sans pop-up) avant tout affichage de données sensibles
+  if (isSessionValidating || !currentAdminRecord) {
+    return (
+      <div className="min-h-screen w-full bg-[#fafbfc] dark:bg-[#080d1a] flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 rounded-3xl p-8 max-w-sm w-full text-center shadow-xl space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center">
+            <RefreshCw className="w-6 h-6 animate-spin" />
+          </div>
+          <div>
+            <h1 className="text-base font-bold text-slate-900 dark:text-white font-['Outfit']">
+              Vérification sécurisée en cours
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Contrôle de votre session chiffrée et de vos habilitations serveur...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const navItems: { id: AdminTab; label: string; shortLabel: string; icon: React.ReactNode; badge?: number }[] = [
+    { id: 'products', label: 'Catalogue & Stocks', shortLabel: 'Catalogue', icon: <Package className="w-4 h-4" />, badge: products.length },
+    { id: 'media', label: 'Médiathèque & Recadrage', shortLabel: 'Médias', icon: <Crop className="w-4 h-4" /> },
+    { id: 'videos', label: 'Vidéos Immersives', shortLabel: 'Vidéos', icon: <Video className="w-4 h-4" />, badge: videos.length },
+    { id: 'orders', label: 'Commandes & Clients', shortLabel: 'Commandes', icon: <ShoppingBag className="w-4 h-4" />, badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined },
+    { id: 'hero', label: 'Hero Section', shortLabel: 'Hero', icon: <Sparkles className="w-4 h-4" /> },
+    { id: 'settings', label: 'Boutique & Serveur', shortLabel: 'Boutique', icon: <Settings className="w-4 h-4" /> },
+    { id: 'admins', label: 'Équipe & Sécurité', shortLabel: 'Sécurité', icon: <Users className="w-4 h-4" />, badge: adminsList.length }
+  ];
+
+  const handleSelectNavTab = (tab: AdminTab) => {
+    setActiveTab(tab);
+    setCropperTarget(null);
+    setIsCreatingProduct(false);
+    setEditingProduct(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
-    <div 
-      className="fixed inset-0 z-50 overflow-hidden bg-slate-950/70 backdrop-blur-sm flex justify-center items-center p-2 sm:p-4 md:p-6"
-      role="dialog"
-      aria-modal="true"
-    >
-      {/* Main Admin Box */}
-      <div className="relative w-full max-w-7xl h-[95vh] bg-white dark:bg-[#0b0f17] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden text-slate-900 dark:text-white transition-colors">
-        
-        {/* Top Header Bar */}
-        <div className="px-5 py-4 bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+    <div className="min-h-screen w-full bg-[#f8fafc] dark:bg-[#080d1a] text-slate-900 dark:text-white flex flex-col lg:flex-row transition-colors">
+      {/* Hidden input used by Media Library for instant upload + crop */}
+      <input
+        ref={mediaQuickUploadRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        onChange={handleQuickMediaReplaceFile}
+        className="hidden"
+      />
+      {/* Hidden file input for Hero Photo replacement across tabs */}
+      <input
+        ref={heroPhotoInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        onChange={handleHeroPhotoUpload}
+        className="hidden"
+      />
+
+      {/* ========================================================= */}
+      {/* DESKTOP DEDICATED SIDEBAR (NO POPUP)                      */}
+      {/* ========================================================= */}
+      <aside className="hidden lg:flex lg:flex-col lg:w-64 xl:w-72 shrink-0 bg-white dark:bg-[#0b1120] border-r border-slate-200 dark:border-slate-800/90 sticky top-0 h-screen">
+        {/* Sidebar Brand Header */}
+        <div className="p-5 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-950 flex items-center justify-center font-bold text-sm shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 flex items-center justify-center shrink-0">
               <ShieldCheck className="w-5 h-5 text-emerald-400 dark:text-emerald-600" />
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg font-bold text-slate-950 dark:text-white font-['Outfit']">
-                  Espace Direction & Gestion
-                </h2>
-                <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                  OUMAR IPHONE
-                </span>
-                {currentAdminEmail && (
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                    {currentAdminEmail}
-                  </span>
-                )}
-                {currentAdminRecord?.role && (
-                  <span className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
-                    currentAdminRecord.role === 'superadmin'
-                      ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
-                      : currentAdminRecord.role === 'admin'
-                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                  }`}>
-                    {currentAdminRecord.role}
-                  </span>
-                )}
+            <div className="min-w-0">
+              <div className="text-sm font-extrabold tracking-wide text-slate-950 dark:text-white font-['Outfit'] truncate">
+                OUMAR IPHONE
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Administration sécurisée · Catalogue, Stocks, Vidéos, Commandes & Paramètres Abidjan
-              </p>
+              <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                Espace Direction Sécurisé
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {currentAdminEmail && (
+            <div className="mt-3.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-mono text-slate-600 dark:text-slate-300 truncate">
+                {currentAdminEmail}
+              </span>
+              {currentAdminRecord?.role && (
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-slate-900 dark:bg-white text-white dark:text-slate-950 shrink-0">
+                  {currentAdminRecord.role}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar Navigation Links */}
+        <nav className="flex-1 p-3.5 space-y-1 overflow-y-auto">
+          {navItems.map((item) => {
+            const isActive = activeTab === item.id && !cropperTarget && !isCreatingProduct && !editingProduct;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleSelectNavTab(item.id)}
+                className={`w-full min-h-[44px] flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {item.icon}
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {item.badge !== undefined && (
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md tabular-nums ${
+                      isActive
+                        ? 'bg-white/20 dark:bg-slate-900/15 text-white dark:text-slate-950'
+                        : item.id === 'orders' && pendingOrdersCount > 0
+                        ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Sidebar Footer Controls */}
+        <div className="p-3.5 border-t border-slate-200/80 dark:border-slate-800 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
-              title="Se déconnecter de l'administration"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Déconnexion</span>
-            </button>
-            <button
+              type="button"
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-              title="Fermer l'administration"
+              className="min-h-[42px] px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
             >
-              <X className="w-5 h-5" />
+              <Store className="w-3.5 h-3.5" />
+              <span>Boutique</span>
+            </button>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="min-h-[42px] px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+            >
+              {isDark ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5" />}
+              <span>{isDark ? 'Clair' : 'Sombre'}</span>
             </button>
           </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full min-h-[42px] px-3 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Déconnexion sécurisée</span>
+          </button>
         </div>
+      </aside>
 
-        {/* Global Notification Toast */}
-        {notification && (
-          <div className="bg-emerald-500 text-white px-4 py-2 text-xs font-semibold flex items-center justify-between animate-in slide-in-from-top-2">
-            <div className="flex items-center gap-2">
-              <Check className="w-4 h-4" />
-              <span>{notification}</span>
+      {/* ========================================================= */}
+      {/* MAIN CONTENT SHELL (MOBILE TOP BAR + FULL PAGE BODY)      */}
+      {/* ========================================================= */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        {/* Sticky Top Header (Mobile + Desktop context bar) */}
+        <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#0b1120]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shrink-0">
+          <div className="px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="lg:hidden w-9 h-9 rounded-xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white font-['Outfit'] truncate">
+                  {cropperTarget
+                    ? 'Studio Média & Recadrage'
+                    : isCreatingProduct
+                    ? 'Nouveau Produit Apple'
+                    : editingProduct
+                    ? `Modifier : ${editingProduct.name}`
+                    : navItems.find((n) => n.id === activeTab)?.label || 'Administration'}
+                </h1>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block truncate">
+                  Espace dédié sécurisé ({MASKED_ADMIN_PATH}) · Modifications publiées en temps réel
+                </p>
+              </div>
             </div>
-            <button onClick={() => setNotification(null)} className="text-white/80 hover:text-white">
-              <X className="w-3.5 h-3.5" />
-            </button>
+
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={onClose}
+                className="min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Store className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Voir la boutique</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="lg:hidden min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 cursor-pointer"
+                aria-label="Changer le thème"
+              >
+                {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                title="Se déconnecter"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Déconnexion</span>
+              </button>
+            </div>
           </div>
-        )}
 
-        {/* Navigation Tabs Bar */}
-        <div className="px-5 py-2.5 bg-slate-100/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0">
-          <button
-            onClick={() => setActiveTab('products')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'products'
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Package className="w-3.5 h-3.5" />
-            <span>Catalogue & Stocks ({products.length})</span>
-          </button>
+          {/* Mobile & Tablet Horizontal Navigation Tabs */}
+          <div className="lg:hidden px-3 py-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            {navItems.map((item) => {
+              const isActive = activeTab === item.id && !cropperTarget && !isCreatingProduct && !editingProduct;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleSelectNavTab(item.id)}
+                  className={`min-h-[40px] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/60'
+                  }`}
+                >
+                  {item.icon}
+                  <span>{item.shortLabel}</span>
+                </button>
+              );
+            })}
+          </div>
 
-          <button
-            onClick={() => setActiveTab('videos')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'videos'
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Video className="w-3.5 h-3.5" />
-            <span>Vidéos Immersives ({videos.length})</span>
-          </button>
+          {/* Global Notification Banner */}
+          {notification && (
+            <div className="bg-emerald-600 text-white px-4 sm:px-6 py-2.5 text-xs font-semibold flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 shrink-0" />
+                <span>{notification}</span>
+              </div>
+              <button type="button" onClick={() => setNotification(null)} className="p-1 text-white/80 hover:text-white cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </header>
 
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap relative ${
-              activeTab === 'orders'
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
-            }`}
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Commandes & Clients ({orders.length})</span>
-            {pendingOrdersCount > 0 && (
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-            )}
-          </button>
+        {/* Main Full-Page Content Body */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+          {/* ========================================================= */}
+          {/* INLINE FULL-PAGE STUDIO MÉDIA & RECADRAGE (NO POPUP)      */}
+          {/* ========================================================= */}
+          {cropperTarget ? (
+            <MediaCropper
+              initialSrc={cropperTarget.src}
+              title={cropperTarget.title}
+              subtitle={cropperTarget.subtitle}
+              defaultAspectRatio={cropperTarget.defaultAspectRatio}
+              uploadFolder={cropperTarget.uploadFolder}
+              onSave={cropperTarget.onApply}
+              onCancel={() => setCropperTarget(null)}
+            />
+          ) : (isCreatingProduct || editingProduct) ? null : (
+          <>
+          {/* ========================================================= */}
+          {/* TAB 0 (NEW): MÉDIATHÈQUE & RECADRAGE DES MÉDIAS DU SITE    */}
+          {/* ========================================================= */}
+          {activeTab === 'media' && (
+            <div className="space-y-6">
+              {/* Hero Visual Studio Card */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-950 dark:text-white font-['Outfit'] flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <span>Visuel Principal — Page d’Accueil (Hero)</span>
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Modifiez, recadrez, redressez ou remplacez la photo principale avec export WebP ultra-rapide.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={openHeroPhotoCropper}
+                      className="min-h-[42px] px-4 py-2 rounded-xl text-xs font-bold bg-slate-950 dark:bg-white text-white dark:text-slate-950 inline-flex items-center gap-1.5 hover:opacity-90 cursor-pointer transition-opacity"
+                    >
+                      <Crop className="w-3.5 h-3.5" />
+                      <span>Recadrer & Retoucher</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => heroPhotoInputRef.current?.click()}
+                      className="min-h-[42px] px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Importer nouvelle photo</span>
+                    </button>
+                  </div>
+                </div>
 
-          <button
-            onClick={() => setActiveTab('hero')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'hero'
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Personnalisation du site → Hero Section</span>
-          </button>
+                <div className="flex flex-col sm:flex-row items-center gap-5">
+                  <div className="w-36 h-44 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
+                    <img
+                      src={heroPhotoPreview || heroPhotoSrc || heroTitaniumSample}
+                      alt="Hero OUMAR IPHONE"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300 text-center sm:text-left">
+                    <div className="font-bold text-slate-900 dark:text-white text-sm">
+                      {heroPhotoSrc ? 'Visuel personnalisé actif' : 'Visuel officiel par défaut'}
+                    </div>
+                    <p className="max-w-lg leading-relaxed text-slate-500 dark:text-slate-400">
+                      Cliquez sur « Recadrer & Retoucher » pour ajuster le cadrage 4:5, pivoter, zoomer ou régler la luminosité sans quitter cette page.
+                    </p>
+                    {heroPhotoSrc && (
+                      <button
+                        type="button"
+                        onClick={handleResetHeroPhoto}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer pt-1"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Rétablir la photo d’origine</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'settings'
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Settings className="w-3.5 h-3.5" />
-            <span>Boutique & Serveur Supabase</span>
-          </button>
+              {/* Products & Finishes Media Library */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-950 dark:text-white font-['Outfit'] flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-emerald-500" />
+                      <span>Médias du Catalogue & Finitions Couleurs</span>
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Recadrez ou remplacez directement les photos principales et les variantes de couleur de chaque produit.
+                    </p>
+                  </div>
 
-          <button
-            onClick={() => setActiveTab('admins')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'admins'
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Équipe & Admins ({adminsList.length})</span>
-          </button>
-        </div>
+                  <div className="relative w-full sm:w-64">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={mediaSearch}
+                      onChange={(e) => setMediaSearch(e.target.value)}
+                      placeholder="Filtrer un produit..."
+                      className="w-full min-h-[42px] pl-9 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none"
+                    />
+                  </div>
+                </div>
 
-        {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#f8fafc] dark:bg-[#080d1a]">
-          
+                <div className="space-y-5">
+                  {products
+                    .filter((p) =>
+                      !mediaSearch.trim() ||
+                      p.name.toLowerCase().includes(mediaSearch.toLowerCase()) ||
+                      p.category.toLowerCase().includes(mediaSearch.toLowerCase())
+                    )
+                    .map((product) => (
+                      <div
+                        key={`media-prod-${product.id}`}
+                        className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-950 dark:text-white font-['Outfit']">
+                              {product.name}
+                            </h3>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                              {product.category} · {(product.colors || []).length} finition(s)
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                          {/* Main Product Image Card */}
+                          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 flex flex-col justify-between gap-2">
+                            <div className="aspect-[4/3] rounded-lg bg-slate-100 dark:bg-slate-800 p-2 flex items-center justify-center overflow-hidden">
+                              <img
+                                src={product.image}
+                                alt={product.name}
+                                className="w-full h-full object-contain"
+                                loading="lazy"
+                              />
+                            </div>
+                            <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate">
+                              Photo principale
+                            </div>
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openProductMediaCropper(product, 'main')}
+                                className="min-h-[34px] px-2 py-1 rounded-lg bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-[10px] font-bold inline-flex items-center justify-center gap-1 cursor-pointer"
+                              >
+                                <Crop className="w-3 h-3" />
+                                <span>Recadrer</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPendingMediaUploadHandler(() => (dataUrl: string) => {
+                                    setCropperTarget({
+                                      src: dataUrl,
+                                      title: `${product.name} — Photo principale`,
+                                      subtitle: 'Nouvelle photo importée : ajustez le cadrage avant publication',
+                                      defaultAspectRatio: '4:3',
+                                      uploadFolder: 'products',
+                                      onApply: async (croppedUrl) => {
+                                        const updatedProd = { ...product, image: croppedUrl };
+                                        const res = await upsertProductRemote(updatedProd);
+                                        if (res.success) {
+                                          onProductsUpdated(products.map((p) => (p.id === product.id ? updatedProd : p)));
+                                          setCropperTarget(null);
+                                          triggerNotification(`Photo de "${product.name}" mise à jour !`);
+                                        }
+                                      }
+                                    });
+                                  });
+                                  mediaQuickUploadRef.current?.click();
+                                }}
+                                className="min-h-[34px] px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[10px] font-semibold inline-flex items-center justify-center gap-1 cursor-pointer"
+                              >
+                                <Upload className="w-3 h-3" />
+                                <span>Changer</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Color Finish Image Cards */}
+                          {(product.colors || []).map((col, cIdx) => (
+                            <div
+                              key={`media-col-${product.id}-${cIdx}`}
+                              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 flex flex-col justify-between gap-2"
+                            >
+                              <div className="aspect-[4/3] rounded-lg bg-slate-100 dark:bg-slate-800 p-2 flex items-center justify-center overflow-hidden">
+                                <img
+                                  src={col.image || product.image}
+                                  alt={`${product.name} ${col.name}`}
+                                  className="w-full h-full object-contain"
+                                  loading="lazy"
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span
+                                  className="w-3 h-3 rounded-full border border-black/20 shrink-0"
+                                  style={{ backgroundColor: col.hex }}
+                                />
+                                <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate">
+                                  {col.name}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => openProductMediaCropper(product, 'color', cIdx)}
+                                  className="min-h-[34px] px-2 py-1 rounded-lg bg-slate-950 dark:bg-white text-white dark:text-slate-950 text-[10px] font-bold inline-flex items-center justify-center gap-1 cursor-pointer"
+                                >
+                                  <Crop className="w-3 h-3" />
+                                  <span>Recadrer</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPendingMediaUploadHandler(() => (dataUrl: string) => {
+                                      setCropperTarget({
+                                        src: dataUrl,
+                                        title: `${product.name} — ${col.name}`,
+                                        subtitle: 'Nouvelle photo de finition importée : ajustez le cadrage',
+                                        defaultAspectRatio: '4:3',
+                                        uploadFolder: 'products',
+                                        onApply: async (croppedUrl) => {
+                                          const updatedProd: Product = {
+                                            ...product,
+                                            colors: (product.colors || []).map((c, idx) =>
+                                              idx === cIdx ? { ...c, image: croppedUrl } : c
+                                            )
+                                          };
+                                          const res = await upsertProductRemote(updatedProd);
+                                          if (res.success) {
+                                            onProductsUpdated(products.map((p) => (p.id === product.id ? updatedProd : p)));
+                                            setCropperTarget(null);
+                                            triggerNotification(`Finition "${col.name}" recadrée et publiée !`);
+                                          }
+                                        }
+                                      });
+                                    });
+                                    mediaQuickUploadRef.current?.click();
+                                  }}
+                                  className="min-h-[34px] px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[10px] font-semibold inline-flex items-center justify-center gap-1 cursor-pointer"
+                                >
+                                  <Upload className="w-3 h-3" />
+                                  <span>Changer</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ========================================================= */}
           {/* TAB 1: CATALOGUE & STOCKS */}
           {/* ========================================================= */}
@@ -1539,6 +2157,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <video
                           src={vid.url || undefined}
                           muted
+                          loop
                           playsInline
                           controls
                           className="w-full h-full object-cover"
@@ -2096,11 +2715,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={openHeroPhotoCropper}
+                            className="px-3 py-1.5 rounded-xl bg-slate-950 dark:bg-white text-white dark:text-slate-950 font-bold inline-flex items-center gap-1.5 hover:opacity-90 transition-opacity cursor-pointer"
+                          >
+                            <Crop className="w-3.5 h-3.5" />
+                            <span>Recadrer</span>
+                          </button>
                           <button
                             type="button"
                             onClick={() => heroPhotoInputRef.current?.click()}
-                            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-semibold text-slate-800 dark:text-white transition-colors"
+                            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-semibold text-slate-800 dark:text-white transition-colors cursor-pointer"
                           >
                             Remplacer
                           </button>
@@ -2108,7 +2735,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <button
                               type="button"
                               onClick={handleResetHeroPhoto}
-                              className="px-3 py-1.5 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-semibold transition-colors"
+                              className="px-3 py-1.5 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-semibold transition-colors cursor-pointer"
                             >
                               Réinitialiser
                             </button>
@@ -2298,16 +2925,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </span>
                       </div>
                     </div>
-                    {heroPhotoSrc && (
+                    <div className="flex flex-wrap items-center justify-center gap-2 mt-3">
                       <button
                         type="button"
-                        onClick={handleResetHeroPhoto}
-                        className="mt-3 text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center gap-1.5 font-semibold transition-colors cursor-pointer"
+                        onClick={openHeroPhotoCropper}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-950 dark:bg-white text-white dark:text-slate-950 inline-flex items-center gap-1.5 hover:opacity-90 cursor-pointer"
                       >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        <span>Rétablir la photo d'origine</span>
+                        <Crop className="w-3.5 h-3.5" />
+                        <span>Recadrer & Retoucher</span>
                       </button>
-                    )}
+                      {heroPhotoSrc && (
+                        <button
+                          type="button"
+                          onClick={handleResetHeroPhoto}
+                          className="text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Rétablir</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Upload & Configuration Controls */}
@@ -2315,15 +2952,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {/* File Upload Trigger */}
                     <div>
                       <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                        Importer une photo depuis vos fichiers
+                        Importer une photo depuis vos fichiers (ouverture directe du studio recadrage)
                       </label>
-                      <input
-                        ref={heroPhotoInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleHeroPhotoUpload}
-                        className="hidden"
-                      />
                       <button
                         type="button"
                         onClick={() => heroPhotoInputRef.current?.click()}
@@ -2693,24 +3323,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Security Architecture Info Banner */}
-              <div className="p-4 bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-200/70 dark:border-indigo-800/40 rounded-2xl text-xs text-indigo-950 dark:text-indigo-200 space-y-2">
-                <div className="flex items-center gap-2 font-bold text-indigo-900 dark:text-indigo-300">
-                  <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                  <span>Sécurité et gestion des droits d'accès</span>
+              {/* Security Architecture & Stealth Access Info Banner (visible uniquement aux admins connectés) */}
+              <div className="p-4 sm:p-5 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 rounded-2xl text-xs text-emerald-950 dark:text-emerald-100 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 font-bold text-emerald-900 dark:text-emerald-300">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Centre de Cybersécurité & Portail Furtif Actif</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopySecretPortalLink}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
+                  >
+                    {copiedPortalLink ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedPortalLink ? 'Lien privé copié !' : 'Copier le lien secret d’accès'}</span>
+                  </button>
                 </div>
-                <p className="text-[11px] leading-relaxed text-indigo-900/80 dark:text-indigo-200/80">
-                  L'accès à ce tableau de bord est strictement contrôlé. Seuls les comptes collaborateurs enregistrés ci-dessous avec le statut <strong>Actif</strong> peuvent visualiser les commandes des clients, modifier le catalogue ou ajuster les disponibilités.
+
+                <p className="text-[11px] leading-relaxed text-emerald-900/85 dark:text-emerald-200/85">
+                  L'espace d'administration est une <strong>page dédiée 100 % invisible pour les visiteurs et moteurs de recherche</strong> (<code>noindex</code> actif, page 404 personnalisée sur <code>/admin</code>, <code>/login</code>, <code>/wp-admin</code> et <code>{MASKED_ADMIN_PATH}</code> sans session valide). Dès l'ouverture, la clé est masquée en <code>{MASKED_ADMIN_PATH}</code>. Pour y accéder discrètement :
                 </p>
-                <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px]">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-100/80 dark:bg-indigo-900/50 font-semibold text-indigo-800 dark:text-indigo-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500" /> Direction (Accès Total & Gestion Équipe)
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-[11px]">
+                  <div className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/70 border border-emerald-200/70 dark:border-emerald-900/50">
+                    <div className="font-bold text-slate-900 dark:text-white mb-0.5">1. Mobile & PC (Geste discret)</div>
+                    <p className="text-slate-600 dark:text-slate-400">
+                      Taper/cliquer <strong>7 fois rapidement</strong> sur le texte <em>« © OUMAR IPHONE SARL »</em> en bas de page.
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/70 border border-emerald-200/70 dark:border-emerald-900/50">
+                    <div className="font-bold text-slate-900 dark:text-white mb-0.5">2. Raccourci Clavier (PC)</div>
+                    <p className="text-slate-600 dark:text-slate-400">
+                      Appuyer simultanément sur <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px]">Ctrl + Alt + Shift + O</kbd>.
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/70 border border-emerald-200/70 dark:border-emerald-900/50">
+                    <div className="font-bold text-slate-900 dark:text-white mb-0.5">3. URL Privée Sécurisée</div>
+                    <p className="text-slate-600 dark:text-slate-400">
+                      Utilisez le bouton « Copier le lien secret » (la clé est automatiquement masquée en <code>{MASKED_ADMIN_PATH}</code>).
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-[10px]">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100/90 dark:bg-emerald-900/50 font-semibold text-emerald-900 dark:text-emerald-200">
+                    <Check className="w-3 h-3" /> Anti-Brute Force & Honeypot
                   </span>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-100/80 dark:bg-indigo-900/50 font-semibold text-indigo-800 dark:text-indigo-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Administrateur (Catalogue, Stocks & Commandes)
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100/90 dark:bg-emerald-900/50 font-semibold text-emerald-900 dark:text-emerald-200">
+                    <Check className="w-3 h-3" /> Auth PKCE + RBAC Serveur (RLS)
                   </span>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-100/80 dark:bg-indigo-900/50 font-semibold text-indigo-800 dark:text-indigo-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Responsable (Traitement des Commandes)
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100/90 dark:bg-emerald-900/50 font-semibold text-emerald-900 dark:text-emerald-200">
+                    <Check className="w-3 h-3" /> Déconnexion auto (20 min inactif)
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100/90 dark:bg-emerald-900/50 font-semibold text-emerald-900 dark:text-emerald-200">
+                    <Check className="w-3 h-3" /> Anti-XSS / SVG bloqué / EXIF purgé
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100/90 dark:bg-emerald-900/50 font-semibold text-emerald-900 dark:text-emerald-200">
+                    <Check className="w-3 h-3" /> Commandes PII hors localStorage
                   </span>
                 </div>
               </div>
@@ -2883,226 +3552,217 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
-        </div>
-
         {/* ========================================================= */}
-        {/* ADD STORE ADMIN MODAL */}
+        {/* INLINE ADD STORE ADMIN PANEL (NO POPUP)                   */}
         {/* ========================================================= */}
-        {isAddAdminModalOpen && (
-          <div className="fixed inset-0 z-70 bg-black/75 backdrop-blur-sm flex justify-center items-center p-3 sm:p-6 overflow-y-auto">
-            <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 flex flex-col text-slate-900 dark:text-white animate-in zoom-in-95">
-              
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
-                    <UserPlus className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold font-['Outfit']">
-                      Ajouter un Administrateur
-                    </h3>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Autoriser un membre de l'équipe OUMAR IPHONE
-                    </p>
-                  </div>
+        {isAddAdminModalOpen && activeTab === 'admins' && (
+          <div className="mt-6 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-6 flex flex-col text-slate-900 dark:text-white animate-in fade-in">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+                  <UserPlus className="w-4 h-4" />
                 </div>
+                <div>
+                  <h3 className="text-sm font-bold font-['Outfit']">
+                    Ajouter un Administrateur
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Autoriser un membre de l'équipe OUMAR IPHONE
+                  </p>
+                </div>
+              </div>
 
+              <button
+                type="button"
+                onClick={() => setIsAddAdminModalOpen(false)}
+                className="min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-xl cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAdmin} className="space-y-4 pt-4 text-xs max-w-xl">
+              {/* Email */}
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                  Adresse Email Professionnelle *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={newAdminEmail}
+                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                  placeholder="direction@oumar-iphone.ci"
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Le collaborateur utilisera cette adresse email pour se connecter à l'espace de gestion.
+                </p>
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                  Niveau d'accès & Privilèges *
+                </label>
+                <select
+                  value={newAdminRole}
+                  onChange={(e) => setNewAdminRole(e.target.value as any)}
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none cursor-pointer"
+                >
+                  <option value="superadmin">Direction — Accès total & gestion de l'équipe</option>
+                  <option value="admin">Administrateur — Gestion complète (catalogue, vidéos, commandes)</option>
+                  <option value="manager">Responsable — Traitement et validation des commandes</option>
+                </select>
+              </div>
+
+              {/* Phone */}
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                  Numéro WhatsApp / Téléphone (Optionnel)
+                </label>
+                <input
+                  type="text"
+                  value={newAdminPhone}
+                  onChange={(e) => setNewAdminPhone(e.target.value)}
+                  placeholder="+225 07 78 02 42 85"
+                  className="w-full min-h-[42px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
+                />
+              </div>
+
+              {adminActionError && (
+                <div className="p-3 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300 text-xs font-medium border border-rose-200 dark:border-rose-900/50">
+                  {adminActionError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsAddAdminModalOpen(false)}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg"
+                  className="min-h-[42px] px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingAdmins}
+                  className="min-h-[42px] px-5 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                >
+                  {loadingAdmins ? 'Ajout en cours...' : 'Confirmer l’autorisation'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* INLINE SQL MIGRATION PANEL (NO POPUP)                     */}
+        {/* ========================================================= */}
+        {isSqlModalOpen && activeTab === 'settings' && (
+          <div className="mt-6 max-w-3xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-6 flex flex-col text-slate-900 dark:text-white animate-in fade-in">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+                  <FileCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-['Outfit']">
+                    Script d'initialisation du serveur en ligne
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Configuration sécurisée des données de la boutique OUMAR IPHONE ({SUPABASE_PROJECT_ID})
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopySql}
+                  className="min-h-[40px] flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+                >
+                  {copiedSql ? (
+                    <>
+                      <CheckCheck className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
+                      <span>Copié !</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copier le script</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSqlModalOpen(false)}
+                  className="min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-xl cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
+            </div>
 
-              <form onSubmit={handleCreateAdmin} className="space-y-4 pt-4 text-xs">
-                {/* Email */}
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Adresse Email Professionnelle *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={newAdminEmail}
-                    onChange={(e) => setNewAdminEmail(e.target.value)}
-                    placeholder="direction@oumar-iphone.ci"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Le collaborateur utilisera cette adresse email pour se connecter à l'espace de gestion.
-                  </p>
-                </div>
+            <div className="p-3 my-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border border-indigo-100 dark:border-indigo-900/50 text-xs flex flex-wrap items-center justify-between gap-2">
+              <span>
+                Collez ce script dans l'éditeur SQL de votre console serveur pour initialiser les rubriques.
+              </span>
+              <a
+                href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}/sql`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-bold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
+              >
+                <span>Accéder à la console</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
 
-                {/* Role */}
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Niveau d'accès & Privilèges *
-                  </label>
-                  <select
-                    value={newAdminRole}
-                    onChange={(e) => setNewAdminRole(e.target.value as any)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none cursor-pointer"
-                  >
-                    <option value="superadmin">Direction — Accès total & gestion de l'équipe</option>
-                    <option value="admin">Administrateur — Gestion complète (catalogue, vidéos, commandes)</option>
-                    <option value="manager">Responsable — Traitement et validation des commandes</option>
-                  </select>
-                </div>
-
-                {/* Phone */}
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Numéro WhatsApp / Téléphone (Optionnel)
-                  </label>
-                  <input
-                    type="text"
-                    value={newAdminPhone}
-                    onChange={(e) => setNewAdminPhone(e.target.value)}
-                    placeholder="+225 07 78 02 42 85"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
-                  />
-                </div>
-
-                {adminActionError && (
-                  <div className="p-3 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300 text-xs font-medium border border-rose-200 dark:border-rose-900/50">
-                    {adminActionError}
-                  </div>
-                )}
-
-                <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddAdminModalOpen(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loadingAdmins}
-                    className="px-5 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer shadow-xs disabled:opacity-50"
-                  >
-                    {loadingAdmins ? 'Ajout en cours...' : 'Confirmer l’autorisation'}
-                  </button>
-                </div>
-              </form>
-
+            <div className="max-h-[420px] overflow-y-auto bg-slate-950 text-emerald-400 font-mono text-[11px] p-4 rounded-2xl border border-slate-800 shadow-inner select-all">
+              <pre className="whitespace-pre-wrap leading-relaxed">{SUPABASE_MIGRATION_SQL}</pre>
             </div>
           </div>
         )}
+          </>
+          )}
 
         {/* ========================================================= */}
-        {/* SQL MIGRATION MODAL */}
+        {/* INLINE FULL-PAGE PRODUCT EDITOR (NO POPUP)                */}
         {/* ========================================================= */}
-        {isSqlModalOpen && (
-          <div className="fixed inset-0 z-70 bg-black/75 backdrop-blur-sm flex justify-center items-center p-3 sm:p-6 overflow-y-auto">
-            <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 max-h-[90vh] flex flex-col text-slate-900 dark:text-white animate-in zoom-in-95">
-              
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
-                    <FileCode className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold font-['Outfit']">
-                      Script d'initialisation du serveur en ligne
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Configuration sécurisée des données de la boutique OUMAR IPHONE ({SUPABASE_PROJECT_ID})
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleCopySql}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
-                  >
-                    {copiedSql ? (
-                      <>
-                        <CheckCheck className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
-                        <span>Copié !</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4" />
-                        <span>Copier le script d'initialisation</span>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsSqlModalOpen(false)}
-                    className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Guide bar */}
-              <div className="p-3 my-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border border-indigo-100 dark:border-indigo-900/50 text-xs flex items-center justify-between">
-                <span>
-                  Collez ce script dans l'éditeur de votre console serveur pour initialiser les rubriques de la boutique.
-                </span>
-                <a
-                  href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}/sql`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 font-bold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0 ml-2"
-                >
-                  <span>Accéder à la console</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
-
-              {/* Code viewer */}
-              <div className="flex-1 overflow-y-auto bg-slate-950 text-emerald-400 font-mono text-[11px] p-4 rounded-2xl border border-slate-800 shadow-inner select-all">
-                <pre className="whitespace-pre-wrap leading-relaxed">{SUPABASE_MIGRATION_SQL}</pre>
-              </div>
-
-              <div className="flex justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800 shrink-0 text-xs">
-                <span className="text-slate-500 dark:text-slate-400">
-                  Fichier également disponible dans : <code className="font-semibold text-slate-700 dark:text-slate-300">/supabase/migrations/20261027_store_schema.sql</code>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setIsSqlModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                >
-                  Fermer
-                </button>
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* PRODUCT FORM MODAL (CREATE OR EDIT) */}
-        {/* ========================================================= */}
-        {(isCreatingProduct || editingProduct) && (
-          <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-sm flex justify-center items-center p-3 sm:p-6 overflow-y-auto">
-            <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 max-h-[90vh] overflow-y-auto space-y-6 text-slate-900 dark:text-white animate-in zoom-in-95">
-              
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-                <h3 className="text-base font-bold font-['Outfit']">
-                  {isCreatingProduct ? 'Ajouter un nouveau produit Apple' : `Modifier "${formProduct.name}"`}
-                </h3>
+        {!cropperTarget && (isCreatingProduct || editingProduct) && (
+          <div className="w-full max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-7 space-y-6 text-slate-900 dark:text-white animate-in fade-in">
+            <div className="flex items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => {
                     setIsCreatingProduct(false);
                     setEditingProduct(null);
                   }}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg"
+                  className="min-h-[42px] min-w-[42px] rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Retour au catalogue"
                 >
-                  <X className="w-5 h-5" />
+                  <ArrowLeft className="w-4 h-4" />
                 </button>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold font-['Outfit']">
+                    {isCreatingProduct ? 'Ajouter un nouveau produit Apple' : `Modifier "${formProduct.name}"`}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Édition plein écran · Inclut le recadrage des photos et finitions
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={handleSaveProductForm}
+                className="min-h-[42px] px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Enregistrer</span>
+              </button>
+            </div>
 
               {/* Form Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -3221,17 +3881,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   />
                 </div>
 
-                {/* Image Upload / URL & Presets */}
+                {/* Image Upload / URL, Cropper & Presets */}
                 <div className="sm:col-span-2 space-y-2">
                   <label className="block font-semibold">Image principale du produit</label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <input
                       type="text"
                       value={formProduct.image || ''}
                       onChange={(e) => setFormProduct({ ...formProduct, image: e.target.value })}
                       placeholder="URL de l'image ou import de fichier"
-                      className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
+                      className="flex-1 min-w-[200px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
                     />
+                    {formProduct.image && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCropperTarget({
+                            src: formProduct.image!,
+                            title: formProduct.name || 'Image principale du produit',
+                            subtitle: 'Recadrage de la photo principale avant enregistrement',
+                            defaultAspectRatio: '4:3',
+                            uploadFolder: 'products',
+                            onApply: (croppedUrl) => {
+                              setFormProduct((prev) => ({ ...prev, image: croppedUrl }));
+                              setCropperTarget(null);
+                              triggerNotification('Image principale recadrée (cliquez sur Enregistrer le produit pour sauvegarder).');
+                            }
+                          })
+                        }
+                        className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:opacity-90 transition-opacity flex items-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        <Crop className="w-3.5 h-3.5" />
+                        <span>Recadrer</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => productImageInputRef.current?.click()}
@@ -3243,7 +3926,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <input
                       ref={productImageInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
                       onChange={handleUploadProductImage}
                       className="hidden"
                     />
@@ -3512,6 +4195,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <Upload className="w-3 h-3" />
                                 <span className="hidden sm:inline">Photo</span>
                               </button>
+
+                              {(col.image || formProduct.image) && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCropperTarget({
+                                      src: col.image || formProduct.image!,
+                                      title: `${formProduct.name || 'Produit'} — ${col.name}`,
+                                      subtitle: 'Recadrer la photo de cette finition',
+                                      defaultAspectRatio: '4:3',
+                                      uploadFolder: 'products',
+                                      onApply: (croppedUrl) => {
+                                        handleUpdateColor(idx, { image: croppedUrl });
+                                        setCropperTarget(null);
+                                        triggerNotification(`Photo de la finition "${col.name}" recadrée !`);
+                                      }
+                                    })
+                                  }
+                                  className="px-2 py-1 rounded-lg text-[11px] font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-950 hover:opacity-90 transition-opacity flex items-center gap-1 cursor-pointer"
+                                  title="Recadrer la photo de cette finition"
+                                >
+                                  <Crop className="w-3 h-3" />
+                                  <span className="hidden sm:inline">Recadrer</span>
+                                </button>
+                              )}
                             </div>
 
                             {/* Active / Inactive Toggle */}
@@ -3682,9 +4390,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
             </div>
-          </div>
-        )}
-
+          )}
+        </main>
       </div>
     </div>
   );

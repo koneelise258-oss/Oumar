@@ -3,10 +3,11 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ArrowDown, MessageCircle, ShieldCheck, Zap, Sparkles } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
-import { getHeroCustomPhoto, getHeroSettings, HeroSettings, DEFAULT_HERO_SETTINGS } from '../data/storeSettings';
+import { getHeroCustomPhoto, getHeroSettings, HeroSettings } from '../data/storeSettings';
 import { Product } from '../types';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { LiquidGlassIcon } from './LiquidGlassIcon';
+import { useDevicePerformance } from '../utils/devicePerformance';
 import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
 
 if (typeof window !== 'undefined') {
@@ -22,6 +23,7 @@ interface HeroProps {
 const DEFAULT_OUMAR_PHOTO_PATH = heroTitaniumSample;
 
 export const Hero: React.FC<HeroProps> = () => {
+  const perf = useDevicePerformance();
   const heroRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
@@ -96,7 +98,7 @@ export const Hero: React.FC<HeroProps> = () => {
     return () => window.removeEventListener('oumar_hero_photo_updated', handlePhotoUpdated);
   }, []);
 
-  // Dynamic photo tone detection for adaptive ambient lighting
+  // Dynamic photo tone detection for adaptive ambient lighting (desktop hautes performances uniquement)
   const [photoTone, setPhotoTone] = useState<{
     dominantRgb: string;
     brightness: number;
@@ -109,9 +111,11 @@ export const Hero: React.FC<HeroProps> = () => {
     isBright: true,
   });
 
-  // Sample photo colors and brightness to tune the Hero's ambient extension
+  // Évite un double téléchargement / décodage Canvas sur mobile ou connexion lente
   useEffect(() => {
-    if (!oumarPhotoSrc || imageError) return;
+    if (!oumarPhotoSrc || imageError || perf.isMobile || perf.isSlowConnection || perf.tier === 'low') {
+      return;
+    }
 
     const sample = () => {
       const img = new Image();
@@ -160,128 +164,134 @@ export const Hero: React.FC<HeroProps> = () => {
       const timer = setTimeout(sample, 200);
       return () => clearTimeout(timer);
     }
-  }, [oumarPhotoSrc, imageError]);
+  }, [oumarPhotoSrc, imageError, perf.isMobile, perf.isSlowConnection, perf.tier]);
 
-  // Master GSAP Coordinated Timeline & ScrollTrigger
+  // Master GSAP Coordinated Timeline & ScrollTrigger (adaptatif selon l'appareil)
   useEffect(() => {
-    // Check reduced motion preference
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReducedMotion || !heroRef.current) return;
+    if (perf.prefersReducedMotion || perf.tier === 'low' || !heroRef.current) return;
 
     const ctx = gsap.context(() => {
-      // Phase A -> Phase E: Master Coordinated Entrance Timeline
+      const isLightweight = perf.isMobile;
       const tl = gsap.timeline({
         defaults: {
           ease: 'power3.out'
         }
       });
 
-      // Photo-driven background and ambient veil reveal
+      if (isLightweight) {
+        // Entrée mobile ultra-rapide et légère (zéro ScrollTrigger bloquant le scroll tactile)
+        tl.fromTo(
+          '.hero-kicker, .hero-masked-line, .hero-desc, .hero-actions, .hero-portrait-stage',
+          { y: 14, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.45, stagger: 0.05, clearProps: 'transform' }
+        );
+        return;
+      }
+
+      // Desktop complet : chorégraphie et parallaxe douce
       tl.fromTo(
         '.hero__photo-background',
-        { opacity: 0, scale: 1.18 },
-        { opacity: photoTone.isDark ? 0.38 : 0.48, scale: 1.12, duration: 1.2, ease: 'power2.out' },
+        { opacity: 0, scale: 1.16 },
+        { opacity: photoTone.isDark ? 0.38 : 0.48, scale: 1.12, duration: 1.0, ease: 'power2.out' },
         0
       )
       .fromTo(
         '.hero__ambient-glow',
         { opacity: 0 },
-        { opacity: 1, duration: 1.4, ease: 'power2.out' },
+        { opacity: 1, duration: 1.1, ease: 'power2.out' },
         0
       )
       .fromTo(
         '.hero__background-overlay',
         { opacity: 0 },
-        { opacity: 1, duration: 0.8, ease: 'power2.out' },
-        0.1
+        { opacity: 1, duration: 0.7, ease: 'power2.out' },
+        0.08
       );
 
-      // Phase B: Typography with Masked Line Reveals (zero accent clipping)
       tl.fromTo(
         '.hero-kicker',
-        { x: -24, opacity: 0 },
-        { x: 0, opacity: 1, duration: 0.6, ease: 'power3.out' },
-        '-=0.6'
+        { x: -20, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.55, ease: 'power3.out' },
+        '-=0.55'
       )
       .fromTo(
         '.hero-masked-line',
-        { yPercent: 125, opacity: 0 },
-        { yPercent: 0, opacity: 1, duration: 0.95, stagger: 0.14, ease: 'power4.out' },
-        '-=0.45'
+        { yPercent: 115, opacity: 0 },
+        { yPercent: 0, opacity: 1, duration: 0.85, stagger: 0.12, ease: 'power4.out' },
+        '-=0.4'
       )
       .fromTo(
         '.hero-desc',
-        { y: 22, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.7, ease: 'power3.out' },
-        '-=0.6'
+        { y: 18, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' },
+        '-=0.5'
       );
 
-      // Phase C: Coordinated Portrait Stage Revelation from Right
       tl.fromTo(
         '.hero-portrait-stage',
-        { x: 30, opacity: 0, scale: 0.98 },
-        { x: 0, opacity: 1, scale: 1, duration: 0.95, ease: 'power3.out' },
-        '-=0.7'
+        { x: 24, opacity: 0, scale: 0.98 },
+        { x: 0, opacity: 1, scale: 1, duration: 0.85, ease: 'power3.out' },
+        '-=0.6'
       )
       .fromTo(
         '.hero-portrait-img',
-        { scale: 1.04 },
-        { scale: 1, duration: 1.05, ease: 'power3.out' },
+        { scale: 1.03 },
+        { scale: 1, duration: 0.9, ease: 'power3.out' },
         '<'
       );
 
-      // Phase E: Stabilization — Action Buttons & Trust Indicators
       tl.fromTo(
         '.hero-actions',
-        { y: 16, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.55, ease: 'power3.out' },
-        '-=0.45'
+        { y: 14, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' },
+        '-=0.4'
       )
       .fromTo(
         '.hero-proof-item',
-        { y: 12, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.45, stagger: 0.08, ease: 'power2.out' },
-        '-=0.3'
+        { y: 10, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.4, stagger: 0.07, ease: 'power2.out' },
+        '-=0.25'
       );
 
-      // Scroll-Driven Motion via ScrollTrigger (scrubbed, non-blocking parallax)
-      gsap.to('.hero-portrait-stage', {
-        y: -24,
-        ease: 'none',
-        scrollTrigger: {
-          trigger: heroRef.current,
-          start: 'top top',
-          end: 'bottom top',
-          scrub: 0.5
-        }
-      });
+      if (perf.enableParallax) {
+        gsap.to('.hero-portrait-stage', {
+          y: -22,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: heroRef.current,
+            start: 'top top',
+            end: 'bottom top',
+            scrub: 0.5
+          }
+        });
 
-      gsap.to('.hero__photo-background', {
-        y: 35,
-        scale: 1.16,
-        ease: 'none',
-        scrollTrigger: {
-          trigger: heroRef.current,
-          start: 'top top',
-          end: 'bottom top',
-          scrub: 0.5
-        }
-      });
+        gsap.to('.hero__photo-background', {
+          y: 30,
+          scale: 1.16,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: heroRef.current,
+            start: 'top top',
+            end: 'bottom top',
+            scrub: 0.5
+          }
+        });
 
-      gsap.to('.hero-copy-column', {
-        y: -24,
-        ease: 'none',
-        scrollTrigger: {
-          trigger: heroRef.current,
-          start: 'top top',
-          end: 'bottom top',
-          scrub: 0.5
-        }
-      });
+        gsap.to('.hero-copy-column', {
+          y: -22,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: heroRef.current,
+            start: 'top top',
+            end: 'bottom top',
+            scrub: 0.5
+          }
+        });
+      }
     }, heroRef);
 
     return () => ctx.revert();
-  }, []);
+  }, [perf.prefersReducedMotion, perf.tier, perf.isMobile, perf.enableParallax]);
 
   const handleImageError = () => {
     if (oumarPhotoSrc !== DEFAULT_OUMAR_PHOTO_PATH) {
@@ -293,9 +303,9 @@ export const Hero: React.FC<HeroProps> = () => {
   };
 
   return (
-    <section 
+    <section
       ref={heroRef}
-      className="hero relative min-h-[calc(100vh-4rem)] flex items-center justify-center overflow-hidden pt-8 pb-16 lg:py-16 transition-colors duration-300"
+      className="hero relative min-h-[calc(100vh-4rem)] flex items-center justify-center overflow-hidden pt-6 pb-12 sm:pt-8 sm:pb-16 lg:py-16 transition-colors duration-300"
     >
       {/* ========================================================
           1. COUCHE D'ARRIÈRE-PLAN : Photo importée agrandie et floutée
@@ -313,7 +323,7 @@ export const Hero: React.FC<HeroProps> = () => {
       {/* ========================================================
           1b. HALO CHROMATIQUE AMBIANT : Diffusion des teintes de la photo
          ======================================================== */}
-      {oumarPhotoSrc && !imageError && (
+      {oumarPhotoSrc && !imageError && !perf.isMobile && (
         <div
           className="hero__ambient-glow absolute inset-0 z-[1] pointer-events-none transition-opacity duration-700"
           style={{
@@ -337,17 +347,17 @@ export const Hero: React.FC<HeroProps> = () => {
           4. CONTENU PRINCIPAL : Grille 2 colonnes alignée verticalement
          ======================================================== */}
       <div className="hero__inner px-4 sm:px-6 lg:px-8">
-        
+
         {/* ========================================================
             COLONNE GAUCHE : Typographie & Actions
            ======================================================== */}
-        <div 
+        <div
           ref={contentRef}
           className="hero__content hero-copy-column w-full flex flex-col justify-start text-left min-w-0"
         >
-          
+
           {/* Identity Kicker */}
-          <div className="hero-kicker flex items-center gap-2 text-xs font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-5">
+          <div className="hero-kicker flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] sm:text-xs font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-4 sm:mb-5">
             <span className="font-['Outfit'] tracking-[0.2em] text-slate-900 dark:text-white font-bold">
               {heroContent.kickerBrand || 'OUMAR IPHONE'}
             </span>
@@ -355,43 +365,43 @@ export const Hero: React.FC<HeroProps> = () => {
             <span>{heroContent.kickerLocation || 'BOUTIQUE OFFICIELLE · ABIDJAN'}</span>
           </div>
 
-          {/* Phase B: Main Headline with Clean Masked Line Reveals (No accent clipping) */}
-          <h1 className="text-4xl sm:text-5xl lg:text-[3.75rem] font-bold tracking-tight text-slate-950 dark:text-white font-['Outfit'] leading-[1.08] mb-6 [text-wrap:balance]">
+          {/* Main Headline */}
+          <h1 className="text-3xl sm:text-5xl lg:text-[3.75rem] font-bold tracking-tight text-slate-950 dark:text-white font-['Outfit'] leading-[1.1] sm:leading-[1.08] mb-5 sm:mb-6 [text-wrap:balance] break-words">
             <div className="overflow-hidden pb-1 pt-0.5">
               <span className="hero-masked-line block">
                 {heroContent.titleLine1 || "L'art du titane."}
               </span>
             </div>
-            <div className="overflow-hidden pb-2.5 pt-0.5">
+            <div className="overflow-hidden pb-2 pt-0.5">
               <span className="hero-masked-line block text-slate-500 dark:text-slate-400 font-light">
                 {heroContent.titleLine2 || 'La pureté du verre.'}
               </span>
             </div>
           </h1>
 
-          {/* Phase B bis: Concise Supporting Description */}
-          <p className="hero-desc text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl mb-9">
+          {/* Concise Supporting Description */}
+          <p className="hero-desc text-sm sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl mb-6 sm:mb-9">
             {heroContent.description || "La référence des iPhone neufs scellés et reconditionnés certifiés en Côte d'Ivoire. Sous la direction d'Oumar, profitez d'une sélection rigoureusement inspectée, garantie 12 mois et disponible en boutique à Abidjan."}
           </p>
 
-          {/* Phase E: Action Buttons avec Interactions Élastiques */}
-          <div 
+          {/* Action Buttons (48px min-height sur mobile) */}
+          <div
             ref={actionsRef}
-            className="hero-actions flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mb-11"
+            className="hero-actions flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 mb-7 sm:mb-10"
           >
             {/* Primary CTA: EXPLORER LE CATALOGUE */}
             <LiquidGlassSurface
               as="a"
               href="#catalogue"
-              elastic={true}
+              elastic={!perf.isMobile && perf.tier !== 'low'}
               maxStretch={8}
-              chromaticDispersion={true}
+              chromaticDispersion={!perf.isMobile && perf.tier === 'high'}
               dispersionIntensity={0.5}
-              blurIntensity={14}
+              blurIntensity={perf.isMobile ? 8 : 14}
               tint="rgba(15, 23, 42, 0.94)"
               darkTint="rgba(248, 250, 252, 0.95)"
               borderRadius="14px"
-              className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-semibold text-white dark:text-slate-950 shadow-md transition-all whitespace-nowrap shrink-0 group focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
+              className="min-h-[48px] inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-semibold text-white dark:text-slate-950 shadow-md transition-all active:scale-[0.98] whitespace-nowrap shrink-0 group focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
               style={{
                 background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
                 boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.4)'
@@ -407,36 +417,36 @@ export const Hero: React.FC<HeroProps> = () => {
               href={WHATSAPP_URL("Bonjour Oumar, je vous contacte depuis votre site officiel pour échanger sur vos disponibilités d'iPhone.")}
               target="_blank"
               rel="noopener noreferrer"
-              elastic={true}
-              maxStretch={12}
-              refractionIntensity={14}
-              chromaticDispersion={true}
-              dispersionIntensity={0.8}
-              blurIntensity={18}
+              elastic={!perf.isMobile && perf.tier !== 'low'}
+              maxStretch={10}
+              refractionIntensity={12}
+              chromaticDispersion={!perf.isMobile && perf.tier === 'high'}
+              dispersionIntensity={0.6}
+              blurIntensity={perf.isMobile ? 8 : 16}
               borderRadius="14px"
-              className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:text-emerald-950 dark:hover:text-emerald-400 transition-all whitespace-nowrap shrink-0 group focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+              className="min-h-[48px] inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:text-emerald-950 dark:hover:text-emerald-400 transition-all active:scale-[0.98] whitespace-nowrap shrink-0 group focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
             >
               <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
               <span>{heroContent.secondaryButtonText || 'CONTACTER SUR WHATSAPP'}</span>
             </LiquidGlassSurface>
           </div>
 
-          {/* Phase E bis: Unboxed Proof Indicators with Glass Icon Lenses */}
-          <div className="pt-6 border-t border-slate-200/80 dark:border-slate-800/80 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs font-medium text-slate-600 dark:text-slate-400">
+          {/* Unboxed Proof Indicators with Glass Icon Lenses */}
+          <div className="pt-5 sm:pt-6 border-t border-slate-200/80 dark:border-slate-800/80 flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-2.5 sm:gap-y-3 text-[11px] sm:text-xs font-medium text-slate-600 dark:text-slate-400">
             <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
               <LiquidGlassIcon size="sm">
                 <ShieldCheck className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
               </LiquidGlassIcon>
               <span>{heroContent.badgeProof1 || 'Garantie 12 Mois Oumar'}</span>
             </div>
-            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
+            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700 hidden sm:inline">·</span>
             <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
               <LiquidGlassIcon size="sm">
                 <Zap className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
               </LiquidGlassIcon>
               <span>{heroContent.badgeProof2 || 'Test & Retrait en Boutique'}</span>
             </div>
-            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
+            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700 hidden sm:inline">·</span>
             <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
               <LiquidGlassIcon size="sm">
                 <Sparkles className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
@@ -450,7 +460,7 @@ export const Hero: React.FC<HeroProps> = () => {
         {/* ========================================================
             COLONNE DROITE : Photographie principale visible en entier
            ======================================================== */}
-        <div 
+        <div
           className="hero__visual w-full self-start"
           style={{
             height: contentHeight ? `${contentHeight}px` : undefined,
@@ -466,6 +476,7 @@ export const Hero: React.FC<HeroProps> = () => {
                   onError={handleImageError}
                   className="hero__photo hero-portrait-img select-none transition-transform duration-700 ease-out"
                   loading="eager"
+                  decoding="sync"
                   fetchPriority="high"
                 />
               </div>
@@ -476,6 +487,7 @@ export const Hero: React.FC<HeroProps> = () => {
                   alt={heroContent.photoAltText || 'Oumar — Fondateur OUMAR IPHONE Abidjan'}
                   className="hero__photo hero-portrait-img select-none transition-transform duration-700 ease-out"
                   loading="eager"
+                  decoding="sync"
                   fetchPriority="high"
                 />
               </div>

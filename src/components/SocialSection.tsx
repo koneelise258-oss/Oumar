@@ -1,20 +1,19 @@
 import React from 'react';
-import { MessageCircle, ExternalLink, Sparkles } from 'lucide-react';
+import { MessageCircle, ExternalLink } from 'lucide-react';
 
 export const SocialSection: React.FC = () => {
   return (
-    <section 
-      id="reseaux" 
-      className="w-full py-8 sm:py-14 px-3 sm:px-6 lg:px-8 relative z-10 bg-slate-50/50 dark:bg-slate-900/30 border-y border-slate-200/60 dark:border-slate-800/60"
+    <section
+      id="reseaux"
+      className="perf-section w-full py-10 sm:py-16 px-4 sm:px-6 lg:px-8 relative z-10 bg-slate-50/60 dark:bg-slate-900/30 border-y border-slate-200/60 dark:border-slate-800/60"
     >
       <div className="max-w-7xl mx-auto">
-        {/* Header de section */}
-        <div className="flex flex-col items-center text-center mb-6 sm:mb-10 space-y-1.5 sm:space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Communauté & Contact Direct</span>
+        {/* Header de section épuré */}
+        <div className="flex flex-col items-center text-center mb-7 sm:mb-10 space-y-2">
+          <div className="text-[11px] font-bold tracking-[0.18em] uppercase text-emerald-700 dark:text-emerald-400">
+            COMMUNAUTÉ & CONTACT DIRECT
           </div>
-          <h2 className="text-xl sm:text-3xl font-extrabold font-['Outfit'] tracking-tight text-slate-900 dark:text-white">
+          <h2 className="text-2xl sm:text-3xl font-extrabold font-['Outfit'] tracking-tight text-slate-950 dark:text-white">
             Nos Réseaux Sociaux
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-lg">
@@ -22,16 +21,15 @@ export const SocialSection: React.FC = () => {
           </p>
         </div>
 
-        {/* Disposition sur 2 colonnes strictes sur mobile (grid-cols-2) */}
+        {/* Disposition équilibrée sur 2 colonnes mobile et desktop */}
         <div className="grid grid-cols-2 gap-3 sm:gap-6 max-w-3xl mx-auto">
           {/* Card TikTok */}
           <a
             href="https://www.tiktok.com/@oumar_iphone.0"
             target="_blank"
             rel="noopener noreferrer"
-            className="group relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-6 bg-gradient-to-br from-slate-900 to-black text-white shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between border border-slate-800"
+            className="group relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-6 bg-gradient-to-br from-slate-900 to-black text-white shadow-md hover:shadow-xl transition-all duration-300 md:hover:-translate-y-1 active:scale-[0.98] flex flex-col justify-between border border-slate-800"
           >
-            {/* Arrière-plan décoratif subtil */}
             <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-all" />
 
             <div className="space-y-3 relative z-10">
