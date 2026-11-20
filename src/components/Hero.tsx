@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { ArrowDown, MessageCircle, ShieldCheck, Zap, Sparkles } from 'lucide-react';
+import { ArrowDown, ShieldCheck } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
 import { getHeroCustomPhoto, getHeroSettings, HeroSettings } from '../data/storeSettings';
 import { Product } from '../types';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { LiquidGlassIcon } from './LiquidGlassIcon';
+import { AppleLogo, WhatsAppLogo, IPhoneIcon } from './BrandIcons';
 import { useDevicePerformance } from '../utils/devicePerformance';
 import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
 
@@ -358,8 +359,9 @@ export const Hero: React.FC<HeroProps> = () => {
 
           {/* Identity Kicker */}
           <div className="hero-kicker flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] sm:text-xs font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-4 sm:mb-5">
-            <span className="font-['Outfit'] tracking-[0.2em] text-slate-900 dark:text-white font-bold">
-              {heroContent.kickerBrand || 'OUMAR IPHONE'}
+            <span className="inline-flex items-center gap-1.5 font-['Outfit'] tracking-[0.2em] text-slate-900 dark:text-white font-bold">
+              <AppleLogo className="w-3.5 h-3.5 -mt-0.5 shrink-0 text-slate-900 dark:text-white" />
+              <span>{heroContent.kickerBrand || 'OUMAR IPHONE'}</span>
             </span>
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">/</span>
             <span>{heroContent.kickerLocation || 'BOUTIQUE OFFICIELLE · ABIDJAN'}</span>
@@ -426,7 +428,7 @@ export const Hero: React.FC<HeroProps> = () => {
               borderRadius="14px"
               className="min-h-[48px] inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:text-emerald-950 dark:hover:text-emerald-400 transition-all active:scale-[0.98] whitespace-nowrap shrink-0 group focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
             >
-              <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
+              <WhatsAppLogo className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
               <span>{heroContent.secondaryButtonText || 'CONTACTER SUR WHATSAPP'}</span>
             </LiquidGlassSurface>
           </div>
@@ -442,14 +444,14 @@ export const Hero: React.FC<HeroProps> = () => {
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-700 hidden sm:inline">·</span>
             <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
               <LiquidGlassIcon size="sm">
-                <Zap className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
+                <IPhoneIcon className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
               </LiquidGlassIcon>
               <span>{heroContent.badgeProof2 || 'Test & Retrait en Boutique'}</span>
             </div>
             <span aria-hidden="true" className="text-slate-300 dark:text-slate-700 hidden sm:inline">·</span>
             <div className="hero-proof-item flex items-center gap-2 text-slate-800 dark:text-slate-200">
               <LiquidGlassIcon size="sm">
-                <Sparkles className="w-3.5 h-3.5 text-slate-900 dark:text-slate-100" />
+                <WhatsAppLogo className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               </LiquidGlassIcon>
               <span>{heroContent.badgeProof3 || 'Échange Direct WhatsApp'}</span>
             </div>

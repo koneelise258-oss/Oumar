@@ -2,15 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Product } from '../types';
 import { 
   X, 
-  MessageCircle, 
   ShoppingBag, 
   ShieldCheck, 
-  Zap, 
   Store, 
   Check, 
-  Sparkles,
   Cpu,
-  Smartphone,
   Camera,
   BatteryCharging,
   Package,
@@ -19,6 +15,7 @@ import {
 import { WHATSAPP_URL } from '../data/products';
 import { deduplicateColors } from '../services/storeService';
 import { AppleProductImageViewer } from './AppleProductImageViewer';
+import { WhatsAppLogo, IPhoneIcon } from './BrandIcons';
 import { 
   formatProductPrice, 
   formatWhatsAppPrice, 
@@ -177,7 +174,7 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                 <div className="my-2.5 p-3 bg-white/80 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs backdrop-blur-sm">
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">
                     <span className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                       <span>Finition :</span>
                     </span>
                     <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-extrabold text-[11px]">
@@ -260,7 +257,7 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                 <div className="flex items-center justify-between gap-2 text-xs font-semibold tracking-wider uppercase text-slate-500 dark:text-slate-400 mb-2">
                   <span>{product.category} · {product.model}</span>
                   <span className={`inline-flex items-center gap-1.5 ${product.inStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className={`w-2 h-2 rounded-full ${product.inStock ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                     {product.inStock ? 'En stock à Abidjan' : 'Sur commande'}
                   </span>
                 </div>
@@ -408,7 +405,7 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       {product.specs.screen && (
                         <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
-                          <Smartphone className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                          <IPhoneIcon className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                           <div>
                             <span className="font-semibold block text-slate-900 dark:text-white">Écran</span>
                             <span>{product.specs.screen}</span>
@@ -466,7 +463,7 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                     <span>Contrôle qualité en boutique</span>
                   </div>
                   <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800">
-                    <MessageCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <WhatsAppLogo className="w-4 h-4 text-emerald-500 shrink-0" />
                     <span>Contact direct sur WhatsApp</span>
                   </div>
                 </div>
@@ -481,7 +478,7 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                   rel="noopener noreferrer"
                   className="flex-1 py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
                 >
-                  <MessageCircle className="w-4 h-4" />
+                  <WhatsAppLogo className="w-4 h-4 shrink-0" />
                   <span>Commander sur WhatsApp</span>
                 </a>
 

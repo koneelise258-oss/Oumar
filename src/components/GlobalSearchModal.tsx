@@ -4,17 +4,12 @@ import {
   Search, 
   X, 
   ArrowRight, 
-  Check, 
-  Smartphone, 
-  Sparkles, 
-  MessageCircle, 
-  ShieldCheck,
-  Tag,
-  Clock
+  ShieldCheck
 } from 'lucide-react';
 import { getWhatsAppUrl } from '../data/storeSettings';
 import { formatProductPrice, normalizeConditionName } from '../utils/pricingUtils';
 import { sanitizeText } from '../utils/security';
+import { WhatsAppLogo, IPhoneIcon } from './BrandIcons';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -56,8 +51,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Categories list
-  const categories = ['Tous', 'iPhone', 'iPad', 'MacBook', 'Accessoires'];
+  // Categories list (aligné avec Catalogue)
+  const categories = ['Tous', 'iPhone', 'iPad', 'iPhone Duo', 'MacBook', 'Accessoires'];
 
   // Search filter - Recherche en temps réel complètement sécurisée contre les valeurs nulles
   const results = useMemo(() => {
@@ -172,14 +167,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           {categories.map((cat) => (
             <button
               key={cat}
+              type="button"
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1 rounded-full whitespace-nowrap font-medium transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full whitespace-nowrap font-medium transition-all cursor-pointer ${
                 selectedCategory === cat
                   ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 font-bold shadow-xs'
                   : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60'
               }`}
             >
-              {cat}
+              {(cat === 'iPhone' || cat === 'iPhone Duo') && <IPhoneIcon className="w-3 h-3 shrink-0" />}
+              <span>{cat}</span>
             </button>
           ))}
           <span className="ml-auto text-[11px] text-slate-400 shrink-0">
@@ -213,7 +210,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     </span>
                     {product.inStock ? (
                       <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                         En stock Abidjan
                       </span>
                     ) : (
@@ -269,7 +266,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   rel="noopener noreferrer"
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-xs sm:text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md transition-all cursor-pointer"
                 >
-                  <MessageCircle className="w-4 h-4" />
+                  <WhatsAppLogo className="w-4 h-4 shrink-0" />
                   <span>Demander la disponibilité sur WhatsApp</span>
                 </a>
                 <button

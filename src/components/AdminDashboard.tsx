@@ -63,9 +63,17 @@ import {
   validateVideoFile,
   sanitizeText,
   getSecretPortalUrl,
+  getActivePortalKeyForCopy,
+  hasCustomAdminPortalKey,
+  setCustomAdminPortalKey,
+  resetCustomAdminPortalKey,
+  generateRandomPortalKey,
+  normalizePortalKeyInput,
+  BUILTIN_PORTAL_KEY,
   MASKED_ADMIN_PATH,
   purgeSensitiveClientStorage
 } from '../utils/security';
+import { AppleLogo, WhatsAppLogo, IPhoneIcon } from './BrandIcons';
 import {
   X,
   Package,
@@ -85,7 +93,6 @@ import {
   Check,
   RotateCcw,
   Search,
-  MessageCircle,
   Clock,
   MapPin,
   ShieldCheck,
@@ -96,8 +103,6 @@ import {
   ExternalLink,
   ChevronDown,
   AlertTriangle,
-  Sparkles,
-  Smartphone,
   Database,
   Cloud,
   RefreshCw,
@@ -115,7 +120,11 @@ import {
   Crop,
   Sun,
   Moon,
-  Store
+  Store,
+  LayoutTemplate,
+  Info,
+  KeyRound,
+  Shuffle
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -230,6 +239,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [currentAdminRecord, setCurrentAdminRecord] = useState<StoreAdminRecord | null>(null);
   const [isSessionValidating, setIsSessionValidating] = useState<boolean>(true);
   const [copiedPortalLink, setCopiedPortalLink] = useState(false);
+  const [portalCodeInput, setPortalCodeInput] = useState<string>(() => getActivePortalKeyForCopy() || '');
+  const [isCustomPortalCode, setIsCustomPortalCode] = useState<boolean>(() => hasCustomAdminPortalKey());
+  const [portalCodeError, setPortalCodeError] = useState<string | null>(null);
+  const [savingPortalCode, setSavingPortalCode] = useState(false);
 
   // Déconnexion automatique après 20 minutes d'inactivité (Idle Session Timeout)
   useEffect(() => {
@@ -1217,15 +1230,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleCopySecretPortalLink = async () => {
+  const handleCopySecretPortalLink = async (overrideKey?: string) => {
+    const activeKey = getActivePortalKeyForCopy(overrideKey);
+    if (!activeKey) {
+      triggerNotification('Votre code personnalisé est protégé (empreinte SHA-256). Saisissez-le ou générez un nouveau code ci-dessous pour copier le lien.');
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(getSecretPortalUrl());
+      await navigator.clipboard.writeText(getSecretPortalUrl(activeKey));
       setCopiedPortalLink(true);
       triggerNotification('Lien privé du portail direction copié (à garder strictement confidentiel).');
       setTimeout(() => setCopiedPortalLink(false), 3000);
     } catch {
       triggerNotification('Impossible de copier automatiquement le lien.');
     }
+  };
+
+  const handleSaveCustomPortalCode = async () => {
+    setPortalCodeError(null);
+    setSavingPortalCode(true);
+    try {
+      const result = await setCustomAdminPortalKey(portalCodeInput);
+      if (!result.success || !result.cleanKey) {
+        setPortalCodeError(result.error || 'Code secret invalide.');
+        return;
+      }
+      setPortalCodeInput(result.cleanKey);
+      setIsCustomPortalCode(true);
+      await handleCopySecretPortalLink(result.cleanKey);
+      triggerNotification('Nouveau code secret du portail enregistré (empreinte SHA-256) et lien copié !');
+    } finally {
+      setSavingPortalCode(false);
+    }
+  };
+
+  const handleGeneratePortalCode = () => {
+    setPortalCodeError(null);
+    setPortalCodeInput(generateRandomPortalKey());
+  };
+
+  const handleResetPortalCode = () => {
+    resetCustomAdminPortalKey();
+    setIsCustomPortalCode(false);
+    setPortalCodeInput(BUILTIN_PORTAL_KEY);
+    setPortalCodeError(null);
+    triggerNotification(`Code secret intégré rétabli (/portail-${BUILTIN_PORTAL_KEY}).`);
   };
 
   const handleLogout = async () => {
@@ -1270,7 +1319,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { id: 'media', label: 'Médiathèque & Recadrage', shortLabel: 'Médias', icon: <Crop className="w-4 h-4" /> },
     { id: 'videos', label: 'Vidéos Immersives', shortLabel: 'Vidéos', icon: <Video className="w-4 h-4" />, badge: videos.length },
     { id: 'orders', label: 'Commandes & Clients', shortLabel: 'Commandes', icon: <ShoppingBag className="w-4 h-4" />, badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined },
-    { id: 'hero', label: 'Hero Section', shortLabel: 'Hero', icon: <Sparkles className="w-4 h-4" /> },
+    { id: 'hero', label: 'Hero Section', shortLabel: 'Hero', icon: <LayoutTemplate className="w-4 h-4" /> },
     { id: 'settings', label: 'Boutique & Serveur', shortLabel: 'Boutique', icon: <Settings className="w-4 h-4" /> },
     { id: 'admins', label: 'Équipe & Sécurité', shortLabel: 'Sécurité', icon: <Users className="w-4 h-4" />, badge: adminsList.length }
   ];
@@ -1525,7 +1574,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
                   <div>
                     <h2 className="text-base font-bold text-slate-950 dark:text-white font-['Outfit'] flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <ImageIcon className="w-4 h-4 text-amber-500" />
                       <span>Visuel Principal — Page d’Accueil (Hero)</span>
                     </h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1815,7 +1864,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                     title="Restaurer la sélection officielle des 6 modèles certifiés Apple"
                   >
-                    <Sparkles className={`w-3.5 h-3.5 ${isSeedingCatalog ? 'animate-spin' : ''}`} />
+                    <AppleLogo className={`w-3.5 h-3.5 ${isSeedingCatalog ? 'animate-spin' : ''}`} />
                     <span>{isSeedingCatalog ? 'Chargement...' : 'Catalogue officiel Apple'}</span>
                   </button>
 
@@ -2083,20 +2132,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-white focus:outline-none"
                       >
                         <option value="html5">Fichier Vidéo direct (MP4, WebM)</option>
-                        <option value="tiktok">Lien Vidéo TikTok (@oumariphone)</option>
+                        <option value="tiktok">Lien Vidéo TikTok (@oumar_iphone.0)</option>
                       </select>
                     </div>
 
                     <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        URL de la vidéo ou lien TikTok
+                        URL de la vidéo ou lien TikTok (détection automatique du format)
                       </label>
                       <div className="flex gap-2">
                         <input
                           type="text"
                           value={videoUrlInput}
-                          onChange={(e) => setVideoUrlInput(e.target.value)}
-                          placeholder="https://.../video.mp4 ou https://www.tiktok.com/@oumariphone/video/..."
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setVideoUrlInput(val);
+                            const lower = val.trim().toLowerCase();
+                            if (lower.includes('tiktok.com')) {
+                              setVideoTypeInput('tiktok');
+                            } else if (/\.(mp4|webm|mov)(\?|$)/i.test(lower) || lower.startsWith('data:video/')) {
+                              setVideoTypeInput('html5');
+                            }
+                          }}
+                          placeholder="https://.../video.mp4 ou https://www.tiktok.com/@oumar_iphone.0/video/..."
                           className="flex-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-white focus:outline-none"
                         />
                         <button
@@ -2388,7 +2446,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               className="p-2 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors"
                               title="Contacter le client sur WhatsApp"
                             >
-                              <MessageCircle className="w-4 h-4" />
+                              <WhatsAppLogo className="w-4 h-4" />
                             </a>
 
                             {/* Delete order */}
@@ -2514,7 +2572,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {/* Card 1: Kicker & Badges */}
                   <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
                     <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white pb-2 border-b border-slate-100 dark:border-slate-800">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <LayoutTemplate className="w-4 h-4 text-amber-500" />
                       <span>1. Accroche supérieure & Localisation</span>
                     </div>
 
@@ -2780,7 +2838,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        <Smartphone className="w-3 h-3" />
+                        <IPhoneIcon className="w-3 h-3" />
                         <span>Mobile</span>
                       </button>
                     </div>
@@ -2861,7 +2919,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span className="line-clamp-2">{heroForm.badgeProof2}</span>
                           </div>
                           <div className="p-1.5 rounded-lg bg-white/5 border border-white/5">
-                            <MessageCircle className="w-3 h-3 text-emerald-400 mx-auto mb-0.5" />
+                            <WhatsAppLogo className="w-3 h-3 text-emerald-400 mx-auto mb-0.5" />
                             <span className="line-clamp-2">{heroForm.badgeProof3}</span>
                           </div>
                         </div>
@@ -2891,7 +2949,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
                   <div>
                     <h3 className="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <ImageIcon className="w-4 h-4 text-amber-500" />
                       <span>Photo de l'Hero Section & Image de Marque (Oumar)</span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -2999,7 +3057,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     {/* Information Box */}
                     <div className="p-3.5 bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-800/60 rounded-xl text-[11px] text-amber-900 dark:text-amber-300 flex items-start gap-2.5 leading-relaxed">
-                      <Sparkles className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                      <Info className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
                       <span>
                         Cette modification est immédiatement sauvegardée et transmise à la page d'accueil publique en temps réel.
                       </span>
@@ -3231,7 +3289,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     disabled={isSeedingCatalog}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all cursor-pointer shadow-xs disabled:opacity-50"
                   >
-                    <Sparkles className={`w-3.5 h-3.5 ${isSeedingCatalog ? 'animate-spin' : ''}`} />
+                    <AppleLogo className={`w-3.5 h-3.5 ${isSeedingCatalog ? 'animate-spin' : ''}`} />
                     <span>{isSeedingCatalog ? 'Chargement...' : 'Charger le catalogue officiel Apple (6 modèles)'}</span>
                   </button>
 
@@ -3324,7 +3382,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Security Architecture & Stealth Access Info Banner (visible uniquement aux admins connectés) */}
-              <div className="p-4 sm:p-5 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 rounded-2xl text-xs text-emerald-950 dark:text-emerald-100 space-y-3">
+              <div className="p-4 sm:p-5 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 rounded-2xl text-xs text-emerald-950 dark:text-emerald-100 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2 font-bold text-emerald-900 dark:text-emerald-300">
                     <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -3332,7 +3390,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={handleCopySecretPortalLink}
+                    onClick={() => handleCopySecretPortalLink()}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
                   >
                     {copiedPortalLink ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -3363,6 +3421,86 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       Utilisez le bouton « Copier le lien secret » (la clé est automatiquement masquée en <code>{MASKED_ADMIN_PATH}</code>).
                     </p>
                   </div>
+                </div>
+
+                {/* Personnalisation directe du code secret du portail (Zéro variable d'environnement) */}
+                <div className="p-3.5 rounded-xl bg-white/90 dark:bg-slate-900/85 border border-emerald-200/80 dark:border-emerald-900/60 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white text-xs">
+                      <KeyRound className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>Code secret du portail (intégré — aucune configuration serveur requise)</span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                      isCustomPortalCode
+                        ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300'
+                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                    }`}>
+                      {isCustomPortalCode ? 'Code personnalisé actif (SHA-256)' : `Code intégré actif (${BUILTIN_PORTAL_KEY})`}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                    Le portail fonctionne immédiatement avec son code intégré. Vous pouvez le personnaliser ici à tout moment : seul son hachage SHA-256 est enregistré sur l'appareil.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-mono text-slate-400 select-none">
+                        /portail-
+                      </span>
+                      <input
+                        type="text"
+                        value={portalCodeInput}
+                        onChange={(e) => {
+                          setPortalCodeInput(normalizePortalKeyInput(e.target.value));
+                          if (portalCodeError) setPortalCodeError(null);
+                        }}
+                        placeholder="omr-dir-7x9k4p"
+                        maxLength={48}
+                        className="w-full min-h-[38px] pl-[66px] pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleGeneratePortalCode}
+                        className="min-h-[38px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
+                        title="Générer automatiquement un code secret robuste"
+                      >
+                        <Shuffle className="w-3.5 h-3.5" />
+                        <span>Générer</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSaveCustomPortalCode}
+                        disabled={savingPortalCode || portalCodeInput.length < 8}
+                        className="min-h-[38px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:opacity-90 disabled:opacity-40 transition-opacity cursor-pointer"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{savingPortalCode ? 'Enregistrement...' : 'Appliquer & Copier'}</span>
+                      </button>
+
+                      {isCustomPortalCode && (
+                        <button
+                          type="button"
+                          onClick={handleResetPortalCode}
+                          className="min-h-[38px] inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                          title="Revenir au code secret intégré par défaut"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Défaut</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {portalCodeError && (
+                    <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
+                      {portalCodeError}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 pt-1 text-[10px]">

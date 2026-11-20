@@ -2,23 +2,19 @@ import React, { useState, useMemo } from 'react';
 import { Product, ProductCategory } from '../types';
 import { 
   ShoppingBag, 
-  MessageCircle, 
   ShieldCheck, 
   Check, 
   Search, 
   SlidersHorizontal, 
-  ArrowUpDown, 
   X, 
-  Eye, 
   RotateCcw,
-  Sparkles,
-  Settings,
   ChevronDown
 } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
 import { ProductModal } from './ProductModal';
 import { deduplicateColors } from '../services/storeService';
 import { AppleProductImageViewer } from './AppleProductImageViewer';
+import { WhatsAppLogo, IPhoneIcon } from './BrandIcons';
 import { 
   formatProductPrice, 
   formatWhatsAppPrice, 
@@ -251,6 +247,9 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                     : 'bg-white dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-800'
                 }`}
               >
+                {(cat === 'iPhone' || cat === 'iPhone Duo') && (
+                  <IPhoneIcon className="w-3.5 h-3.5 shrink-0" />
+                )}
                 <span>{cat}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
                   isSelected 
@@ -680,7 +679,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                         onClick={(e) => e.stopPropagation()}
                         className="w-full min-h-[40px] sm:min-h-[42px] py-2 sm:py-2.5 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 transition-colors active:scale-[0.97] min-w-0"
                       >
-                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <WhatsAppLogo className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <span className="truncate">WhatsApp</span>
                       </a>
                     </div>

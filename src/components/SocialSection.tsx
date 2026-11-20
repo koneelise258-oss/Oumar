@@ -1,7 +1,22 @@
-import React from 'react';
-import { MessageCircle, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ExternalLink } from 'lucide-react';
+import { TikTokLogo, WhatsAppLogo } from './BrandIcons';
+import { WHATSAPP_URL } from '../data/products';
+import { loadStoreSettings } from '../data/storeSettings';
 
 export const SocialSection: React.FC = () => {
+  const [phoneDisplay, setPhoneDisplay] = useState<string>(
+    () => loadStoreSettings().whatsappPhone || '+225 01 61 44 36 37'
+  );
+
+  useEffect(() => {
+    const syncPhone = () => {
+      setPhoneDisplay(loadStoreSettings().whatsappPhone || '+225 01 61 44 36 37');
+    };
+    window.addEventListener('oumar_settings_updated', syncPhone);
+    return () => window.removeEventListener('oumar_settings_updated', syncPhone);
+  }, []);
+
   return (
     <section
       id="reseaux"
@@ -34,13 +49,7 @@ export const SocialSection: React.FC = () => {
 
             <div className="space-y-3 relative z-10">
               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform">
-                {/* Icône TikTok SVG officielle */}
-                <svg
-                  className="w-5 h-5 sm:w-6 sm:h-6 fill-current text-white"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 3 15.68 6.34 6.34 0 0 0 9.34 22a6.33 6.33 0 0 0 6.33-6.33V9a8.16 8.16 0 0 0 4.92 1.64V7.19a4.85 4.85 0 0 1-1-.5z" />
-                </svg>
+                <TikTokLogo className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
 
               <div>
@@ -61,17 +70,17 @@ export const SocialSection: React.FC = () => {
 
           {/* Card WhatsApp */}
           <a
-            href="https://wa.me/2250161443637?text=Bonjour%20OUMAR%20IPHONE%2C%20je%20souhaite%20des%20informations"
+            href={WHATSAPP_URL('Bonjour OUMAR IPHONE, je souhaite des informations sur vos disponibilités à Abidjan.')}
             target="_blank"
             rel="noopener noreferrer"
-            className="group relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-6 bg-gradient-to-br from-emerald-900/90 to-emerald-950 text-white shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between border border-emerald-800/80"
+            className="group relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-6 bg-gradient-to-br from-emerald-900/90 to-emerald-950 text-white shadow-md hover:shadow-xl transition-all duration-300 md:hover:-translate-y-1 active:scale-[0.98] flex flex-col justify-between border border-emerald-800/80"
           >
             {/* Arrière-plan décoratif subtil */}
             <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
 
             <div className="space-y-3 relative z-10">
               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-800/80 border border-emerald-700/60 flex items-center justify-center text-emerald-300 shadow-xs group-hover:scale-105 transition-transform">
-                <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 fill-current text-emerald-300" />
+                <WhatsAppLogo className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-300" />
               </div>
 
               <div>
@@ -79,7 +88,7 @@ export const SocialSection: React.FC = () => {
                   WhatsApp Direct
                 </span>
                 <h3 className="text-xs sm:text-lg font-bold font-['Outfit'] text-white truncate group-hover:text-emerald-300 transition-colors">
-                  +225 01 61 44 36 37
+                  {phoneDisplay}
                 </h3>
               </div>
             </div>

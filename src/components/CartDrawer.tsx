@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CartItem } from '../types';
-import { X, Plus, Minus, Trash2, MessageCircle, ShieldCheck, CheckCircle2, Store, AlertTriangle } from 'lucide-react';
-import { getWhatsAppUrl } from '../data/storeSettings';
+import { X, Plus, Minus, Trash2, ShieldCheck, CheckCircle2, Store, AlertTriangle, RefreshCw } from 'lucide-react';
+import { getWhatsAppUrl, loadStoreSettings } from '../data/storeSettings';
 import { formatProductPrice, normalizeConditionName } from '../utils/pricingUtils';
 import { sanitizeText, sanitizePhone, openSafeExternalUrl } from '../utils/security';
+import { WhatsAppLogo } from './BrandIcons';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -27,24 +28,46 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSent, setOrderSent] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [storePhone, setStorePhone] = useState<string>(
+    () => loadStoreSettings().whatsappPhone || '+225 01 61 44 36 37'
+  );
+
+  // Fermeture par touche Échap + synchronisation automatique du téléphone boutique
+  useEffect(() => {
+    if (!isOpen) return;
+    setStorePhone(loadStoreSettings().whatsappPhone || '+225 01 61 44 36 37');
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  // Items with defined prices contribute to numerical subtotal
+  // Seuls les articles ayant un prix défini (> 0) contribuent au sous-total numérique
+  // (ne jamais recopier le prix de base d'un produit si la combinaison choisie est "Prix sur demande")
   const subtotal = items.reduce((acc, item) => {
-    const price = typeof item.unitPrice === 'number' && item.unitPrice > 0 
-      ? item.unitPrice 
-      : (typeof item.product.price === 'number' ? item.product.price : 0);
+    const price = typeof item.unitPrice === 'number' && item.unitPrice > 0 ? item.unitPrice : 0;
     return acc + price * item.quantity;
   }, 0);
 
   const hasItemsOnDemand = items.some(
-    (item) => !item.unitPrice || item.unitPrice <= 0
+    (item) => typeof item.unitPrice !== 'number' || item.unitPrice <= 0
   );
 
-  // La boutique ne propose AUCUNE livraison : retrait gratuit en boutique
-  const deliveryFee = 0;
   const total = subtotal;
+
+  const formattedSubtotal =
+    total > 0
+      ? `${subtotal.toLocaleString('fr-FR')} FCFA${hasItemsOnDemand ? ' (+ sur demande)' : ''}`
+      : 'Prix sur demande';
+
+  const formattedTotal =
+    total > 0
+      ? `${total.toLocaleString('fr-FR')} FCFA${hasItemsOnDemand ? ' (+ sur demande)' : ''}`
+      : 'Prix sur demande';
 
   const handleOrderSubmitted = (e: React.FormEvent | React.MouseEvent) => {
     e.preventDefault();
@@ -71,16 +94,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       const itemListText = items
         .map((it) => {
           const cond = normalizeConditionName(it.chosenCondition || it.product.condition);
-          const priceLabel = it.unitPrice && it.unitPrice > 0
-            ? `${(it.unitPrice * it.quantity).toLocaleString('fr-FR')} FCFA`
-            : 'Prix sur demande';
+          const priceLabel =
+            typeof it.unitPrice === 'number' && it.unitPrice > 0
+              ? `${(it.unitPrice * it.quantity).toLocaleString('fr-FR')} FCFA`
+              : 'Prix sur demande';
           return `• ${sanitizeText(it.product.name, 100)} [État: ${cond}] (${sanitizeText(it.chosenStorage, 30)}, ${sanitizeText(it.chosenColor, 40)}) x${it.quantity} — ${priceLabel}`;
         })
         .join('\n');
 
-      const totalSummary = total > 0
-        ? `${total.toLocaleString('fr-FR')} FCFA${hasItemsOnDemand ? ' (+ articles sur demande)' : ''}`
-        : 'Prix sur demande';
+      const totalSummary =
+        total > 0
+          ? `${total.toLocaleString('fr-FR')} FCFA${hasItemsOnDemand ? ' (+ articles sur demande)' : ''}`
+          : 'Prix sur demande';
 
       const whatsappMessage = `Bonjour OUMAR IPHONE, je souhaite me renseigner pour réserver et acheter en magasin :\n\n${itemListText}\n\nTotal estimé : ${totalSummary}\n\nNom du client : ${cleanName}${cleanPhone ? `\nTéléphone de contact : ${cleanPhone}` : ''}\nMode de retrait : En boutique OUMAR IPHONE (Abidjan)\n\nMerci de me confirmer la disponibilité des articles en boutique.`;
 
@@ -125,8 +150,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </p>
             </div>
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="p-1.5 text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               aria-label="Fermer le panier"
             >
               <X className="w-5 h-5" />
@@ -139,6 +165,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <div className="py-16 text-center text-slate-400 dark:text-slate-500">
                 <p className="text-sm">Votre panier est vide.</p>
                 <button
+                  type="button"
                   onClick={onClose}
                   className="mt-4 text-xs font-semibold text-slate-900 dark:text-white hover:underline cursor-pointer"
                 >
@@ -146,72 +173,91 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </button>
               </div>
             ) : (
-              items.map((item, index) => (
-                <div
-                  key={`cart-${item.product?.id || index}-${item.chosenStorage}-${item.chosenColor}-${index}`}
-                  className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex gap-3.5 items-center"
-                >
-                  <img
-                    src={item.product.image || undefined}
-                    alt={item.product.name}
-                    className="w-16 h-16 object-cover rounded-lg bg-white dark:bg-slate-850 p-1 border border-slate-200/60 dark:border-slate-700/60"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                        {item.product.name}
-                      </h3>
-                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-sm bg-slate-200/80 dark:bg-slate-750 text-slate-700 dark:text-slate-300">
-                        {normalizeConditionName(item.chosenCondition || item.product.condition)}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {item.chosenStorage} · {item.chosenColor}
-                    </p>
-                    <p className={`text-xs font-bold mt-1 ${
-                      !item.unitPrice || item.unitPrice <= 0
-                        ? 'text-amber-600 dark:text-amber-400'
-                        : 'text-slate-950 dark:text-white'
-                    }`}>
-                      {formatProductPrice(item.unitPrice ? item.unitPrice * item.quantity : null)}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-1 py-0.5">
-                      <button
-                        onClick={() => onUpdateQuantity(index, item.quantity - 1)}
-                        className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                        aria-label="Diminuer la quantité"
+              items.map((item, index) => {
+                const chosenColorObj = item.product.colors?.find(
+                  (c) =>
+                    c.name &&
+                    item.chosenColor &&
+                    c.name.trim().toLowerCase() === item.chosenColor.trim().toLowerCase()
+                );
+                const thumbnailSrc = chosenColorObj?.image || item.product.image || undefined;
+
+                return (
+                  <div
+                    key={`cart-${item.product?.id || index}-${item.chosenStorage}-${item.chosenColor}-${index}`}
+                    className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex gap-3.5 items-center"
+                  >
+                    <img
+                      src={thumbnailSrc}
+                      alt={`${item.product.name} — ${item.chosenColor}`}
+                      className="w-16 h-16 object-contain rounded-lg bg-white dark:bg-slate-800 p-1.5 border border-slate-200/60 dark:border-slate-700/60 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                          {item.product.name}
+                        </h3>
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-sm bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+                          {normalizeConditionName(item.chosenCondition || item.product.condition)}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                        {item.chosenStorage} · {item.chosenColor}
+                      </p>
+                      <p
+                        className={`text-xs font-bold mt-1 tabular-nums ${
+                          !item.unitPrice || item.unitPrice <= 0
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-slate-950 dark:text-white'
+                        }`}
                       >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="text-xs font-bold w-4 text-center">
-                        {item.quantity}
-                      </span>
+                        {formatProductPrice(
+                          typeof item.unitPrice === 'number' && item.unitPrice > 0
+                            ? item.unitPrice * item.quantity
+                            : null
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-1 py-0.5">
+                        <button
+                          type="button"
+                          onClick={() => onUpdateQuantity(index, item.quantity - 1)}
+                          className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                          aria-label="Diminuer la quantité"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="text-xs font-bold w-4 text-center tabular-nums">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onUpdateQuantity(index, item.quantity + 1)}
+                          className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                          aria-label="Augmenter la quantité"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
                       <button
-                        onClick={() => onUpdateQuantity(index, item.quantity + 1)}
-                        className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                        aria-label="Augmenter la quantité"
+                        type="button"
+                        onClick={() => onRemoveItem(index)}
+                        className="text-slate-400 hover:text-rose-500 p-1 cursor-pointer"
+                        aria-label="Supprimer du panier"
                       >
-                        <Plus className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <button
-                      onClick={() => onRemoveItem(index)}
-                      className="text-slate-400 hover:text-rose-500 p-1"
-                      aria-label="Supprimer du panier"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
           {/* Footer & Order Reservation Form */}
           {items.length > 0 && (
-            <div className="p-6 border-t border-slate-200/90 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850 space-y-4">
+            <div className="p-6 border-t border-slate-200/90 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/95 space-y-4">
               
               {/* Pickup Mode Notice */}
               <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center gap-2.5">
@@ -268,20 +314,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
               {/* Price Calculation (No Delivery Fee) */}
               <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <div className="flex justify-between">
+                <div className="flex justify-between gap-2">
                   <span>Sous-total articles</span>
-                  <span className="font-semibold tabular-nums text-slate-900 dark:text-white">
-                    {subtotal.toLocaleString('fr-FR')} FCFA
+                  <span className="font-semibold tabular-nums text-slate-900 dark:text-white text-right">
+                    {formattedSubtotal}
                   </span>
                 </div>
                 <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
                   <span>Frais de retrait en boutique</span>
                   <span className="tabular-nums font-bold">Gratuit (0 FCFA)</span>
                 </div>
-                <div className="flex justify-between text-sm font-bold text-slate-950 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
+                <div className="flex justify-between gap-2 text-sm font-bold text-slate-950 dark:text-white pt-2 border-t border-slate-200 dark:border-slate-800">
                   <span>Total à régler au retrait</span>
-                  <span className="tabular-nums text-base">
-                    {total.toLocaleString('fr-FR')} FCFA
+                  <span className={`tabular-nums text-right ${total > 0 ? 'text-base' : 'text-sm text-amber-600 dark:text-amber-400'}`}>
+                    {formattedTotal}
                   </span>
                 </div>
               </div>
@@ -295,17 +341,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               >
                 {isSubmitting ? (
                   <>
-                    <MessageCircle className="w-4 h-4 animate-bounce" />
+                    <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
                     <span>Préparation du message WhatsApp...</span>
                   </>
                 ) : orderSent ? (
                   <>
-                    <CheckCircle2 className="w-4 h-4" />
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
                     <span>Demande préparée sur WhatsApp !</span>
                   </>
                 ) : (
                   <>
-                    <MessageCircle className="w-4 h-4" />
+                    <WhatsAppLogo className="w-4 h-4 shrink-0" />
                     <span>Réserver & Valider sur WhatsApp</span>
                   </>
                 )}
@@ -313,7 +359,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
               <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 text-center">
                 <ShieldCheck className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300 shrink-0" />
-                <span>Contact direct & échanges sur WhatsApp (+225 01 61 44 36 37)</span>
+                <span>Contact direct & échanges sur WhatsApp ({storePhone})</span>
               </div>
             </div>
           )}

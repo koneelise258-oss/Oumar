@@ -2,15 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Product, ProductColor } from '../types';
 import { 
   ArrowLeft, 
-  MessageCircle, 
   ShoppingBag, 
   ShieldCheck, 
-  Zap, 
   Store, 
   Check, 
-  Sparkles,
   Cpu,
-  Smartphone,
   Camera,
   BatteryCharging,
   Package,
@@ -22,6 +18,7 @@ import {
 import { WHATSAPP_URL } from '../data/products';
 import { deduplicateColors } from '../services/storeService';
 import { AppleProductImageViewer } from './AppleProductImageViewer';
+import { WhatsAppLogo, IPhoneIcon } from './BrandIcons';
 import { 
   formatProductPrice, 
   formatWhatsAppPrice, 
@@ -116,11 +113,28 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     setTimeout(() => setAdded(false), 2000);
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
+    const shareUrl = window.location.href;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: `${product.name} — OUMAR IPHONE`,
+          text: `${product.name} (${selectedCondition}, ${selectedStorage}, ${selectedColor})`,
+          url: shareUrl
+        });
+        return;
+      } catch {
+        // Fallback to clipboard if user cancels or share API declines
+      }
+    }
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(window.location.href);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2000);
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 2000);
+      } catch {
+        // Ignore clipboard permission errors
+      }
     }
   };
 
@@ -160,7 +174,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
             className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-xs active:scale-[0.98]"
           >
             <ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-            <span>← Retour au catalogue</span>
+            <span>Retour au catalogue</span>
           </button>
 
           <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -227,7 +241,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
               <div className="my-3 p-3.5 bg-white/80 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm backdrop-blur-sm">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2.5">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
                     <span>Finitions disponibles :</span>
                   </span>
                   <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-extrabold text-[11px]">
@@ -303,7 +317,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
               <div className="flex items-center justify-between gap-2 text-xs font-semibold tracking-wider uppercase text-slate-500 dark:text-slate-400 mb-2">
                 <span>{product.category} · {product.model}</span>
                 <span className={`inline-flex items-center gap-1.5 ${isVariantInStock ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className={`w-2 h-2 rounded-full ${isVariantInStock ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                   {isVariantInStock ? 'Disponible en boutique Abidjan' : 'Sur commande'}
                 </span>
               </div>
@@ -460,7 +474,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
                     {product.specs.screen && (
                       <div className="flex items-start gap-2.5 text-slate-700 dark:text-slate-300">
-                        <Smartphone className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                        <IPhoneIcon className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                         <div>
                           <span className="font-bold block text-slate-900 dark:text-white">Écran</span>
                           <span>{product.specs.screen}</span>
@@ -518,7 +532,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                   <span>Contrôle qualité rigoureux</span>
                 </div>
                 <div className="flex items-center gap-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
-                  <MessageCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <WhatsAppLogo className="w-4 h-4 text-emerald-500 shrink-0" />
                   <span>Contact direct sur WhatsApp</span>
                 </div>
               </div>
@@ -533,7 +547,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                 rel="noopener noreferrer"
                 className="flex-1 py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all active:scale-[0.98] cursor-pointer"
               >
-                <MessageCircle className="w-5 h-5 fill-current" />
+                <WhatsAppLogo className="w-5 h-5 shrink-0" />
                 <span>Se renseigner sur WhatsApp</span>
               </a>
 

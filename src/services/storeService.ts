@@ -478,21 +478,39 @@ export async function fetchStoreSettingsRemote(): Promise<StoreSettings> {
 
   try {
     // Projection explicite des seules colonnes publiques (exclut toute colonne interne héritée comme admin_pin)
-    const PUBLIC_SETTINGS_COLUMNS =
+    const BASE_PUBLIC_COLUMNS =
       'id, store_name, whatsapp_phone, tagline, city, addresses, opening_hours, warranty_text, delivery_fee, hero_photo_custom, updated_at';
 
-    const { data, error } = await supabase
+    let data: any = null;
+    const primaryRes = await supabase
       .from('store_settings')
-      .select(PUBLIC_SETTINGS_COLUMNS)
+      .select(`${BASE_PUBLIC_COLUMNS}, hero_settings`)
       .eq('id', 'default')
       .maybeSingle();
 
-    if (error) {
+    if (primaryRes.error && primaryRes.error.message?.includes('hero_settings')) {
+      const fallbackRes = await supabase
+        .from('store_settings')
+        .select(BASE_PUBLIC_COLUMNS)
+        .eq('id', 'default')
+        .maybeSingle();
+      if (fallbackRes.error) {
+        return loadStoreSettings();
+      }
+      data = fallbackRes.data;
+    } else if (primaryRes.error) {
       return loadStoreSettings();
+    } else {
+      data = primaryRes.data;
     }
 
     if (data) {
       const existingLocal = loadStoreSettings();
+      const mergedHeroSettings =
+        data.hero_settings && typeof data.hero_settings === 'object'
+          ? { ...existingLocal.heroSettings, ...data.hero_settings }
+          : existingLocal.heroSettings;
+
       const mapped: StoreSettings = {
         whatsappPhone: data.whatsapp_phone,
         storeName: data.store_name,
@@ -502,7 +520,7 @@ export async function fetchStoreSettingsRemote(): Promise<StoreSettings> {
         openingHours: data.opening_hours,
         warrantyText: data.warranty_text,
         deliveryFee: data.delivery_fee,
-        heroSettings: existingLocal.heroSettings
+        heroSettings: mergedHeroSettings
       };
 
       // Synchroniser la photo Hero uniquement si son URL passe la validation stricte anti-XSS
@@ -513,6 +531,11 @@ export async function fetchStoreSettingsRemote(): Promise<StoreSettings> {
       }
 
       saveStoreSettings(mapped);
+      if (typeof window !== 'undefined' && mergedHeroSettings) {
+        window.dispatchEvent(
+          new CustomEvent('oumar_hero_settings_updated', { detail: mergedHeroSettings })
+        );
+      }
       return mapped;
     }
   } catch {

@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { AppleLogo, TikTokLogo } from './BrandIcons';
 
 interface FooterProps {
   onSecretAccess?: () => void;
@@ -37,8 +38,9 @@ export const Footer: React.FC<FooterProps> = ({ onSecretAccess }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-slate-800">
           <div>
-            <div className="text-xl font-bold tracking-tight text-white font-['Outfit'] mb-1">
-              OUMAR IPHONE
+            <div className="inline-flex items-center gap-2 text-xl font-bold tracking-tight text-white font-['Outfit'] mb-1">
+              <AppleLogo className="w-4 h-4 -mt-0.5 text-white shrink-0" />
+              <span>OUMAR IPHONE</span>
             </div>
             <p className="text-xs text-slate-400">
               Boutique Apple d’excellence certifiée à Abidjan · Cocody Angré 8ème Tranche & Plateau Avenue Chardy
@@ -49,7 +51,10 @@ export const Footer: React.FC<FooterProps> = ({ onSecretAccess }) => {
             <a href="#catalogue" className="hover:text-white transition-colors">Catalogue</a>
             <a href="#garantie" className="hover:text-white transition-colors">Garantie & SAV</a>
             <a href="#boutique" className="hover:text-white transition-colors">Nos Boutiques</a>
-            <a href="https://www.tiktok.com/@oumar_iphone.0" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TikTok @oumar_iphone.0</a>
+            <a href="https://www.tiktok.com/@oumar_iphone.0" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+              <TikTokLogo className="w-3.5 h-3.5 shrink-0" />
+              <span>TikTok @oumar_iphone.0</span>
+            </a>
           </div>
         </div>
 

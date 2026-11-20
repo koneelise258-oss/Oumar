@@ -1,6 +1,7 @@
 import React from 'react';
-import { Home, Package, Search, MessageCircle, ArrowRight, Compass } from 'lucide-react';
+import { Home, Package, Search, ArrowRight } from 'lucide-react';
 import { WHATSAPP_URL } from '../data/products';
+import { AppleLogo, WhatsAppLogo } from './BrandIcons';
 
 interface NotFoundPageProps {
   requestedPath?: string;
@@ -26,7 +27,7 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({
       <div className="w-full max-w-2xl text-center">
         {/* Clean Apple-inspired minimal emblem */}
         <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm mb-6">
-          <Compass className="w-8 h-8 sm:w-9 sm:h-9 text-slate-900 dark:text-white stroke-[1.75]" />
+          <AppleLogo className="w-8 h-8 sm:w-9 sm:h-9 text-slate-900 dark:text-white" />
         </div>
 
         {/* Display 404 Numeral */}
@@ -88,7 +89,7 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-400 hover:underline min-h-[36px] px-2"
           >
-            <MessageCircle className="w-4 h-4" />
+            <WhatsAppLogo className="w-4 h-4 shrink-0" />
             <span>Contacter Oumar sur WhatsApp</span>
           </a>
         </div>

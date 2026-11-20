@@ -15,13 +15,53 @@ import { getCombinationPrice, normalizeConditionName } from './utils/pricingUtil
 import {
   MASKED_ADMIN_PATH,
   isDecoyAdminLocation,
-  isSecretAdminLocation,
+  verifySecretAdminLocation,
   isKnownPublicPath,
   clearUrlToRoot,
   maskAdminUrl,
   purgeSensitiveClientStorage
 } from './utils/security';
 import { ArrowUp, CheckCircle2, ShoppingBag, X } from 'lucide-react';
+
+const CART_STORAGE_KEY = 'omr_cart_v1';
+const DEFAULT_PAGE_TITLE = 'OUMAR IPHONE | Boutique Apple Abidjan';
+
+function loadPersistedCart(catalog: Product[]): CartItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const hydrated: CartItem[] = [];
+    for (const entry of parsed) {
+      if (!entry || typeof entry !== 'object') continue;
+      const productId = entry.productId || entry.product?.id;
+      const matched = catalog.find((p) => p.id === productId && p.published !== false);
+      if (!matched) continue;
+      const chosenStorage = typeof entry.chosenStorage === 'string' && entry.chosenStorage
+        ? entry.chosenStorage
+        : matched.selectedStorage || matched.storage?.[0] || 'Standard';
+      const chosenColor = typeof entry.chosenColor === 'string' && entry.chosenColor
+        ? entry.chosenColor
+        : matched.selectedColor || matched.colors?.[0]?.name || 'Standard';
+      const chosenCondition = normalizeConditionName(entry.chosenCondition || matched.condition);
+      const qty = Math.min(20, Math.max(1, Math.floor(Number(entry.quantity) || 1)));
+      const livePrice = getCombinationPrice(matched, chosenStorage, chosenCondition, chosenColor).price;
+      hydrated.push({
+        product: matched,
+        quantity: qty,
+        chosenStorage,
+        chosenColor,
+        chosenCondition,
+        unitPrice: typeof livePrice === 'number' && livePrice > 0 ? livePrice : 0
+      });
+    }
+    return hydrated;
+  } catch {
+    return [];
+  }
+}
 
 // Chargement différé des composants secondaires et pages dédiées
 const VideosSection = lazy(() => import('./components/VideosSection').then(m => ({ default: m.VideosSection })));
@@ -45,7 +85,7 @@ function StoreApp() {
   const [activeSection, setActiveSection] = useState<string>('home');
   const [products, setProducts] = useState<Product[]>(loadProducts);
   const [videos, setVideos] = useState<VideoItem[]>(loadVideos);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => loadPersistedCart(loadProducts()));
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   // Page 404 personnalisée (routes inexistantes, leurres /admin, /login, /espace-prive non authentifié)
@@ -71,6 +111,7 @@ function StoreApp() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [cartToast, setCartToast] = useState<CartToastState | null>(null);
   const cartToastTimerRef = useRef<number | null>(null);
+  const lastRemoteSyncAtRef = useRef<number>(0);
 
   // Nettoyage de sécurité au démarrage : ne jamais conserver de données clients (commandes PII) en localStorage public
   useEffect(() => {
@@ -81,31 +122,140 @@ function StoreApp() {
     }
   }, []);
 
-  // Synchronisation en arrière-plan différée pour libérer le fil principal au démarrage
+  // Sauvegarde automatique du panier dans localStorage (sans aucune PII client)
   useEffect(() => {
-    const syncRemoteData = () => {
-      fetchProductsRemote().then((remoteProds) => {
+    try {
+      const compact = cartItems.map((it) => ({
+        productId: it.product.id,
+        quantity: it.quantity,
+        chosenStorage: it.chosenStorage,
+        chosenColor: it.chosenColor,
+        chosenCondition: it.chosenCondition
+      }));
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(compact));
+    } catch {
+      // Ignore storage quota restrictions
+    }
+  }, [cartItems]);
+
+  // Réconciliation automatique du panier + fiche active quand le catalogue se met à jour
+  useEffect(() => {
+    if (!products || products.length === 0) return;
+
+    setCartItems((prev) => {
+      if (prev.length === 0) return prev;
+      let changed = false;
+      const next: CartItem[] = [];
+      for (const item of prev) {
+        const fresh = products.find((p) => p.id === item.product.id && p.published !== false);
+        if (!fresh) {
+          changed = true;
+          continue;
+        }
+        const cond = normalizeConditionName(item.chosenCondition || fresh.condition);
+        const livePrice = getCombinationPrice(fresh, item.chosenStorage, cond, item.chosenColor).price;
+        const resolvedUnitPrice = typeof livePrice === 'number' && livePrice > 0 ? livePrice : 0;
+        if (fresh !== item.product || resolvedUnitPrice !== (item.unitPrice || 0)) {
+          changed = true;
+          next.push({
+            ...item,
+            product: fresh,
+            chosenCondition: cond,
+            unitPrice: resolvedUnitPrice
+          });
+        } else {
+          next.push(item);
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    setActiveDetailProduct((current) => {
+      if (!current) return null;
+      const updated = products.find((p) => p.id === current.id);
+      return updated && updated !== current ? updated : current;
+    });
+  }, [products]);
+
+  // Mise à jour automatique du titre de la page (SEO & onglet navigateur)
+  useEffect(() => {
+    if (adminView !== null) return; // AdminAuthModal / AdminDashboard gèrent leur propre titre
+    if (isNotFound) {
+      document.title = 'Page introuvable (404) — OUMAR IPHONE';
+    } else if (activeDetailProduct) {
+      document.title = `${activeDetailProduct.name} — OUMAR IPHONE Abidjan`;
+    } else {
+      document.title = DEFAULT_PAGE_TITLE;
+    }
+  }, [activeDetailProduct, isNotFound, adminView]);
+
+  // Synchronisation automatique en arrière-plan (démarrage différé, retour d'onglet, reconnexion réseau)
+  const syncRemoteData = useCallback((force = false) => {
+    const now = Date.now();
+    if (!force && now - lastRemoteSyncAtRef.current < 120_000) return;
+    lastRemoteSyncAtRef.current = now;
+
+    fetchProductsRemote(force)
+      .then((remoteProds) => {
         if (Array.isArray(remoteProds) && remoteProds.length > 0) {
           setProducts(remoteProds);
         }
-      }).catch(() => {});
+      })
+      .catch(() => {});
 
-      fetchVideosRemote().then((remoteVideos) => {
+    fetchVideosRemote()
+      .then((remoteVideos) => {
         if (Array.isArray(remoteVideos)) {
           setVideos(remoteVideos);
         }
-      }).catch(() => {});
+      })
+      .catch(() => {});
 
-      fetchStoreSettingsRemote().catch(() => {});
-    };
+    fetchStoreSettingsRemote().catch(() => {});
+  }, []);
 
+  useEffect(() => {
+    let cancelIdle: (() => void) | undefined;
     if ('requestIdleCallback' in window) {
-      const id = (window as any).requestIdleCallback(syncRemoteData, { timeout: 1500 });
-      return () => (window as any).cancelIdleCallback(id);
+      const id = (window as any).requestIdleCallback(() => syncRemoteData(true), { timeout: 1500 });
+      cancelIdle = () => (window as any).cancelIdleCallback(id);
     } else {
-      const timer = setTimeout(syncRemoteData, 250);
-      return () => clearTimeout(timer);
+      const timer = setTimeout(() => syncRemoteData(true), 250);
+      cancelIdle = () => clearTimeout(timer);
     }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncRemoteData(false);
+      }
+    };
+    const handleOnline = () => syncRemoteData(true);
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      cancelIdle?.();
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [syncRemoteData]);
+
+  // Synchronisation automatique inter-onglets (produits, vidéos, panier)
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'oumar_store_products') {
+        setProducts(loadProducts());
+      } else if (e.key === 'oumar_store_videos') {
+        setVideos(loadVideos());
+      } else if (e.key === CART_STORAGE_KEY) {
+        setCartItems(loadPersistedCart(loadProducts()));
+      } else if (e.key === 'oumar_store_settings') {
+        window.dispatchEvent(new CustomEvent('oumar_settings_updated'));
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
   // Déclenchement sécurisé de la page Admin dédiée (Fail-Closed + masquage d'URL vers /espace-prive)
@@ -188,14 +338,16 @@ function StoreApp() {
   useEffect(() => {
     let cancelled = false;
 
-    const handleLocation = () => {
+    const handleLocation = async () => {
       const path = window.location.pathname || '/';
       const cleanPath = path.replace(/\/+$/, '') || '/';
       const hash = window.location.hash.replace('#', '');
       const search = window.location.search;
 
-      // 1. Portail furtif privé : masque l'URL vers /espace-prive et ouvre la page dédiée Admin
-      if (isSecretAdminLocation(search, window.location.hash, path)) {
+      // 1. Portail furtif privé (code intégré ou code personnalisé SHA-256) : masque l'URL vers /espace-prive et ouvre la page dédiée Admin
+      const isSecret = await verifySecretAdminLocation(search, window.location.hash, path);
+      if (cancelled) return;
+      if (isSecret) {
         handleTriggerAdmin();
         return;
       }

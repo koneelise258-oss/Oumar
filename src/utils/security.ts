@@ -8,14 +8,14 @@
  */
 
 // ==============================================================================
-// 1. PORTAIL ADMIN FURTIF (STEALTH ACCESS)
+// 1. PORTAIL ADMIN FURTIF (STEALTH ACCESS — SANS VARIABLE D'ENVIRONNEMENT)
 // ==============================================================================
-const DEFAULT_PORTAL_KEY = 'omr-dir-7x9k4p';
+// Code secret intégré par défaut (fonctionne immédiatement sans aucun fichier .env)
+export const BUILTIN_PORTAL_KEY = 'omr-dir-7x9k4p';
 
-export const ADMIN_PORTAL_KEY: string = (() => {
-  const envKey = (import.meta.env?.VITE_ADMIN_PORTAL_KEY as string | undefined)?.trim();
-  return envKey && envKey.length >= 6 ? envKey : DEFAULT_PORTAL_KEY;
-})();
+const CUSTOM_PORTAL_HASH_STORAGE_KEY = 'omr_portal_hash_v1';
+const SESSION_PORTAL_KEY_CACHE = 'omr_portal_active_key_session';
+const PORTAL_HASH_SALT = 'omr_iphone_abidjan_portal_salt_v1::';
 
 // Chemins classiques ciblés par les bots / scanners — renvoient strictement la page 404 personnalisée (zéro fuite d'information)
 const DECOY_ADMIN_PATHS = new Set([
@@ -54,10 +54,152 @@ const DECOY_ADMIN_HASHES = new Set([
 export const MASKED_ADMIN_PATH = '/espace-prive';
 
 /**
+ * Empreinte SHA-256 salée (Web Crypto API) pour vérifier un code secret personnalisé sans jamais stocker le code en clair dans localStorage.
+ */
+async function hashPortalSecret(key: string): Promise<string> {
+  const payload = `${PORTAL_HASH_SALT}${key}`;
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const encoded = new TextEncoder().encode(payload);
+    const digest = await crypto.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  // Fallback déterministe si Web Crypto indisponible dans un contexte non-HTTPS local
+  let h1 = 0xdeadbeef ^ payload.length;
+  let h2 = 0x41c6ce57 ^ payload.length;
+  for (let i = 0; i < payload.length; i++) {
+    const ch = payload.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+export function getStoredCustomPortalHash(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const val = localStorage.getItem(CUSTOM_PORTAL_HASH_STORAGE_KEY)?.trim();
+    return val && val.length >= 16 ? val : null;
+  } catch {
+    return null;
+  }
+}
+
+export function hasCustomAdminPortalKey(): boolean {
+  return Boolean(getStoredCustomPortalHash());
+}
+
+/**
+ * Nettoie et valide un code d'accès secret (lettres, chiffres, tirets, 8 à 48 caractères).
+ */
+export function normalizePortalKeyInput(raw: string): string {
+  return (raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+}
+
+/**
+ * Génère un code secret aléatoire cryptographiquement sûr (ex: omr-7k4p-9x2m).
+ */
+export function generateRandomPortalKey(): string {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const bytes = new Uint8Array(8);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  let part1 = '';
+  let part2 = '';
+  for (let i = 0; i < 4; i++) {
+    part1 += alphabet[bytes[i] % alphabet.length];
+    part2 += alphabet[bytes[i + 4] % alphabet.length];
+  }
+  return `omr-${part1}-${part2}`;
+}
+
+/**
+ * Enregistre un code secret personnalisé directement depuis le tableau de bord (stockage par empreinte SHA-256 uniquement).
+ */
+export async function setCustomAdminPortalKey(rawKey: string): Promise<{
+  success: boolean;
+  cleanKey?: string;
+  error?: string;
+}> {
+  const cleanKey = normalizePortalKeyInput(rawKey);
+  if (cleanKey.length < 8) {
+    return {
+      success: false,
+      error: 'Le code secret doit contenir au moins 8 caractères (lettres, chiffres ou tirets).'
+    };
+  }
+  const forbidden = new Set(['admin', 'administrator', 'login', 'dashboard', 'password', 'oumariphone']);
+  if (forbidden.has(cleanKey)) {
+    return {
+      success: false,
+      error: 'Ce code est trop prévisible. Utilisez une combinaison aléatoire.'
+    };
+  }
+
+  try {
+    const hashed = await hashPortalSecret(cleanKey);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CUSTOM_PORTAL_HASH_STORAGE_KEY, hashed);
+      sessionStorage.setItem(SESSION_PORTAL_KEY_CACHE, cleanKey);
+    }
+    return { success: true, cleanKey };
+  } catch {
+    return { success: false, error: 'Impossible d’enregistrer le code sur cet appareil.' };
+  }
+}
+
+/**
+ * Rétablit le code secret intégré par défaut (omr-dir-7x9k4p).
+ */
+export function resetCustomAdminPortalKey(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(CUSTOM_PORTAL_HASH_STORAGE_KEY);
+    sessionStorage.removeItem(SESSION_PORTAL_KEY_CACHE);
+  } catch {
+    // Ignore storage error
+  }
+}
+
+/**
+ * Retourne le code secret actuellement connu pour générer le lien de copie en session admin.
+ */
+export function getActivePortalKeyForCopy(overrideKey?: string): string | null {
+  if (overrideKey) {
+    const clean = normalizePortalKeyInput(overrideKey);
+    if (clean.length >= 6) return clean;
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = sessionStorage.getItem(SESSION_PORTAL_KEY_CACHE)?.trim();
+      if (cached && cached.length >= 6) return cached;
+    } catch {
+      // Ignore
+    }
+  }
+  return hasCustomAdminPortalKey() ? null : BUILTIN_PORTAL_KEY;
+}
+
+/**
  * Chemin d'entrée secret dédié (ex: /portail-omr-dir-7x9k4p).
  */
-export function getSecretPortalPath(): string {
-  return `/portail-${ADMIN_PORTAL_KEY}`;
+export function getSecretPortalPath(overrideKey?: string): string {
+  const key = getActivePortalKeyForCopy(overrideKey) || BUILTIN_PORTAL_KEY;
+  return `/portail-${key}`;
 }
 
 export function isDecoyAdminLocation(pathname: string, hash: string): boolean {
@@ -71,34 +213,67 @@ export function isDecoyAdminLocation(pathname: string, hash: string): boolean {
 }
 
 /**
- * Vérifie si l'URL courante correspond à la route secrète privée de la direction.
- * Formats pris en charge (comparaison en temps constant) :
- * - /portail-<ADMIN_PORTAL_KEY>
- * - ?portail=<ADMIN_PORTAL_KEY>
- * - #<ADMIN_PORTAL_KEY> ou #/<ADMIN_PORTAL_KEY>
+ * Extrait un éventuel candidat de clé depuis /portail-<clé>, ?portail=<clé> ou #<clé>.
  */
-export function isSecretAdminLocation(search: string, hash: string, pathname = ''): boolean {
+function extractPortalCandidate(search: string, hash: string, pathname = ''): string | null {
   const cleanPath = (pathname || '').replace(/\/+$/, '');
-  if (cleanPath && constantTimeEqual(cleanPath, getSecretPortalPath())) {
-    return true;
+  if (cleanPath.toLowerCase().startsWith('/portail-')) {
+    const candidate = cleanPath.slice('/portail-'.length).trim();
+    if (candidate) return candidate;
   }
 
   try {
     const params = new URLSearchParams(search || '');
     const queryKey = params.get('portail')?.trim();
-    if (queryKey && constantTimeEqual(queryKey, ADMIN_PORTAL_KEY)) {
-      return true;
-    }
+    if (queryKey) return queryKey;
   } catch {
     // Ignore malformed query string
   }
 
   const cleanHash = (hash || '').replace(/^#\/?/, '').trim();
-  if (cleanHash && constantTimeEqual(cleanHash, ADMIN_PORTAL_KEY)) {
-    return true;
+  if (cleanHash && cleanHash.length >= 6 && !cleanHash.includes('/')) {
+    return cleanHash;
   }
 
-  return false;
+  return null;
+}
+
+/**
+ * Vérification synchrone (code intégré par défaut).
+ */
+export function isSecretAdminLocation(search: string, hash: string, pathname = ''): boolean {
+  if (hasCustomAdminPortalKey()) return false;
+  const candidate = extractPortalCandidate(search, hash, pathname);
+  if (!candidate) return false;
+  return constantTimeEqual(candidate, BUILTIN_PORTAL_KEY);
+}
+
+/**
+ * Vérification complète (code personnalisé SHA-256 si configuré, sinon code intégré par défaut).
+ */
+export async function verifySecretAdminLocation(
+  search: string,
+  hash: string,
+  pathname = ''
+): Promise<boolean> {
+  const candidate = extractPortalCandidate(search, hash, pathname);
+  if (!candidate) return false;
+
+  const customHash = getStoredCustomPortalHash();
+  if (customHash) {
+    const candidateHash = await hashPortalSecret(normalizePortalKeyInput(candidate));
+    if (constantTimeEqual(candidateHash, customHash)) {
+      try {
+        sessionStorage.setItem(SESSION_PORTAL_KEY_CACHE, normalizePortalKeyInput(candidate));
+      } catch {
+        // Ignore
+      }
+      return true;
+    }
+    return false;
+  }
+
+  return constantTimeEqual(candidate, BUILTIN_PORTAL_KEY);
 }
 
 /**
@@ -154,8 +329,8 @@ export function maskAdminUrl(): void {
   }
 }
 
-export function getSecretPortalUrl(): string {
-  const path = getSecretPortalPath();
+export function getSecretPortalUrl(overrideKey?: string): string {
+  const path = getSecretPortalPath(overrideKey);
   if (typeof window === 'undefined') return path;
   return `${window.location.origin}${path}`;
 }
@@ -549,9 +724,10 @@ export function purgeSensitiveClientStorage(): void {
   try {
     // Ne jamais laisser de données clients (PII commandes) dans localStorage
     localStorage.removeItem('oumar_store_orders');
-    // Nettoyer les anciens marqueurs de session admin
+    // Nettoyer les anciens marqueurs de session admin et le cache temporaire du lien portail
     sessionStorage.removeItem('oumar_admin_session');
     sessionStorage.removeItem('oumar_admin_email');
+    sessionStorage.removeItem(SESSION_PORTAL_KEY_CACHE);
   } catch {
     // Ignore storage restrictions
   }
