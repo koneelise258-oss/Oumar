@@ -2027,7 +2027,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Vidéos du mur immersif ({videos.length})
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Les vidéos sont jouées en boucle muette sur la page d’accueil, entre le Hero et le Catalogue.
+                    Lecture automatique en boucle sans habillage (seul le bouton son est affiché). Les liens TikTok sont lus en mode épuré et les fichiers MP4 directs offrent un rendu 100 % natif sans filigrane.
                   </p>
                 </div>
 
