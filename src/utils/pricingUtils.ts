@@ -1,4 +1,5 @@
 import { Product, ProductVariant } from '../types';
+import { StorePromotionSettings, getStorePromotionSettings } from '../data/storeSettings';
 
 export type StandardCondition = 'Neuf' | 'Quasi-occasion' | 'Reconditionné';
 
@@ -110,6 +111,52 @@ export function getCombinationPrice(
   return {
     price: null,
     isVariantExact: false
+  };
+}
+
+export interface AppliedPromotionResult {
+  finalPrice: number | null;
+  originalBasePrice: number | null;
+  discountPercent: number;
+  isDiscounted: boolean;
+}
+
+/**
+ * Applique la réduction globale boutique (-X%) si active et si le produit n'est pas exclu.
+ * Un produit à "Prix sur demande" (null ou <= 0) reste toujours "Prix sur demande".
+ */
+export function applyStorePromotion(
+  basePrice: number | null | undefined,
+  productId?: string | null,
+  promotion?: StorePromotionSettings | null
+): AppliedPromotionResult {
+  if (typeof basePrice !== 'number' || isNaN(basePrice) || basePrice <= 0) {
+    return {
+      finalPrice: basePrice ?? null,
+      originalBasePrice: null,
+      discountPercent: 0,
+      isDiscounted: false,
+    };
+  }
+
+  const promo = promotion ?? getStorePromotionSettings();
+  const isExcluded = Boolean(productId && promo.excludedProductIds.includes(productId));
+
+  if (!promo.enabled || promo.discountPercent <= 0 || isExcluded) {
+    return {
+      finalPrice: basePrice,
+      originalBasePrice: null,
+      discountPercent: 0,
+      isDiscounted: false,
+    };
+  }
+
+  const discounted = Math.max(1, Math.round((basePrice * (100 - promo.discountPercent)) / 100));
+  return {
+    finalPrice: discounted,
+    originalBasePrice: basePrice,
+    discountPercent: promo.discountPercent,
+    isDiscounted: true,
   };
 }
 

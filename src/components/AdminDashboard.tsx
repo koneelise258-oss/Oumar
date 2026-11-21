@@ -26,12 +26,29 @@ import {
   getHeroSettings,
   saveHeroSettings,
   HeroSettings,
-  DEFAULT_HERO_SETTINGS
+  DEFAULT_HERO_SETTINGS,
+  MediaStyleSettings,
+  DEFAULT_MEDIA_STYLE,
+  getMediaStyleSettings,
+  saveMediaStyleSettings,
+  clampMediaStyle,
+  StorePromotionSettings,
+  DEFAULT_STORE_PROMOTION,
+  getStorePromotionSettings,
+  saveStorePromotionSettings,
+  normalizeStorePromotion,
+  NewStoreTeaserSettings,
+  DEFAULT_NEW_STORE_TEASER,
+  getNewStoreTeaserSettings,
+  saveNewStoreTeaserSettings,
+  normalizeNewStoreTeaser
 } from '../data/storeSettings';
 import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
 import { loadProducts, saveProducts, resetProducts } from '../data/products';
 import { processAndUploadProductImage, APPLE_ASSET_IMAGES } from '../services/imageService';
 import { MediaCropper, AspectPresetKey } from './MediaCropper';
+import { AdminPromotionsPanel } from './admin/AdminPromotionsPanel';
+import { AdminNewStorePanel } from './admin/AdminNewStorePanel';
 import { useTheme } from '../context/ThemeContext';
 import { saveVideos, resetVideos } from '../data/videos';
 import {
@@ -124,7 +141,12 @@ import {
   LayoutTemplate,
   Info,
   KeyRound,
-  Shuffle
+  Shuffle,
+  SlidersHorizontal,
+  Percent,
+  Building2,
+  Layers,
+  Tag
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -136,7 +158,16 @@ interface AdminDashboardProps {
   onVideosUpdated: (videos: VideoItem[]) => void;
 }
 
-type AdminTab = 'products' | 'media' | 'videos' | 'orders' | 'hero' | 'settings' | 'admins';
+type AdminTab =
+  | 'products'
+  | 'orders'
+  | 'promotions'
+  | 'media'
+  | 'videos'
+  | 'hero'
+  | 'newstore'
+  | 'settings'
+  | 'admins';
 
 interface CropperTarget {
   src: string;
@@ -157,12 +188,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const { isDark, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<AdminTab>('products');
+  const [productsSubMode, setProductsSubMode] = useState<'catalog' | 'discounts'>('catalog');
   const [orders, setOrders] = useState<StoreOrder[]>(loadOrders);
   const [settings, setSettings] = useState<StoreSettings>(loadStoreSettings);
   const [cropperTarget, setCropperTarget] = useState<CropperTarget | null>(null);
   const [mediaSearch, setMediaSearch] = useState('');
+  const [mediaCatFilter, setMediaCatFilter] = useState<string>('Tous');
   const mediaQuickUploadRef = useRef<HTMLInputElement>(null);
   const [pendingMediaUploadHandler, setPendingMediaUploadHandler] = useState<((url: string) => void) | null>(null);
+  const [mediaStyleForm, setMediaStyleForm] = useState<MediaStyleSettings>(getMediaStyleSettings);
+  const [savingMediaStyle, setSavingMediaStyle] = useState(false);
+  const [promoForm, setPromoForm] = useState<StorePromotionSettings>(getStorePromotionSettings);
+  const [savingPromo, setSavingPromo] = useState(false);
+  const [newStoreForm, setNewStoreForm] = useState<NewStoreTeaserSettings>(getNewStoreTeaserSettings);
+  const [savingNewStore, setSavingNewStore] = useState(false);
 
   // Success / notification message
   const [notification, setNotification] = useState<string | null>(null);
@@ -205,7 +244,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (e.detail && Array.isArray(e.detail)) setOrders(e.detail);
     };
     const handleSettingsUpdate = (e: any) => {
-      if (e.detail) setSettings(e.detail);
+      if (e.detail) {
+        setSettings(e.detail);
+        if (e.detail?.heroSettings?.mediaStyle) {
+          setMediaStyleForm(clampMediaStyle(e.detail.heroSettings.mediaStyle));
+        }
+        if (e.detail?.heroSettings?.storePromotion) {
+          setPromoForm(normalizeStorePromotion(e.detail.heroSettings.storePromotion));
+        }
+        if (e.detail?.heroSettings?.newStoreTeaser) {
+          setNewStoreForm(normalizeNewStoreTeaser(e.detail.heroSettings.newStoreTeaser));
+        }
+      }
     };
     window.addEventListener('oumar_orders_updated', handleOrdersUpdate);
     window.addEventListener('oumar_settings_updated', handleSettingsUpdate);
@@ -1065,7 +1115,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleSaveStoreSettings = async () => {
-    const res = await saveStoreSettingsRemote(settingsForm);
+    const mergedHero: HeroSettings = {
+      ...heroForm,
+      mediaStyle: clampMediaStyle(mediaStyleForm),
+      storePromotion: normalizeStorePromotion(promoForm),
+      newStoreTeaser: normalizeNewStoreTeaser(newStoreForm),
+    };
+    const nextSettings: StoreSettings = {
+      ...settingsForm,
+      heroSettings: mergedHero
+    };
+    setSettingsForm(nextSettings);
+    const res = await saveStoreSettingsRemote(nextSettings);
     if (res.success) {
       triggerNotification('Paramètres de la boutique enregistrés !');
     } else {
@@ -1086,18 +1147,116 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const current = getHeroSettings();
     setHeroForm(current);
     setHeroFormSnapshot(current);
+    setMediaStyleForm(clampMediaStyle(current.mediaStyle));
+    setPromoForm(normalizeStorePromotion(current.storePromotion));
+    setNewStoreForm(normalizeNewStoreTeaser(current.newStoreTeaser));
   }, [isOpen]);
+
+  const handleSavePromoSettings = async (overridePromo?: StorePromotionSettings) => {
+    const targetPromo = normalizeStorePromotion(overridePromo ?? promoForm);
+    setPromoForm(targetPromo);
+    setSavingPromo(true);
+    try {
+      const updatedStore = saveStorePromotionSettings(targetPromo);
+      const updatedHero: HeroSettings = {
+        ...heroForm,
+        mediaStyle: clampMediaStyle(mediaStyleForm),
+        storePromotion: targetPromo,
+        newStoreTeaser: normalizeNewStoreTeaser(newStoreForm),
+      };
+      setHeroForm(updatedHero);
+      setHeroFormSnapshot(updatedHero);
+      setSettingsForm(updatedStore);
+      const res = await saveStoreSettingsRemote(updatedStore);
+      if (res.success) {
+        triggerNotification(
+          targetPromo.enabled
+            ? `Réduction globale (-${targetPromo.discountPercent}%) enregistrée et publiée !`
+            : 'Paramètres de promotion enregistrés et publiés !'
+        );
+      } else {
+        triggerNotification('Promotion enregistrée localement (synchronisation serveur en attente).');
+      }
+    } finally {
+      setSavingPromo(false);
+    }
+  };
+
+  const handleSaveNewStoreTeaser = async (overrideForm?: NewStoreTeaserSettings) => {
+    const targetTeaser = normalizeNewStoreTeaser(overrideForm ?? newStoreForm);
+    setNewStoreForm(targetTeaser);
+    setSavingNewStore(true);
+    try {
+      const updatedStore = saveNewStoreTeaserSettings(targetTeaser);
+      const updatedHero: HeroSettings = {
+        ...heroForm,
+        mediaStyle: clampMediaStyle(mediaStyleForm),
+        storePromotion: normalizeStorePromotion(promoForm),
+        newStoreTeaser: targetTeaser,
+      };
+      setHeroForm(updatedHero);
+      setHeroFormSnapshot(updatedHero);
+      setSettingsForm(updatedStore);
+      const res = await saveStoreSettingsRemote(updatedStore);
+      if (res.success) {
+        triggerNotification('Section « Nouveau Magasin en Construction » mise à jour !');
+      } else {
+        triggerNotification('Section mise à jour localement (synchronisation serveur en attente).');
+      }
+    } finally {
+      setSavingNewStore(false);
+    }
+  };
+
+  const handleSaveMediaStyle = async (overrideStyle?: MediaStyleSettings) => {
+    const targetStyle = clampMediaStyle(overrideStyle ?? mediaStyleForm);
+    setMediaStyleForm(targetStyle);
+    setSavingMediaStyle(true);
+    try {
+      const updatedStore = saveMediaStyleSettings(targetStyle);
+      const updatedHero: HeroSettings = {
+        ...heroForm,
+        mediaStyle: targetStyle,
+        storePromotion: normalizeStorePromotion(promoForm),
+        newStoreTeaser: normalizeNewStoreTeaser(newStoreForm),
+      };
+      setHeroForm(updatedHero);
+      setHeroFormSnapshot(updatedHero);
+      setSettingsForm(updatedStore);
+      const res = await saveStoreSettingsRemote(updatedStore);
+      if (res.success) {
+        triggerNotification('Arrondi des bords des médias appliqué sur tout le site !');
+      } else {
+        triggerNotification('Arrondi appliqué localement (synchronisation serveur en attente).');
+      }
+    } finally {
+      setSavingMediaStyle(false);
+    }
+  };
+
+  const handleResetMediaStyle = async () => {
+    await handleSaveMediaStyle({ ...DEFAULT_MEDIA_STYLE });
+  };
 
   const handleSaveHeroSettings = async () => {
     setHeroSaving(true);
     setHeroSaveSuccess(false);
     try {
-      saveHeroSettings(heroForm);
-      setHeroFormSnapshot(heroForm);
-      await saveStoreSettingsRemote({
+      const mergedHero: HeroSettings = {
+        ...heroForm,
+        mediaStyle: clampMediaStyle(mediaStyleForm),
+        storePromotion: normalizeStorePromotion(promoForm),
+        newStoreTeaser: normalizeNewStoreTeaser(newStoreForm),
+      };
+      saveHeroSettings(mergedHero);
+      setHeroForm(mergedHero);
+      setHeroFormSnapshot(mergedHero);
+      const nextStore = {
         ...settingsForm,
-        heroSettings: heroForm
-      });
+        heroSettings: mergedHero
+      };
+      setSettingsForm(nextStore);
+      await saveStoreSettingsRemote(nextStore);
       setHeroSaveSuccess(true);
       triggerNotification('Hero Section mise à jour et publiée avec succès !');
       setTimeout(() => setHeroSaveSuccess(false), 5000);
@@ -1115,7 +1274,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleResetHeroSettingsToDefault = () => {
     if (window.confirm("Rétablir tous les textes d'origine de la Hero Section ?")) {
-      setHeroForm({ ...DEFAULT_HERO_SETTINGS });
+      setHeroForm({
+        ...DEFAULT_HERO_SETTINGS,
+        mediaStyle: mediaStyleForm,
+        storePromotion: promoForm,
+        newStoreTeaser: newStoreForm,
+      });
       triggerNotification("Textes d'origine de la Hero Section restaurés.");
     }
   };
@@ -1314,15 +1478,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   }
 
-  const navItems: { id: AdminTab; label: string; shortLabel: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: 'products', label: 'Catalogue & Stocks', shortLabel: 'Catalogue', icon: <Package className="w-4 h-4" />, badge: products.length },
-    { id: 'media', label: 'Médiathèque & Recadrage', shortLabel: 'Médias', icon: <Crop className="w-4 h-4" /> },
-    { id: 'videos', label: 'Vidéos Immersives', shortLabel: 'Vidéos', icon: <Video className="w-4 h-4" />, badge: videos.length },
-    { id: 'orders', label: 'Commandes & Clients', shortLabel: 'Commandes', icon: <ShoppingBag className="w-4 h-4" />, badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined },
-    { id: 'hero', label: 'Hero Section', shortLabel: 'Hero', icon: <LayoutTemplate className="w-4 h-4" /> },
-    { id: 'settings', label: 'Boutique & Serveur', shortLabel: 'Boutique', icon: <Settings className="w-4 h-4" /> },
-    { id: 'admins', label: 'Équipe & Sécurité', shortLabel: 'Sécurité', icon: <Users className="w-4 h-4" />, badge: adminsList.length }
+  const navGroups: {
+    groupTitle: string;
+    items: {
+      id: AdminTab;
+      label: string;
+      shortLabel: string;
+      icon: React.ReactNode;
+      badge?: number | string;
+    }[];
+  }[] = [
+    {
+      groupTitle: 'Catalogue & Ventes',
+      items: [
+        { id: 'products', label: 'Catalogue & Catégories', shortLabel: 'Catalogue', icon: <Package className="w-4 h-4" />, badge: products.length },
+        { id: 'orders', label: 'Commandes & Clients', shortLabel: 'Commandes', icon: <ShoppingBag className="w-4 h-4" />, badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined },
+        {
+          id: 'promotions',
+          label: 'Promotions & Décembre',
+          shortLabel: 'Promos',
+          icon: <Percent className="w-4 h-4" />,
+          badge: promoForm.enabled ? `-${promoForm.discountPercent}%` : undefined
+        }
+      ]
+    },
+    {
+      groupTitle: 'Vitrine & Médias',
+      items: [
+        { id: 'media', label: 'Médiathèque & Recadrage', shortLabel: 'Médias', icon: <Crop className="w-4 h-4" /> },
+        { id: 'videos', label: 'Vidéos Immersives', shortLabel: 'Vidéos', icon: <Video className="w-4 h-4" />, badge: videos.length },
+        { id: 'hero', label: 'Accueil (Hero Section)', shortLabel: 'Hero', icon: <LayoutTemplate className="w-4 h-4" /> },
+        { id: 'newstore', label: 'Nouveau Magasin (Chantier)', shortLabel: 'Chantier', icon: <Building2 className="w-4 h-4" /> }
+      ]
+    },
+    {
+      groupTitle: 'Boutique & Technique',
+      items: [
+        { id: 'settings', label: 'Boutique & Cloud', shortLabel: 'Boutique', icon: <Settings className="w-4 h-4" /> }
+      ]
+    },
+    {
+      groupTitle: 'Sécurité & Équipe',
+      items: [
+        { id: 'admins', label: 'Équipe & Cybersécurité', shortLabel: 'Sécurité', icon: <Users className="w-4 h-4" />, badge: adminsList.length }
+      ]
+    }
   ];
+
+  const navItems = navGroups.flatMap((g) => g.items);
 
   const handleSelectNavTab = (tab: AdminTab) => {
     setActiveTab(tab);
@@ -1352,7 +1555,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       />
 
       {/* ========================================================= */}
-      {/* DESKTOP DEDICATED SIDEBAR (NO POPUP)                      */}
+      {/* DESKTOP DEDICATED SIDEBAR (RANGÉE PAR CATÉGORIE)          */}
       {/* ========================================================= */}
       <aside className="hidden lg:flex lg:flex-col lg:w-64 xl:w-72 shrink-0 bg-white dark:bg-[#0b1120] border-r border-slate-200 dark:border-slate-800/90 sticky top-0 h-screen">
         {/* Sidebar Brand Header */}
@@ -1385,41 +1588,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
         </div>
 
-        {/* Sidebar Navigation Links */}
-        <nav className="flex-1 p-3.5 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = activeTab === item.id && !cropperTarget && !isCreatingProduct && !editingProduct;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => handleSelectNavTab(item.id)}
-                className={`w-full min-h-[44px] flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  isActive
-                    ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  {item.icon}
-                  <span className="truncate">{item.label}</span>
-                </div>
-                {item.badge !== undefined && (
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md tabular-nums ${
+        {/* Sidebar Categorized Navigation Links */}
+        <nav className="flex-1 p-3.5 space-y-4 overflow-y-auto">
+          {navGroups.map((group) => (
+            <div key={group.groupTitle} className="space-y-1">
+              <div className="px-3 pt-1 pb-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                {group.groupTitle}
+              </div>
+              {group.items.map((item) => {
+                const isActive = activeTab === item.id && !cropperTarget && !isCreatingProduct && !editingProduct;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectNavTab(item.id)}
+                    className={`w-full min-h-[40px] flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                       isActive
-                        ? 'bg-white/20 dark:bg-slate-900/15 text-white dark:text-slate-950'
-                        : item.id === 'orders' && pendingOrdersCount > 0
-                        ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                        ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70'
                     }`}
                   >
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {item.icon}
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    {item.badge !== undefined && (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md tabular-nums shrink-0 ${
+                          isActive
+                            ? 'bg-white/20 dark:bg-slate-900/15 text-white dark:text-slate-950'
+                            : item.id === 'orders' && pendingOrdersCount > 0
+                            ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                            : item.id === 'promotions' && promoForm.enabled
+                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* Sidebar Footer Controls */}
@@ -1465,6 +1677,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <ShieldCheck className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
               </div>
               <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  <span>
+                    {navGroups.find((g) => g.items.some((i) => i.id === activeTab))?.groupTitle || 'Administration'}
+                  </span>
+                </div>
                 <h1 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white font-['Outfit'] truncate">
                   {cropperTarget
                     ? 'Studio Média & Recadrage'
@@ -1474,9 +1691,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     ? `Modifier : ${editingProduct.name}`
                     : navItems.find((n) => n.id === activeTab)?.label || 'Administration'}
                 </h1>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block truncate">
-                  Espace dédié sécurisé ({MASKED_ADMIN_PATH}) · Modifications publiées en temps réel
-                </p>
               </div>
             </div>
 
@@ -1511,26 +1725,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          {/* Mobile & Tablet Horizontal Navigation Tabs */}
-          <div className="lg:hidden px-3 py-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            {navItems.map((item) => {
-              const isActive = activeTab === item.id && !cropperTarget && !isCreatingProduct && !editingProduct;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => handleSelectNavTab(item.id)}
-                  className={`min-h-[40px] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
-                      : 'text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/60'
-                  }`}
-                >
-                  {item.icon}
-                  <span>{item.shortLabel}</span>
-                </button>
-              );
-            })}
+          {/* Mobile & Tablet Categorized Horizontal Navigation */}
+          <div className="lg:hidden px-3 py-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {navGroups.map((group, gIdx) => (
+              <div key={`mob-grp-${group.groupTitle}`} className="flex items-center gap-1.5 shrink-0">
+                {gIdx > 0 && (
+                  <span className="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-0.5 shrink-0" aria-hidden="true" />
+                )}
+                {group.items.map((item) => {
+                  const isActive = activeTab === item.id && !cropperTarget && !isCreatingProduct && !editingProduct;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleSelectNavTab(item.id)}
+                      className={`min-h-[38px] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/60'
+                      }`}
+                    >
+                      {item.icon}
+                      <span>{item.shortLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
 
           {/* Global Notification Banner */}
@@ -1569,6 +1790,196 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* ========================================================= */}
           {activeTab === 'media' && (
             <div className="space-y-6">
+              {/* Arrondi Global des Bords des Médias */}
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-950 dark:text-white font-['Outfit'] flex items-center gap-2">
+                      <SlidersHorizontal className="w-4 h-4 text-emerald-500" />
+                      <span>Arrondi des bords des médias du site</span>
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Ajustez librement l’arrondi des coins de vos photos d’accueil, fiches produits et lecteurs vidéo.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleResetMediaStyle}
+                      disabled={savingMediaStyle}
+                      className="min-h-[40px] px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Par défaut</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveMediaStyle()}
+                      disabled={savingMediaStyle}
+                      className="min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white inline-flex items-center gap-1.5 shadow-sm active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {savingMediaStyle ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      <span>{savingMediaStyle ? 'Application...' : 'Appliquer sur le site'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1">
+                    Préréglages rapides :
+                  </span>
+                  {[
+                    { label: 'Angles nets (0 px)', values: { heroRadius: 0, productRadius: 0, videoRadius: 0 } },
+                    { label: 'Subtil (12 px)', values: { heroRadius: 12, productRadius: 14, videoRadius: 16 } },
+                    { label: 'Apple Doux (24 px)', values: { heroRadius: 24, productRadius: 22, videoRadius: 24 } },
+                    { label: 'Ultra Arrondi (36 px)', values: { heroRadius: 36, productRadius: 32, videoRadius: 36 } }
+                  ].map((preset) => {
+                    const isMatched =
+                      mediaStyleForm.heroRadius === preset.values.heroRadius &&
+                      mediaStyleForm.productRadius === preset.values.productRadius &&
+                      mediaStyleForm.videoRadius === preset.values.videoRadius;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setMediaStyleForm(preset.values)}
+                        className={`min-h-[34px] px-3 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                          isMatched
+                            ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 border-transparent shadow-xs'
+                            : 'bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Sliders + Live Visual Previews */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Hero Image Radius */}
+                  <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between gap-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-900 dark:text-white">Photo Accueil (Hero)</span>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                        {mediaStyleForm.heroRadius} px
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-center py-2">
+                      <div className="w-24 h-28 bg-slate-200/70 dark:bg-slate-900/80 p-1.5 flex items-center justify-center">
+                        <img
+                          src={heroPhotoPreview || heroPhotoSrc || heroTitaniumSample}
+                          alt="Aperçu Hero"
+                          className="w-full h-full object-cover shadow-sm transition-[border-radius] duration-150"
+                          style={{ borderRadius: `${mediaStyleForm.heroRadius}px` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="48"
+                        step="1"
+                        value={mediaStyleForm.heroRadius}
+                        onChange={(e) =>
+                          setMediaStyleForm((prev) => ({ ...prev, heroRadius: parseInt(e.target.value, 10) }))
+                        }
+                        className="w-full accent-slate-900 dark:accent-white cursor-pointer"
+                        aria-label="Arrondi photo Hero"
+                      />
+                      <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                        <span>0 px</span>
+                        <span>24 px</span>
+                        <span>48 px</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Product Media Radius */}
+                  <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between gap-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-900 dark:text-white">Images Produits</span>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                        {mediaStyleForm.productRadius} px
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-center py-2">
+                      <div
+                        className="w-28 h-24 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-2 flex items-center justify-center shadow-sm overflow-hidden transition-[border-radius] duration-150"
+                        style={{ borderRadius: `${mediaStyleForm.productRadius}px` }}
+                      >
+                        <img
+                          src={products[0]?.image || APPLE_ASSET_IMAGES.iphone16ProMax}
+                          alt="Aperçu produit"
+                          className="w-full h-full object-contain transition-[border-radius] duration-150"
+                          style={{ borderRadius: `${Math.max(0, Math.round(mediaStyleForm.productRadius * 0.75))}px` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="40"
+                        step="1"
+                        value={mediaStyleForm.productRadius}
+                        onChange={(e) =>
+                          setMediaStyleForm((prev) => ({ ...prev, productRadius: parseInt(e.target.value, 10) }))
+                        }
+                        className="w-full accent-slate-900 dark:accent-white cursor-pointer"
+                        aria-label="Arrondi images produits"
+                      />
+                      <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                        <span>0 px</span>
+                        <span>20 px</span>
+                        <span>40 px</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Video Card Radius */}
+                  <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between gap-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-900 dark:text-white">Vidéos Immersives</span>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                        {mediaStyleForm.videoRadius} px
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-center py-2">
+                      <div
+                        className="w-20 h-28 bg-slate-950 border border-slate-700 flex flex-col items-center justify-center text-white/80 shadow-sm overflow-hidden transition-[border-radius] duration-150 relative"
+                        style={{ borderRadius: `${mediaStyleForm.videoRadius}px` }}
+                      >
+                        <Video className="w-5 h-5 text-emerald-400" />
+                        <span className="text-[9px] font-semibold mt-1 text-white/60">9:16</span>
+                      </div>
+                    </div>
+                    <div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="44"
+                        step="1"
+                        value={mediaStyleForm.videoRadius}
+                        onChange={(e) =>
+                          setMediaStyleForm((prev) => ({ ...prev, videoRadius: parseInt(e.target.value, 10) }))
+                        }
+                        className="w-full accent-slate-900 dark:accent-white cursor-pointer"
+                        aria-label="Arrondi vidéos"
+                      />
+                      <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                        <span>0 px</span>
+                        <span>22 px</span>
+                        <span>44 px</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Hero Visual Studio Card */}
               <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
@@ -1578,7 +1989,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>Visuel Principal — Page d’Accueil (Hero)</span>
                     </h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Modifiez, recadrez, redressez ou remplacez la photo principale avec export WebP ultra-rapide.
+                      Modifiez, recadrez, arrondissez les bords ou remplacez la photo principale avec export WebP ultra-rapide.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1602,7 +2013,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center gap-5">
-                  <div className="w-36 h-44 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm">
+                  <div
+                    className="w-36 h-44 overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm transition-[border-radius] duration-150"
+                    style={{ borderRadius: `${mediaStyleForm.heroRadius > 0 ? mediaStyleForm.heroRadius : 16}px` }}
+                  >
                     <img
                       src={heroPhotoPreview || heroPhotoSrc || heroTitaniumSample}
                       alt="Hero OUMAR IPHONE"
@@ -1614,7 +2028,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {heroPhotoSrc ? 'Visuel personnalisé actif' : 'Visuel officiel par défaut'}
                     </div>
                     <p className="max-w-lg leading-relaxed text-slate-500 dark:text-slate-400">
-                      Cliquez sur « Recadrer & Retoucher » pour ajuster le cadrage 4:5, pivoter, zoomer ou régler la luminosité sans quitter cette page.
+                      Cliquez sur « Recadrer & Retoucher » pour ajuster le cadrage 4:5, arrondir les bords de l’image, pivoter, zoomer ou régler la luminosité sans quitter cette page.
                     </p>
                     {heroPhotoSrc && (
                       <button
@@ -1630,7 +2044,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Products & Finishes Media Library */}
+              {/* Products & Finishes Media Library (classé par catégorie) */}
               <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
@@ -1639,7 +2053,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>Médias du Catalogue & Finitions Couleurs</span>
                     </h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Recadrez ou remplacez directement les photos principales et les variantes de couleur de chaque produit.
+                      Recadrez ou remplacez directement les photos principales et les variantes de couleur de chaque catégorie.
                     </p>
                   </div>
 
@@ -1655,13 +2069,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
+                {/* Category Filter Pills for Media Library */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                  {(['Tous', 'iPhone', 'iPad', 'iPhone Duo', 'MacBook', 'Accessoires'] as const).map((cat) => {
+                    const count = cat === 'Tous' ? products.length : products.filter((p) => p.category === cat).length;
+                    const active = mediaCatFilter === cat;
+                    return (
+                      <button
+                        key={`media-cat-${cat}`}
+                        type="button"
+                        onClick={() => setMediaCatFilter(cat)}
+                        className={`min-h-[34px] px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                          active
+                            ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        <span>{cat}</span>
+                        <span className="text-[10px] opacity-75 tabular-nums">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <div className="space-y-5">
                   {products
-                    .filter((p) =>
-                      !mediaSearch.trim() ||
-                      p.name.toLowerCase().includes(mediaSearch.toLowerCase()) ||
-                      p.category.toLowerCase().includes(mediaSearch.toLowerCase())
-                    )
+                    .filter((p) => {
+                      if (mediaCatFilter !== 'Tous' && p.category !== mediaCatFilter) return false;
+                      if (!mediaSearch.trim()) return true;
+                      return (
+                        p.name.toLowerCase().includes(mediaSearch.toLowerCase()) ||
+                        p.category.toLowerCase().includes(mediaSearch.toLowerCase())
+                      );
+                    })
                     .map((product) => (
                       <div
                         key={`media-prod-${product.id}`}
@@ -1681,11 +2121,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                           {/* Main Product Image Card */}
                           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 flex flex-col justify-between gap-2">
-                            <div className="aspect-[4/3] rounded-lg bg-slate-100 dark:bg-slate-800 p-2 flex items-center justify-center overflow-hidden">
+                            <div
+                              className="aspect-[4/3] bg-slate-100 dark:bg-slate-800 p-2 flex items-center justify-center overflow-hidden transition-[border-radius] duration-150"
+                              style={{ borderRadius: `${Math.min(18, Math.round(mediaStyleForm.productRadius * 0.65))}px` }}
+                            >
                               <img
                                 src={product.image}
                                 alt={product.name}
                                 className="w-full h-full object-contain"
+                                style={{ borderRadius: `${Math.max(0, Math.min(14, Math.round(mediaStyleForm.productRadius * 0.5)))}px` }}
                                 loading="lazy"
                               />
                             </div>
@@ -1738,11 +2182,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               key={`media-col-${product.id}-${cIdx}`}
                               className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 flex flex-col justify-between gap-2"
                             >
-                              <div className="aspect-[4/3] rounded-lg bg-slate-100 dark:bg-slate-800 p-2 flex items-center justify-center overflow-hidden">
+                              <div
+                                className="aspect-[4/3] bg-slate-100 dark:bg-slate-800 p-2 flex items-center justify-center overflow-hidden transition-[border-radius] duration-150"
+                                style={{ borderRadius: `${Math.min(18, Math.round(mediaStyleForm.productRadius * 0.65))}px` }}
+                              >
                                 <img
                                   src={col.image || product.image}
                                   alt={`${product.name} ${col.name}`}
                                   className="w-full h-full object-contain"
+                                  style={{ borderRadius: `${Math.max(0, Math.min(14, Math.round(mediaStyleForm.productRadius * 0.5)))}px` }}
                                   loading="lazy"
                                 />
                               </div>
@@ -1809,258 +2257,408 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* ========================================================= */}
-          {/* TAB 1: CATALOGUE & STOCKS */}
+          {/* TAB 1: CATALOGUE PAR CATÉGORIE + RÉDUCTIONS %             */}
           {/* ========================================================= */}
           {activeTab === 'products' && (
-            <div className="space-y-6">
-              
-              {/* Actions Header Bar */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
-                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                  {/* Search */}
-                  <div className="relative flex-1 sm:w-64">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      value={productSearch}
-                      onChange={(e) => setProductSearch(e.target.value)}
-                      placeholder="Filtrer un modèle, capacité..."
-                      className="w-full text-xs font-medium pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Category Filter */}
-                  <select
-                    value={productCatFilter}
-                    onChange={(e) => setProductCatFilter(e.target.value)}
-                    className="text-xs font-semibold px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white focus:outline-none cursor-pointer"
+            <div className="space-y-5">
+              {/* Sub-mode Switch inside Catalogue & Catégories */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                  <button
+                    type="button"
+                    onClick={() => setProductsSubMode('catalog')}
+                    className={`min-h-[38px] px-3.5 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
+                      productsSubMode === 'catalog'
+                        ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
                   >
-                    <option value="Tous">Toutes Catégories</option>
-                    <option value="iPhone">iPhone</option>
-                    <option value="iPad">iPad</option>
-                    <option value="iPhone Duo">iPhone Duo</option>
-                    <option value="MacBook">MacBook</option>
-                    <option value="Accessoires">Accessoires</option>
-                  </select>
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Catalogue par Catégorie ({products.length})</span>
+                  </button>
 
-                  {/* Stock Filter */}
-                  <select
-                    value={productStockFilter}
-                    onChange={(e) => setProductStockFilter(e.target.value as any)}
-                    className="text-xs font-semibold px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white focus:outline-none cursor-pointer"
+                  <button
+                    type="button"
+                    onClick={() => setProductsSubMode('discounts')}
+                    className={`min-h-[38px] px-3.5 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
+                      productsSubMode === 'discounts'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 hover:bg-emerald-100'
+                    }`}
                   >
-                    <option value="all">Tous les stocks</option>
-                    <option value="inStock">En stock seulement</option>
-                    <option value="outOfStock">Ruptures de stock</option>
-                  </select>
+                    <Percent className="w-3.5 h-3.5" />
+                    <span>
+                      Réductions % & Exclusions{' '}
+                      {promoForm.enabled ? `(-${promoForm.discountPercent}% actif)` : '(Inactif)'}
+                    </span>
+                  </button>
                 </div>
 
-                {/* Right Action Buttons */}
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <button
-                    type="button"
-                    onClick={handleSeedOfficialCatalog}
-                    disabled={isSeedingCatalog}
-                    className="px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    title="Restaurer la sélection officielle des 6 modèles certifiés Apple"
-                  >
-                    <AppleLogo className={`w-3.5 h-3.5 ${isSeedingCatalog ? 'animate-spin' : ''}`} />
-                    <span>{isSeedingCatalog ? 'Chargement...' : 'Catalogue officiel Apple'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleResetCatalog}
-                    className="px-3 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer"
-                    title="Restaurer le catalogue d'origine Apple"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Réinitialiser</span>
-                  </button>
-
+                {productsSubMode === 'catalog' && (
                   <button
                     type="button"
                     onClick={openNewProductForm}
-                    className="px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-950 rounded-xl hover:opacity-90 active:scale-[0.98] shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="min-h-[38px] px-4 py-2 text-xs font-bold text-white bg-slate-950 dark:bg-white dark:text-slate-950 rounded-xl hover:opacity-90 active:scale-[0.98] shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Nouveau Produit</span>
                   </button>
-                </div>
+                )}
               </div>
 
-              {/* Products Table / Cards */}
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredProducts.length > 0 ? (
-                  filteredProducts.map((p, idx) => (
-                    <div 
-                      key={`admin-prod-${p.id || idx}-${idx}`}
-                      className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
-                    >
-                      {/* Product identity */}
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        {/* Thumbnail */}
-                        <div className="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-800 p-1.5 flex items-center justify-center shrink-0 border border-slate-200/80 dark:border-slate-700">
-                          <img
-                            src={p.image || undefined}
-                            alt={p.name}
-                            className="w-full h-full object-contain"
+              {productsSubMode === 'discounts' ? (
+                <AdminPromotionsPanel
+                  products={products}
+                  promoForm={promoForm}
+                  onChangePromo={setPromoForm}
+                  onSavePromo={handleSavePromoSettings}
+                  savingPromo={savingPromo}
+                  showDecemberBannerConfig={false}
+                />
+              ) : (
+                <>
+                  {/* Category Tabs + Search + Stock Filter Bar */}
+                  <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3.5">
+                    {/* Quick Category Pills with Live Counts */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                      {(['Tous', 'iPhone', 'iPad', 'iPhone Duo', 'MacBook', 'Accessoires'] as const).map((cat) => {
+                        const catCount =
+                          cat === 'Tous'
+                            ? products.length
+                            : products.filter((p) => p.category === cat).length;
+                        const active = productCatFilter === cat;
+                        return (
+                          <button
+                            key={`admin-cat-pill-${cat}`}
+                            type="button"
+                            onClick={() => setProductCatFilter(cat)}
+                            className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                              active
+                                ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                            }`}
+                          >
+                            <span>{cat}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.2 rounded-md tabular-nums ${
+                                active
+                                  ? 'bg-white/20 dark:bg-slate-900/15'
+                                  : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400'
+                              }`}
+                            >
+                              {catCount}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1 border-t border-slate-100 dark:border-slate-800">
+                      <div className="flex flex-wrap items-center gap-2 flex-1">
+                        <div className="relative flex-1 min-w-[200px] sm:max-w-xs">
+                          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={productSearch}
+                            onChange={(e) => setProductSearch(e.target.value)}
+                            placeholder="Filtrer un modèle, capacité..."
+                            className="w-full min-h-[38px] text-xs font-medium pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white focus:outline-none"
                           />
                         </div>
 
-                        {/* Title & Badges */}
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
-                              {p.category}
-                            </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                              {p.condition}
-                            </span>
-                            {p.featured && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                                Vedette
-                              </span>
-                            )}
-                            {p.published === false && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
-                                Masqué
-                              </span>
-                            )}
-                          </div>
-
-                          <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                            {p.name}
-                          </h4>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                            {p.model} · {p.storage.join(', ')}
-                          </p>
-                        </div>
+                        <select
+                          value={productStockFilter}
+                          onChange={(e) => setProductStockFilter(e.target.value as any)}
+                          className="min-h-[38px] text-xs font-semibold px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white focus:outline-none cursor-pointer"
+                        >
+                          <option value="all">Tous les stocks</option>
+                          <option value="inStock">En stock seulement</option>
+                          <option value="outOfStock">Ruptures de stock</option>
+                        </select>
                       </div>
 
-                      {/* Pricing & Stock location */}
-                      <div className="flex items-center gap-4 text-left md:text-right shrink-0">
-                        <div>
-                          <div className="text-sm font-extrabold text-slate-900 dark:text-white tabular-nums">
-                            {p.price.toLocaleString('fr-FR')} FCFA
-                          </div>
-                          <div className="text-[11px] text-slate-400">
-                            {p.stockLocation}
-                          </div>
-                        </div>
-
-                        {/* Stock Quick Toggle */}
+                      <div className="flex flex-wrap items-center gap-2 justify-end">
                         <button
                           type="button"
-                          onClick={() => handleToggleProductStock(p.id)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                            p.inStock
-                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                              : 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                          }`}
-                          title="Cliquez pour basculer le stock"
+                          onClick={handleSeedOfficialCatalog}
+                          disabled={isSeedingCatalog}
+                          className="min-h-[38px] px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          title="Restaurer la sélection officielle des 6 modèles certifiés Apple"
                         >
-                          <span className={`w-2 h-2 rounded-full ${p.inStock ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                          <span>{p.inStock ? 'En stock' : 'Rupture'}</span>
+                          <AppleLogo className={`w-3.5 h-3.5 ${isSeedingCatalog ? 'animate-spin' : ''}`} />
+                          <span>{isSeedingCatalog ? 'Chargement...' : 'Catalogue officiel Apple'}</span>
                         </button>
-                      </div>
 
-                      {/* Management Actions */}
-                      <div className="flex items-center gap-1 w-full md:w-auto justify-end pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800">
-                        {/* Publish toggle */}
                         <button
                           type="button"
-                          onClick={() => handleToggleProductPublish(p.id)}
-                          className={`p-2 rounded-xl text-xs transition-colors cursor-pointer ${
-                            p.published !== false
-                              ? 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                              : 'text-amber-500 bg-amber-50 dark:bg-amber-950'
-                          }`}
-                          title={p.published !== false ? 'Masquer du catalogue public' : 'Publier dans le catalogue'}
+                          onClick={handleResetCatalog}
+                          className="min-h-[38px] px-3 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer"
+                          title="Restaurer le catalogue d'origine Apple"
                         >
-                          {p.published !== false ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Réinitialiser</span>
                         </button>
-
-                        {/* Move Up */}
-                        <button
-                          type="button"
-                          disabled={idx === 0}
-                          onClick={() => handleMoveProduct(idx, 'up')}
-                          className="p-2 text-slate-400 hover:text-slate-800 dark:hover:text-white disabled:opacity-30 rounded-xl transition-colors cursor-pointer"
-                          title="Monter dans le catalogue"
-                        >
-                          <ArrowUp className="w-4 h-4" />
-                        </button>
-
-                        {/* Move Down */}
-                        <button
-                          type="button"
-                          disabled={idx === products.length - 1}
-                          onClick={() => handleMoveProduct(idx, 'down')}
-                          className="p-2 text-slate-400 hover:text-slate-800 dark:hover:text-white disabled:opacity-30 rounded-xl transition-colors cursor-pointer"
-                          title="Descendre dans le catalogue"
-                        >
-                          <ArrowDown className="w-4 h-4" />
-                        </button>
-
-                        {/* Duplicate */}
-                        <button
-                          type="button"
-                          onClick={() => handleDuplicateProduct(p)}
-                          className="p-2 text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-xl transition-colors cursor-pointer"
-                          title="Dupliquer ce produit"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </button>
-
-                        {/* Edit */}
-                        <button
-                          type="button"
-                          onClick={() => openEditProductForm(p)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 rounded-xl transition-colors cursor-pointer"
-                          title="Modifier la fiche complète"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-
-                        {/* Delete */}
-                        {productDeleteConfirmId === p.id ? (
-                          <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/60 p-1 rounded-xl">
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteProduct(p.id)}
-                              className="px-2 py-1 text-[11px] font-bold bg-rose-600 text-white rounded-lg hover:bg-rose-700"
-                            >
-                              Confirmer
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setProductDeleteConfirmId(null)}
-                              className="p-1 text-slate-400 hover:text-slate-600"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setProductDeleteConfirmId(p.id)}
-                            className="p-2 text-slate-400 hover:text-rose-600 rounded-xl transition-colors cursor-pointer"
-                            title="Supprimer ce produit"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="p-8 text-center text-slate-400 text-sm">
-                    Aucun produit trouvé selon les critères de recherche.
                   </div>
-                )}
-              </div>
+
+                  {/* Products Grouped Cleanly by Category */}
+                  {(() => {
+                    const orderedCategories = ['iPhone', 'iPad', 'iPhone Duo', 'MacBook', 'Accessoires'] as const;
+                    const categoriesToDisplay =
+                      productCatFilter === 'Tous'
+                        ? orderedCategories.filter((cat) => filteredProducts.some((p) => p.category === cat))
+                        : [productCatFilter];
+
+                    if (filteredProducts.length === 0) {
+                      return (
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center text-slate-400 text-sm">
+                          Aucun produit trouvé selon les critères sélectionnés.
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-5">
+                        {categoriesToDisplay.map((categoryName) => {
+                          const categoryItems = filteredProducts.filter((p) => p.category === categoryName);
+                          if (categoryItems.length === 0) return null;
+
+                          return (
+                            <div
+                              key={`cat-group-${categoryName}`}
+                              className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
+                            >
+                              {/* Category Section Banner */}
+                              <div className="px-4 py-3 bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Tag className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 dark:text-white font-['Outfit']">
+                                    {categoryName}
+                                  </h3>
+                                </div>
+                                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 tabular-nums">
+                                  {categoryItems.length} modèle(s)
+                                </span>
+                              </div>
+
+                              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                                {categoryItems.map((p, idx) => {
+                                  const masterIndex = products.findIndex((item) => item.id === p.id);
+                                  const isExcludedPromo = promoForm.excludedProductIds.includes(p.id);
+                                  const isPromoAppliedHere =
+                                    promoForm.enabled &&
+                                    promoForm.discountPercent > 0 &&
+                                    !isExcludedPromo &&
+                                    p.price > 0;
+
+                                  return (
+                                    <div
+                                      key={`admin-prod-${p.id || idx}-${idx}`}
+                                      className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                                    >
+                                      {/* Product identity */}
+                                      <div className="flex items-center gap-3.5 min-w-0">
+                                        <div className="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-800 p-1.5 flex items-center justify-center shrink-0 border border-slate-200/80 dark:border-slate-700">
+                                          <img
+                                            src={p.image || undefined}
+                                            alt={p.name}
+                                            className="w-full h-full object-contain"
+                                          />
+                                        </div>
+
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                                              {p.condition}
+                                            </span>
+                                            {isPromoAppliedHere && (
+                                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                                                -{promoForm.discountPercent}% actif
+                                              </span>
+                                            )}
+                                            {p.featured && (
+                                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                                                Vedette
+                                              </span>
+                                            )}
+                                            {p.published === false && (
+                                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                                                Masqué
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                                            {p.name}
+                                          </h4>
+                                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                            {p.model} · {p.storage.join(', ')}
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      {/* Pricing & Stock */}
+                                      <div className="flex items-center gap-4 text-left md:text-right shrink-0">
+                                        <div>
+                                          <div className="text-sm font-extrabold text-slate-900 dark:text-white tabular-nums">
+                                            {p.price > 0
+                                              ? `${p.price.toLocaleString('fr-FR')} FCFA`
+                                              : 'Prix sur demande'}
+                                          </div>
+                                          <div className="text-[11px] text-slate-400">
+                                            {p.stockLocation}
+                                          </div>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleProductStock(p.id)}
+                                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                            p.inStock
+                                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                              : 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                                          }`}
+                                          title="Cliquez pour basculer le stock"
+                                        >
+                                          <span
+                                            className={`w-2 h-2 rounded-full ${
+                                              p.inStock ? 'bg-emerald-500' : 'bg-rose-500'
+                                            }`}
+                                          />
+                                          <span>{p.inStock ? 'En stock' : 'Rupture'}</span>
+                                        </button>
+                                      </div>
+
+                                      {/* Management Actions */}
+                                      <div className="flex items-center gap-1 w-full md:w-auto justify-end pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleProductPublish(p.id)}
+                                          className={`p-2 rounded-xl text-xs transition-colors cursor-pointer ${
+                                            p.published !== false
+                                              ? 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                              : 'text-amber-500 bg-amber-50 dark:bg-amber-950'
+                                          }`}
+                                          title={
+                                            p.published !== false
+                                              ? 'Masquer du catalogue public'
+                                              : 'Publier dans le catalogue'
+                                          }
+                                        >
+                                          {p.published !== false ? (
+                                            <Eye className="w-4 h-4" />
+                                          ) : (
+                                            <EyeOff className="w-4 h-4" />
+                                          )}
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          disabled={masterIndex <= 0}
+                                          onClick={() => handleMoveProduct(masterIndex, 'up')}
+                                          className="p-2 text-slate-400 hover:text-slate-800 dark:hover:text-white disabled:opacity-30 rounded-xl transition-colors cursor-pointer"
+                                          title="Monter dans le catalogue"
+                                        >
+                                          <ArrowUp className="w-4 h-4" />
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          disabled={masterIndex < 0 || masterIndex === products.length - 1}
+                                          onClick={() => handleMoveProduct(masterIndex, 'down')}
+                                          className="p-2 text-slate-400 hover:text-slate-800 dark:hover:text-white disabled:opacity-30 rounded-xl transition-colors cursor-pointer"
+                                          title="Descendre dans le catalogue"
+                                        >
+                                          <ArrowDown className="w-4 h-4" />
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDuplicateProduct(p)}
+                                          className="p-2 text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-xl transition-colors cursor-pointer"
+                                          title="Dupliquer ce produit"
+                                        >
+                                          <Copy className="w-4 h-4" />
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => openEditProductForm(p)}
+                                          className="p-2 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 rounded-xl transition-colors cursor-pointer"
+                                          title="Modifier la fiche complète"
+                                        >
+                                          <Edit3 className="w-4 h-4" />
+                                        </button>
+
+                                        {productDeleteConfirmId === p.id ? (
+                                          <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/60 p-1 rounded-xl">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDeleteProduct(p.id)}
+                                              className="px-2 py-1 text-[11px] font-bold bg-rose-600 text-white rounded-lg hover:bg-rose-700"
+                                            >
+                                              Confirmer
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setProductDeleteConfirmId(null)}
+                                              className="p-1 text-slate-400"
+                                            >
+                                              <X className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => setProductDeleteConfirmId(p.id)}
+                                            className="p-2 text-slate-400 hover:text-rose-600 rounded-xl transition-colors cursor-pointer"
+                                            title="Supprimer ce produit"
+                                          >
+                                            <Trash2 className="w-4 h-4" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
             </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* TAB: PROMOTIONS & BANDEROLE DE DÉCEMBRE                   */}
+          {/* ========================================================= */}
+          {activeTab === 'promotions' && (
+            <AdminPromotionsPanel
+              products={products}
+              promoForm={promoForm}
+              onChangePromo={setPromoForm}
+              onSavePromo={handleSavePromoSettings}
+              savingPromo={savingPromo}
+              showDecemberBannerConfig={true}
+            />
+          )}
+
+          {/* ========================================================= */}
+          {/* TAB: NOUVEAU MAGASIN EN CONSTRUCTION                      */}
+          {/* ========================================================= */}
+          {activeTab === 'newstore' && (
+            <AdminNewStorePanel
+              form={newStoreForm}
+              onChange={setNewStoreForm}
+              onSave={handleSaveNewStoreTeaser}
+              saving={savingNewStore}
+              onNotify={triggerNotification}
+            />
           )}
 
           {/* ========================================================= */}
@@ -2080,7 +2678,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectNavTab('media')}
+                    className="px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    <span>Arrondir les bords ({mediaStyleForm.videoRadius} px)</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={handleResetVideos}
@@ -2204,7 +2811,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col justify-between p-3.5"
                   >
                     {/* Video Player Preview */}
-                    <div className="relative aspect-9/16 sm:aspect-4/3 w-full rounded-xl overflow-hidden bg-black mb-3">
+                    <div
+                      className="relative aspect-9/16 sm:aspect-4/3 w-full overflow-hidden bg-black mb-3 transition-[border-radius] duration-150"
+                      style={{ borderRadius: `${mediaStyleForm.videoRadius}px` }}
+                    >
                       {vid.type === 'tiktok' || vid.url.includes('tiktok.com') ? (
                         <div className="w-full h-full flex flex-col items-center justify-center text-white/70 p-4 text-center">
                           <Video className="w-8 h-8 mb-2 text-rose-500" />
@@ -2939,131 +3549,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* ========================================================= */}
-          {/* TAB 4: BOUTIQUE & SÉCURITÉ */}
+          {/* TAB 4: BOUTIQUE & SERVEUR CLOUD                           */}
           {/* ========================================================= */}
           {activeTab === 'settings' && (
             <div className="max-w-3xl mx-auto space-y-6">
-              
-              {/* Card 1: Hero Section Photo & Brand Visual Management */}
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2">
-                      <ImageIcon className="w-4 h-4 text-amber-500" />
-                      <span>Photo de l'Hero Section & Image de Marque (Oumar)</span>
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Cette photo est le visuel d'accueil officiel. Elle pilote automatiquement le halo d'ambiance chromatique, les reflets et l'arrière-plan de toute la page d'accueil.
-                    </p>
-                  </div>
-                  <div className="shrink-0">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                      heroPhotoSrc 
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60' 
-                        : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                    }`}>
-                      <span className={`w-2 h-2 rounded-full ${heroPhotoSrc ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-                      <span>{heroPhotoSrc ? 'Photo personnalisée active' : 'Photo officielle par défaut'}</span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-                  {/* Photo Preview Column */}
-                  <div className="md:col-span-4 flex flex-col items-center">
-                    <div className="relative w-full max-w-[220px] aspect-[4/5] rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 shadow-md group">
-                      <img
-                        src={heroPhotoPreview || heroPhotoSrc || heroTitaniumSample || undefined}
-                        alt="Aperçu photo Hero"
-                        className="w-full h-full object-cover object-top select-none transition-transform duration-500 group-hover:scale-105"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-3 pointer-events-none">
-                        <span className="text-[11px] text-white font-semibold font-['Outfit'] tracking-wide">
-                          Aperçu en direct
-                        </span>
-                      </div>
+              {/* Quick Navigation Shortcuts to Related Sections */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleSelectNavTab('media')}
+                  className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600 flex items-center justify-between gap-3 transition-colors cursor-pointer text-left"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                      <ImageIcon className="w-4 h-4" />
                     </div>
-                    <div className="flex flex-wrap items-center justify-center gap-2 mt-3">
-                      <button
-                        type="button"
-                        onClick={openHeroPhotoCropper}
-                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-950 dark:bg-white text-white dark:text-slate-950 inline-flex items-center gap-1.5 hover:opacity-90 cursor-pointer"
-                      >
-                        <Crop className="w-3.5 h-3.5" />
-                        <span>Recadrer & Retoucher</span>
-                      </button>
-                      {heroPhotoSrc && (
-                        <button
-                          type="button"
-                          onClick={handleResetHeroPhoto}
-                          className="text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          <span>Rétablir</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Upload & Configuration Controls */}
-                  <div className="md:col-span-8 space-y-4 text-xs">
-                    {/* File Upload Trigger */}
                     <div>
-                      <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                        Importer une photo depuis vos fichiers (ouverture directe du studio recadrage)
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => heroPhotoInputRef.current?.click()}
-                        className="w-full py-5 px-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-slate-900 dark:hover:border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-2.5 bg-slate-50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-all cursor-pointer group shadow-xs"
-                      >
-                        <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-800 dark:text-slate-200 group-hover:scale-110 transition-transform">
-                          <Upload className="w-4 h-4 text-slate-900 dark:text-white" />
-                        </div>
-                        <div className="text-center">
-                          <span className="font-bold text-slate-900 dark:text-white block text-sm">
-                            Sélectionner une photo d'Oumar
-                          </span>
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                            Prend en charge PNG, JPG, WebP (Max 10 Mo)
-                          </span>
-                        </div>
-                      </button>
-                    </div>
-
-                    {/* URL Input option */}
-                    <div>
-                      <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                        Ou saisir l'URL directe d'une image web
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="url"
-                          value={heroPhotoUrlInput}
-                          onChange={(e) => setHeroPhotoUrlInput(e.target.value)}
-                          placeholder="https://.../photo-oumar.jpg"
-                          className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none text-xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleApplyHeroPhotoUrl}
-                          disabled={!heroPhotoUrlInput.trim()}
-                          className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-950 font-bold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity cursor-pointer shrink-0"
-                        >
-                          Appliquer
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Information Box */}
-                    <div className="p-3.5 bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-800/60 rounded-xl text-[11px] text-amber-900 dark:text-amber-300 flex items-start gap-2.5 leading-relaxed">
-                      <Info className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
-                      <span>
-                        Cette modification est immédiatement sauvegardée et transmise à la page d'accueil publique en temps réel.
-                      </span>
+                      <div className="font-bold text-slate-900 dark:text-white">Visuels & Photo Hero</div>
+                      <div className="text-[11px] text-slate-500">Géré dans « Vitrine & Médias → Médiathèque »</div>
                     </div>
                   </div>
-                </div>
+                  <Crop className="w-4 h-4 text-slate-400 shrink-0" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectNavTab('admins')}
+                  className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600 flex items-center justify-between gap-3 transition-colors cursor-pointer text-left"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">Accès Équipe & Portail</div>
+                      <div className="text-[11px] text-slate-500">Géré dans « Sécurité & Équipe »</div>
+                    </div>
+                  </div>
+                  <Lock className="w-4 h-4 text-slate-400 shrink-0" />
+                </button>
               </div>
 
               {/* Store Parameters Form */}
@@ -3138,25 +3662,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     Enregistrer les paramètres
                   </button>
-                </div>
-              </div>
-
-              {/* Admin Security Information Card */}
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-                <h3 className="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                  <span>Sécurité & Contrôle d'accès</span>
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  L’accès administrateur est entièrement protégé par un système d’authentification chiffré et une gestion stricte des privilèges par collaborateur. Seuls les comptes autorisés par la direction peuvent modifier le catalogue et traiter les commandes de la boutique OUMAR IPHONE.
-                </p>
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 space-y-1">
-                  <p className="font-semibold text-slate-950 dark:text-white flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-amber-500" /> Gestion des accès de l'équipe :
-                  </p>
-                  <p>
-                    Pour ajouter ou modifier un collaborateur, utilisez l’onglet <strong>"Équipe"</strong> ci-dessus. Seuls les comptes autorisés avec une adresse professionnelle enregistrée et active disposent des privilèges de modification et de suivi des commandes.
-                  </p>
                 </div>
               </div>
 

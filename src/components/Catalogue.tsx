@@ -15,7 +15,10 @@ import { ProductModal } from './ProductModal';
 import { deduplicateColors } from '../services/storeService';
 import { AppleProductImageViewer } from './AppleProductImageViewer';
 import { WhatsAppLogo, IPhoneIcon } from './BrandIcons';
+import { useMediaStyle } from '../hooks/useMediaStyle';
+import { useStorePromotion } from '../hooks/useStorePromotion';
 import { 
+  applyStorePromotion,
   formatProductPrice, 
   formatWhatsAppPrice, 
   getCombinationPrice, 
@@ -42,6 +45,8 @@ export const Catalogue: React.FC<CatalogueProps> = ({
   externalActiveProduct,
   onCloseExternalProduct
 }) => {
+  const mediaStyle = useMediaStyle();
+  const { promotion } = useStorePromotion();
   // Selected category tab
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous');
 
@@ -132,17 +137,18 @@ export const Catalogue: React.FC<CatalogueProps> = ({
           return false;
         }
 
-        // Price range filter
-        const priceVal = typeof p.price === 'number' ? p.price : 0;
-        if (priceRange === 'under-500k' && priceVal >= 500000) return false;
-        if (priceRange === '500k-1m' && (priceVal < 500000 || priceVal > 1000000)) return false;
-        if (priceRange === 'over-1m' && priceVal <= 1000000) return false;
+        // Price range filter (basé sur le prix effectif après promotion éventuelle)
+        const baseVal = typeof p.price === 'number' ? p.price : 0;
+        const effectiveVal = applyStorePromotion(baseVal, p.id, promotion).finalPrice || 0;
+        if (priceRange === 'under-500k' && effectiveVal >= 500000) return false;
+        if (priceRange === '500k-1m' && (effectiveVal < 500000 || effectiveVal > 1000000)) return false;
+        if (priceRange === 'over-1m' && effectiveVal <= 1000000) return false;
 
         return true;
       })
       .sort((a, b) => {
-        const priceA = typeof a.price === 'number' ? a.price : 0;
-        const priceB = typeof b.price === 'number' ? b.price : 0;
+        const priceA = applyStorePromotion(typeof a.price === 'number' ? a.price : 0, a.id, promotion).finalPrice || 0;
+        const priceB = applyStorePromotion(typeof b.price === 'number' ? b.price : 0, b.id, promotion).finalPrice || 0;
         if (sortBy === 'price-asc') return priceA - priceB;
         if (sortBy === 'price-desc') return priceB - priceA;
         if (sortBy === 'newest') return (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0);
@@ -154,6 +160,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
       });
   }, [
     products,
+    promotion,
     selectedCategory,
     searchQuery,
     selectedCondition,
@@ -198,7 +205,8 @@ export const Catalogue: React.FC<CatalogueProps> = ({
     const color = cardColors[product.id] || (product.colors && product.colors[0]?.name) || 'Standard';
     const condition = normalizeConditionName(product.condition);
     const { price } = getCombinationPrice(product, storage, condition, color);
-    onAddToCart(product, storage, color, condition, price);
+    const promoApplied = applyStorePromotion(price, product.id, promotion);
+    onAddToCart(product, storage, color, condition, promoApplied.finalPrice);
 
     setAddedIds((prev) => ({ ...prev, [product.id]: true }));
     setTimeout(() => {
@@ -523,28 +531,39 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                 .map((c) => c.image)
                 .filter((img): img is string => Boolean(img && typeof img === 'string' && img.trim()));
 
-              // Strict independent pricing by combination (Storage, Condition, Color)
+              // Strict independent pricing by combination (Storage, Condition, Color) + promo globale éventuelle
               const conditionName = normalizeConditionName(product.condition);
               const priceResult = getCombinationPrice(product, currentStorage, conditionName, currentColor);
-              const currentPrice = priceResult.price;
+              const promoResult = applyStorePromotion(priceResult.price, product.id, promotion);
+              const currentPrice = promoResult.finalPrice;
+              const crossedPrice =
+                promoResult.isDiscounted && promoResult.originalBasePrice
+                  ? promoResult.originalBasePrice
+                  : (typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice
+                      ? product.originalPrice
+                      : null);
 
               return (
                 <div
                   key={`${product.id || 'prod'}-${pIndex}`}
                   onClick={() => onSelectProduct ? onSelectProduct(product) : setActiveModalProduct(product)}
-                  className="perf-card bg-white dark:bg-[#0f172a] rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-200 hover:shadow-lg active:scale-[0.99] cursor-pointer min-w-0"
+                  className="perf-card bg-white dark:bg-[#0f172a] overflow-hidden flex flex-col group border border-slate-200/80 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-200 hover:shadow-lg active:scale-[0.99] cursor-pointer min-w-0"
+                  style={{ borderRadius: `${mediaStyle.productRadius}px` }}
                 >
-                  {/* Product Visual Stage avec transition Apple */}
+                  {/* Product Visual Stage avec transition Apple fluide au changement de couleur */}
                   <div className="relative aspect-[4/3] bg-gradient-to-b from-slate-50 to-slate-100/70 dark:from-slate-900/80 dark:to-[#0b0f17] p-2.5 sm:p-5 flex items-center justify-center overflow-hidden">
                     <AppleProductImageViewer
-                      key={`card-${product.id}-${currentColor}-${cardImage}`}
+                      key={`card-${product.id}`}
                       src={cardImage || product.image || ''}
                       alt={`${product.name} — Finition ${currentColor}`}
                       allImagesToPreload={cardColorImages}
                       fallbackImage={product.image}
                       priority={pIndex < 2}
+                      accentHex={selectedColorObj?.hex}
+                      colorKey={currentColor}
+                      imageRoundedPx={Math.max(0, Math.round(mediaStyle.productRadius * 0.75))}
                       className="w-full h-full object-contain group-hover:scale-[1.03] transition-transform duration-300 ease-out select-none"
-                      containerClassName="w-full h-full relative flex items-center justify-center"
+                      containerClassName="w-full h-full relative flex items-center justify-center overflow-hidden"
                     />
                   </div>
 
@@ -563,10 +582,10 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                               type="button"
                               onClick={(e) => handleCardColorChange(e, product.id, color.name)}
                               aria-pressed={isSelected}
-                              className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border transition-all cursor-pointer ${
+                              className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full border transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-90 cursor-pointer ${
                                 isSelected
-                                  ? 'border-amber-500 scale-110 shadow-xs ring-2 ring-amber-500 ring-offset-1 dark:ring-offset-slate-900'
-                                  : 'border-slate-300 dark:border-slate-600 hover:scale-105'
+                                  ? 'border-amber-500 scale-115 shadow-xs ring-2 ring-amber-500 ring-offset-1 dark:ring-offset-slate-900'
+                                  : 'border-slate-300 dark:border-slate-600 hover:scale-110 opacity-85 hover:opacity-100'
                               }`}
                               style={{ backgroundColor: color.hex }}
                               title={`Changer la photo pour la finition ${color.name}`}
@@ -576,7 +595,10 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                         })}
                       </div>
 
-                      <span className="text-[10px] sm:text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">
+                      <span
+                        key={`${product.id}-label-${currentColor}`}
+                        className="text-[10px] sm:text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px] animate-color-label"
+                      >
                         {currentColor}
                       </span>
                     </div>
@@ -596,7 +618,7 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                           </span>
                         </div>
 
-                        <div className="flex items-baseline gap-2 flex-wrap">
+                        <div className="flex items-baseline gap-1.5 sm:gap-2 flex-wrap">
                           <div className={`text-xs sm:text-base font-extrabold font-['Outfit'] tabular-nums tracking-tight ${
                             currentPrice === null || currentPrice === 0
                               ? 'text-amber-600 dark:text-amber-400 font-semibold'
@@ -604,10 +626,15 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                           }`}>
                             {formatProductPrice(currentPrice)}
                           </div>
-                          {typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice && (
+                          {crossedPrice && (
                             <div className="text-[10px] sm:text-xs text-slate-400 line-through tabular-nums">
-                              {product.originalPrice.toLocaleString('fr-FR')} FCFA
+                              {crossedPrice.toLocaleString('fr-FR')} FCFA
                             </div>
+                          )}
+                          {promoResult.isDiscounted && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] sm:text-[10px] font-extrabold tabular-nums">
+                              -{promoResult.discountPercent}%
+                            </span>
                           )}
                         </div>
                       </div>

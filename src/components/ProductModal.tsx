@@ -16,7 +16,10 @@ import { WHATSAPP_URL } from '../data/products';
 import { deduplicateColors } from '../services/storeService';
 import { AppleProductImageViewer } from './AppleProductImageViewer';
 import { WhatsAppLogo, IPhoneIcon } from './BrandIcons';
+import { useMediaStyle } from '../hooks/useMediaStyle';
+import { useStorePromotion } from '../hooks/useStorePromotion';
 import { 
+  applyStorePromotion,
   formatProductPrice, 
   formatWhatsAppPrice, 
   getCombinationPrice, 
@@ -37,6 +40,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   onClose,
   onAddToCart
 }) => {
+  const mediaStyle = useMediaStyle();
+  const { promotion } = useStorePromotion();
   const [selectedStorage, setSelectedStorage] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedCondition, setSelectedCondition] = useState<string>('Neuf');
@@ -69,9 +74,16 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
   if (!isOpen || !product) return null;
 
-  // Calculate current price strictly based on combination (Storage, Condition, Color)
+  // Calculate current price strictly based on combination (Storage, Condition, Color) + promo globale éventuelle
   const priceResult = getCombinationPrice(product, selectedStorage, selectedCondition, selectedColor);
-  const currentPrice = priceResult.price;
+  const promoResult = applyStorePromotion(priceResult.price, product.id, promotion);
+  const currentPrice = promoResult.finalPrice;
+  const crossedPrice =
+    promoResult.isDiscounted && promoResult.originalBasePrice
+      ? promoResult.originalBasePrice
+      : (typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice
+          ? product.originalPrice
+          : null);
 
   // Current color object
   const currentColorObj = product.colors?.find(
@@ -150,8 +162,12 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                     Nouveauté
                   </span>
                 )}
-                {typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice && (
-                  <span className="text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                {promoResult.isDiscounted ? (
+                  <span className="text-[11px] font-extrabold tracking-wider uppercase px-2.5 py-1 rounded bg-rose-600 text-white shadow-xs tabular-nums">
+                    -{promoResult.discountPercent}% Promo
+                  </span>
+                ) : typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice && (
+                  <span className="text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                     -{(product.originalPrice - currentPrice).toLocaleString('fr-FR')} FCFA
                   </span>
                 )}
@@ -159,12 +175,15 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
 
               {/* Main Image Stage avec transition fluide Apple */}
               <AppleProductImageViewer
-                key={`modal-${product.id}-${selectedColor}-${activeImage}`}
+                key={`modal-${product.id}`}
                 src={activeImage || product.image || ''}
                 alt={`${product.name} — ${selectedColor}`}
                 allImagesToPreload={allColorImages}
                 fallbackImage={product.image}
                 priority={true}
+                accentHex={currentColorObj?.hex}
+                colorKey={selectedColor}
+                imageRoundedPx={mediaStyle.productRadius}
                 className="max-h-[85%] max-w-full object-contain drop-shadow-md select-none"
                 containerClassName="relative aspect-square w-full flex items-center justify-center my-auto py-3 overflow-hidden"
               />
@@ -173,11 +192,17 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
               {product.colors && product.colors.length > 0 && (
                 <div className="my-2.5 p-3 bg-white/80 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs backdrop-blur-sm">
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">
-                    <span className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className="w-2 h-2 rounded-full border border-black/10 transition-colors duration-300"
+                        style={{ backgroundColor: currentColorObj?.hex || '#f59e0b' }}
+                      />
                       <span>Finition :</span>
                     </span>
-                    <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-extrabold text-[11px]">
+                    <span
+                      key={`modal-chip-color-${selectedColor}`}
+                      className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-extrabold text-[11px] animate-color-label"
+                    >
                       {selectedColor}
                     </span>
                   </div>
@@ -198,7 +223,7 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                             }
                           }}
                           aria-pressed={isSelected}
-                          className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-bold transition-all cursor-pointer ${
+                          className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-bold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 cursor-pointer ${
                             isSelected
                               ? 'border-amber-500 bg-slate-950 text-white dark:bg-white dark:text-slate-950 shadow-sm ring-2 ring-amber-500 ring-offset-1 dark:ring-offset-slate-900 scale-105'
                               : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80'
@@ -206,7 +231,7 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                           title={`Voir en finition ${color.name}`}
                         >
                           <span 
-                            className="w-3.5 h-3.5 rounded-full border border-black/20 shadow-xs shrink-0" 
+                            className={`w-3.5 h-3.5 rounded-full border border-black/20 shadow-xs shrink-0 transition-transform duration-300 ${isSelected ? 'scale-110' : 'group-hover:scale-105'}`} 
                             style={{ backgroundColor: color.hex }}
                           />
                           <span>{color.name}</span>
@@ -220,21 +245,30 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
               {/* Thumbnails strip (if multiple gallery photos available) */}
               {galleryImages.length > 1 && (
                 <div className="flex items-center justify-center gap-3 pt-4 border-t border-slate-200/60 dark:border-slate-800">
-                  {galleryImages.map((thumb, idx) => (
-                    <button
-                      key={`modal-thumb-${idx}-${thumb}`}
-                      type="button"
-                      onClick={() => setActiveImage(thumb)}
-                      className={`w-14 h-14 rounded-xl p-1 bg-white dark:bg-slate-800 border-2 transition-all overflow-hidden ${
-                        activeImage === thumb 
-                          ? 'border-slate-900 dark:border-white shadow-sm scale-105' 
-                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'
-                      }`}
-                      aria-label={`Afficher la vue ${idx + 1}`}
-                    >
-                      <img src={thumb || undefined} alt={`Miniature ${idx + 1}`} className="w-full h-full object-contain" />
-                    </button>
-                  ))}
+                  {galleryImages.map((thumb, idx) => {
+                    const thumbRadius = Math.min(18, Math.round(mediaStyle.productRadius * 0.65));
+                    return (
+                      <button
+                        key={`modal-thumb-${idx}-${thumb}`}
+                        type="button"
+                        onClick={() => setActiveImage(thumb)}
+                        className={`w-14 h-14 p-1 bg-white dark:bg-slate-800 border-2 transition-all overflow-hidden cursor-pointer ${
+                          activeImage === thumb 
+                            ? 'border-slate-900 dark:border-white shadow-sm scale-105' 
+                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                        }`}
+                        style={{ borderRadius: `${thumbRadius}px` }}
+                        aria-label={`Afficher la vue ${idx + 1}`}
+                      >
+                        <img
+                          src={thumb || undefined}
+                          alt={`Miniature ${idx + 1}`}
+                          className="w-full h-full object-contain"
+                          style={{ borderRadius: `${Math.max(0, thumbRadius - 3)}px` }}
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
@@ -268,7 +302,7 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                 </h2>
 
                 {/* Price Display */}
-                <div className="flex items-baseline gap-3 mb-6 pb-5 border-b border-slate-200/70 dark:border-slate-800">
+                <div className="flex items-baseline gap-3 flex-wrap mb-6 pb-5 border-b border-slate-200/70 dark:border-slate-800">
                   <span className={`text-2xl sm:text-3xl font-bold font-['Outfit'] tabular-nums tracking-tight ${
                     currentPrice === null || currentPrice === 0
                       ? 'text-amber-600 dark:text-amber-400 font-semibold'
@@ -276,9 +310,14 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                   }`}>
                     {formatProductPrice(currentPrice)}
                   </span>
-                  {typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice && (
+                  {crossedPrice && (
                     <span className="text-sm sm:text-base text-slate-400 dark:text-slate-500 line-through tabular-nums">
-                      {product.originalPrice.toLocaleString('fr-FR')} FCFA
+                      {crossedPrice.toLocaleString('fr-FR')} FCFA
+                    </span>
+                  )}
+                  {promoResult.isDiscounted && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded bg-rose-600 text-white text-xs font-extrabold tabular-nums">
+                      -{promoResult.discountPercent}%
                     </span>
                   )}
                 </div>
@@ -327,7 +366,8 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                     <div className="flex flex-wrap gap-2.5">
                       {product.storage.map((cap, capIdx) => {
                         const isSelected = selectedStorage === cap;
-                        const capPrice = getCombinationPrice(product, cap, selectedCondition, selectedColor).price;
+                        const capRawPrice = getCombinationPrice(product, cap, selectedCondition, selectedColor).price;
+                        const capPrice = applyStorePromotion(capRawPrice, product.id, promotion).finalPrice;
 
                         return (
                           <button
@@ -358,8 +398,14 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                 {/* Color Swatches */}
                 {product.colors && product.colors.length > 0 && (
                   <div className="mb-7">
-                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
-                      Finition : <span className="font-normal text-slate-900 dark:text-white capitalize">{selectedColor}</span>
+                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <span>Finition :</span>
+                      <span
+                        key={`modal-head-color-${selectedColor}`}
+                        className="font-normal text-slate-900 dark:text-white capitalize animate-color-label"
+                      >
+                        {selectedColor}
+                      </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
                       {deduplicateColors(product.colors).map((color, colIdx) => {
@@ -377,14 +423,14 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                               }
                             }}
                             aria-pressed={isSelected}
-                            className={`group flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs transition-all ${
+                            className={`group flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 cursor-pointer ${
                               isSelected
-                                ? 'border-slate-950 dark:border-white bg-slate-50 dark:bg-slate-800/80 font-semibold text-slate-950 dark:text-white shadow-xs'
+                                ? 'border-slate-950 dark:border-white bg-slate-50 dark:bg-slate-800/80 font-semibold text-slate-950 dark:text-white shadow-xs scale-105'
                                 : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 text-slate-600 dark:text-slate-400'
                             }`}
                           >
                             <span 
-                              className="w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600 shadow-xs" 
+                              className={`w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600 shadow-xs transition-transform duration-300 ${isSelected ? 'scale-110' : 'group-hover:scale-105'}`} 
                               style={{ backgroundColor: color.hex }}
                             />
                             <span>{color.name}</span>

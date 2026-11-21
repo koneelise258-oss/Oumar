@@ -7,9 +7,11 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { getWhatsAppUrl } from '../data/storeSettings';
-import { formatProductPrice, normalizeConditionName } from '../utils/pricingUtils';
+import { applyStorePromotion, formatProductPrice, normalizeConditionName } from '../utils/pricingUtils';
 import { sanitizeText } from '../utils/security';
 import { WhatsAppLogo, IPhoneIcon } from './BrandIcons';
+import { useMediaStyle } from '../hooks/useMediaStyle';
+import { useStorePromotion } from '../hooks/useStorePromotion';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -24,6 +26,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   products,
   onSelectProduct
 }) => {
+  const mediaStyle = useMediaStyle();
+  const { promotion } = useStorePromotion();
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -187,18 +191,32 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         {/* Results List */}
         <div className="max-h-[60vh] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80 p-2">
           {results.length > 0 ? (
-            results.map((product, sIdx) => (
+            results.map((product, sIdx) => {
+              const promoResult = applyStorePromotion(product.price, product.id, promotion);
+              const displayPrice = promoResult.finalPrice;
+              const crossedPrice =
+                promoResult.isDiscounted && promoResult.originalBasePrice
+                  ? promoResult.originalBasePrice
+                  : (displayPrice && product.originalPrice && product.originalPrice > displayPrice
+                      ? product.originalPrice
+                      : null);
+
+              return (
               <div
                 key={`search-${product.id || sIdx}-${sIdx}`}
                 onClick={() => handleProductClick(product)}
                 className="group p-3 sm:p-3.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all flex items-center gap-3 sm:gap-4 cursor-pointer"
               >
                 {/* Product Thumbnail */}
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-slate-100 dark:bg-slate-800 p-1.5 flex items-center justify-center shrink-0 border border-slate-200/60 dark:border-slate-700/60 overflow-hidden">
+                <div
+                  className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-100 dark:bg-slate-800 p-1.5 flex items-center justify-center shrink-0 border border-slate-200/60 dark:border-slate-700/60 overflow-hidden"
+                  style={{ borderRadius: `${Math.min(20, Math.round(mediaStyle.productRadius * 0.65))}px` }}
+                >
                   <img
                     src={product.image || undefined}
                     alt={product.name}
                     className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
+                    style={{ borderRadius: `${Math.max(0, Math.min(16, Math.round(mediaStyle.productRadius * 0.5)))}px` }}
                   />
                 </div>
 
@@ -208,6 +226,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60">
                       {normalizeConditionName(product.condition)}
                     </span>
+                    {promoResult.isDiscounted && (
+                      <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-rose-600 text-white tabular-nums">
+                        -{promoResult.discountPercent}%
+                      </span>
+                    )}
                     {product.inStock ? (
                       <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -232,11 +255,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 {/* Price & Action Arrow */}
                 <div className="text-right shrink-0">
                   <div className="text-sm sm:text-base font-extrabold text-slate-950 dark:text-white tabular-nums">
-                    {formatProductPrice(product.price)}
+                    {formatProductPrice(displayPrice)}
                   </div>
-                  {product.price && product.originalPrice && product.originalPrice > product.price && (
+                  {crossedPrice && (
                     <div className="text-[11px] text-slate-400 line-through tabular-nums">
-                      {product.originalPrice.toLocaleString('fr-FR')} FCFA
+                      {crossedPrice.toLocaleString('fr-FR')} FCFA
                     </div>
                   )}
                   <div className="hidden sm:flex items-center justify-end gap-1 text-[11px] font-semibold text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors mt-0.5">
@@ -245,7 +268,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   </div>
                 </div>
               </div>
-            ))
+              );
+            })
           ) : (
             /* Empty state friendly to Abidjan clients with WhatsApp assistant */
             <div className="py-12 px-6 text-center">

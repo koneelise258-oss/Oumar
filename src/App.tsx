@@ -11,7 +11,9 @@ import { checkIsUserAdmin, supabase, isSupabaseConfigured } from './lib/supabase
 import { CartItem, Product, VideoItem } from './types';
 import { ThemeProvider } from './context/ThemeContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { getCombinationPrice, normalizeConditionName } from './utils/pricingUtils';
+import { applyStorePromotion, getCombinationPrice, normalizeConditionName } from './utils/pricingUtils';
+import { useStorePromotion } from './hooks/useStorePromotion';
+import { DecemberPromoBanner } from './components/DecemberPromoBanner';
 import {
   MASKED_ADMIN_PATH,
   isDecoyAdminLocation,
@@ -47,14 +49,15 @@ function loadPersistedCart(catalog: Product[]): CartItem[] {
         : matched.selectedColor || matched.colors?.[0]?.name || 'Standard';
       const chosenCondition = normalizeConditionName(entry.chosenCondition || matched.condition);
       const qty = Math.min(20, Math.max(1, Math.floor(Number(entry.quantity) || 1)));
-      const livePrice = getCombinationPrice(matched, chosenStorage, chosenCondition, chosenColor).price;
+      const rawLivePrice = getCombinationPrice(matched, chosenStorage, chosenCondition, chosenColor).price;
+      const effectivePrice = applyStorePromotion(rawLivePrice, matched.id).finalPrice;
       hydrated.push({
         product: matched,
         quantity: qty,
         chosenStorage,
         chosenColor,
         chosenCondition,
-        unitPrice: typeof livePrice === 'number' && livePrice > 0 ? livePrice : 0
+        unitPrice: typeof effectivePrice === 'number' && effectivePrice > 0 ? effectivePrice : 0
       });
     }
     return hydrated;
@@ -65,6 +68,7 @@ function loadPersistedCart(catalog: Product[]): CartItem[] {
 
 // Chargement différé des composants secondaires et pages dédiées
 const VideosSection = lazy(() => import('./components/VideosSection').then(m => ({ default: m.VideosSection })));
+const NewStoreBannerSection = lazy(() => import('./components/NewStoreBannerSection').then(m => ({ default: m.NewStoreBannerSection })));
 const SocialSection = lazy(() => import('./components/SocialSection').then(m => ({ default: m.SocialSection })));
 const BoutiqueInfo = lazy(() => import('./components/BoutiqueInfo').then(m => ({ default: m.BoutiqueInfo })));
 const ProductDetailPage = lazy(() => import('./components/ProductDetailPage').then(m => ({ default: m.ProductDetailPage })));
@@ -82,6 +86,7 @@ interface CartToastState {
 }
 
 function StoreApp() {
+  const { promotion } = useStorePromotion();
   const [activeSection, setActiveSection] = useState<string>('home');
   const [products, setProducts] = useState<Product[]>(loadProducts);
   const [videos, setVideos] = useState<VideoItem[]>(loadVideos);
@@ -138,7 +143,7 @@ function StoreApp() {
     }
   }, [cartItems]);
 
-  // Réconciliation automatique du panier + fiche active quand le catalogue se met à jour
+  // Réconciliation automatique du panier + fiche active quand le catalogue ou la promotion se met à jour
   useEffect(() => {
     if (!products || products.length === 0) return;
 
@@ -153,8 +158,9 @@ function StoreApp() {
           continue;
         }
         const cond = normalizeConditionName(item.chosenCondition || fresh.condition);
-        const livePrice = getCombinationPrice(fresh, item.chosenStorage, cond, item.chosenColor).price;
-        const resolvedUnitPrice = typeof livePrice === 'number' && livePrice > 0 ? livePrice : 0;
+        const rawLivePrice = getCombinationPrice(fresh, item.chosenStorage, cond, item.chosenColor).price;
+        const promoPrice = applyStorePromotion(rawLivePrice, fresh.id, promotion).finalPrice;
+        const resolvedUnitPrice = typeof promoPrice === 'number' && promoPrice > 0 ? promoPrice : 0;
         if (fresh !== item.product || resolvedUnitPrice !== (item.unitPrice || 0)) {
           changed = true;
           next.push({
@@ -175,7 +181,7 @@ function StoreApp() {
       const updated = products.find((p) => p.id === current.id);
       return updated && updated !== current ? updated : current;
     });
-  }, [products]);
+  }, [products, promotion]);
 
   // Mise à jour automatique du titre de la page (SEO & onglet navigateur)
   useEffect(() => {
@@ -606,9 +612,11 @@ function StoreApp() {
     const chosenColor = color || product.selectedColor || (product.colors && product.colors[0]?.name) || 'Standard';
     const chosenCondition = condition || normalizeConditionName(product.condition);
 
+    const baseComboPrice = getCombinationPrice(product, chosenStorage, chosenCondition, chosenColor).price;
+    const promoFallback = applyStorePromotion(baseComboPrice, product.id, promotion).finalPrice;
     const resolvedPrice = typeof customPrice === 'number' && customPrice >= 0
       ? customPrice
-      : (getCombinationPrice(product, chosenStorage, chosenCondition, chosenColor).price || 0);
+      : (promoFallback || 0);
 
     setCartItems((prev) => {
       const existingIndex = prev.findIndex(
@@ -772,6 +780,9 @@ function StoreApp() {
               onAddToCart={(product) => handleAddToCart(product)}
             />
 
+            {/* 1b. Banderole Promotion de Décembre (défilante avant les vidéos) */}
+            <DecemberPromoBanner />
+
             {/* 2. Section des Vidéos */}
             <VideosSection
               id="videos"
@@ -785,6 +796,9 @@ function StoreApp() {
               onProductsUpdated={(newProducts) => setProducts(newProducts)}
               onSelectProduct={handleSelectProduct}
             />
+
+            {/* 3b. Nouveau Magasin en Construction (motion design compact + vidéo) */}
+            <NewStoreBannerSection />
 
             {/* 4. Nos Réseaux Sociaux (TikTok & WhatsApp) */}
             <SocialSection />

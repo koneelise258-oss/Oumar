@@ -10,16 +10,45 @@ interface AppleProductImageViewerProps {
   containerClassName?: string;
   fallbackImage?: string;
   priority?: boolean;
+  /** Couleur hexadécimale sélectionnée pour le halo ambiant subtil et fluide */
+  accentHex?: string;
+  /** Clé de couleur courante pour animer doucement même si deux finitions partagent la même photo */
+  colorKey?: string;
+  /** Arrondi des bords appliqué directement aux visuels (en px) */
+  imageRoundedPx?: number;
 }
 
 // Cache global en mémoire des images déjà préchargées pour éviter les requêtes réseau répétées
 const PRELOADED_URLS = new Set<string>();
 
+type TransitionPhase = 'idle' | 'prepare' | 'crossfade';
+
+/**
+ * Convertit un code hexadécimal (#RRGGBB ou #RGB) en "r, g, b" pour un halo ambiant subtil.
+ */
+function hexToRgbTuple(hex?: string): string | null {
+  if (!hex || typeof hex !== 'string') return null;
+  const clean = hex.trim().replace(/^#/, '');
+  if (/^[0-9a-fA-F]{3}$/.test(clean)) {
+    const r = parseInt(clean[0] + clean[0], 16);
+    const g = parseInt(clean[1] + clean[1], 16);
+    const b = parseInt(clean[2] + clean[2], 16);
+    return `${r}, ${g}, ${b}`;
+  }
+  if (/^[0-9a-fA-F]{6}$/.test(clean)) {
+    const r = parseInt(clean.slice(0, 2), 16);
+    const g = parseInt(clean.slice(2, 4), 16);
+    const b = parseInt(clean.slice(4, 6), 16);
+    return `${r}, ${g}, ${b}`;
+  }
+  return null;
+}
+
 /**
  * Composant de visualisation d'image produit haute performance & transition Apple fluide.
- * - Précharge les finitions couleur UNIQUEMENT lorsque la carte approche du viewport (gain majeur sur mobile)
- * - Conserve l'image précédente visible pendant le chargement de la suivante (zéro flash blanc)
- * - Squelette shimmer doux avant l'arrivée de la première image
+ * - Crossfade simultané doux et tranquille (480ms ease-out Apple) sans flash blanc
+ * - Halo lumineux subtil harmonisé avec la couleur Apple sélectionnée
+ * - Précharge les finitions couleur UNIQUEMENT lorsque la carte approche du viewport
  * - S'adapte automatiquement aux performances CPU/RAM/réseau de l'appareil
  */
 export const AppleProductImageViewer: React.FC<AppleProductImageViewerProps> = ({
@@ -29,7 +58,10 @@ export const AppleProductImageViewer: React.FC<AppleProductImageViewerProps> = (
   className = 'max-h-[85%] max-w-full object-contain drop-shadow-xl select-none',
   containerClassName = 'relative aspect-square w-full flex items-center justify-center my-auto py-4 overflow-hidden',
   fallbackImage,
-  priority = false
+  priority = false,
+  accentHex,
+  colorKey,
+  imageRoundedPx
 }) => {
   const perf = useDevicePerformance();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,7 +118,8 @@ export const AppleProductImageViewer: React.FC<AppleProductImageViewerProps> = (
 
   const [currentSrc, setCurrentSrc] = useState<string>(src || fallbackImage || '');
   const [previousSrc, setPreviousSrc] = useState<string | null>(null);
-  const [isAnimating, setIsAnimating] = useState<boolean>(false);
+  const [phase, setPhase] = useState<TransitionPhase>('idle');
+  const [settleTick, setSettleTick] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(() => {
     const initial = src || fallbackImage || '';
     return Boolean(initial && !PRELOADED_URLS.has(initial));
@@ -95,8 +128,42 @@ export const AppleProductImageViewer: React.FC<AppleProductImageViewerProps> = (
   const [retryKey, setRetryKey] = useState<number>(0);
 
   const requestIdRef = useRef<number>(0);
+  const currentSrcRef = useRef<string>(currentSrc);
+  currentSrcRef.current = currentSrc;
+  const lastColorKeyRef = useRef<string | undefined>(colorKey);
+  const raf1Ref = useRef<number | null>(null);
+  const raf2Ref = useRef<number | null>(null);
+  const cleanupTimerRef = useRef<number | null>(null);
 
-  // Charger la nouvelle source d'image avec transition Apple sans flash blanc
+  const clearPendingTimers = () => {
+    if (raf1Ref.current !== null) {
+      cancelAnimationFrame(raf1Ref.current);
+      raf1Ref.current = null;
+    }
+    if (raf2Ref.current !== null) {
+      cancelAnimationFrame(raf2Ref.current);
+      raf2Ref.current = null;
+    }
+    if (cleanupTimerRef.current !== null) {
+      window.clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => clearPendingTimers, []);
+
+  // Déclenche une légère respiration visuelle si la couleur change mais pointe vers la même photo
+  useEffect(() => {
+    if (colorKey !== undefined && lastColorKeyRef.current !== undefined && colorKey !== lastColorKeyRef.current) {
+      const targetSrc = src || fallbackImage || '';
+      if (targetSrc === currentSrcRef.current) {
+        setSettleTick((t) => t + 1);
+      }
+    }
+    lastColorKeyRef.current = colorKey;
+  }, [colorKey, src, fallbackImage]);
+
+  // Charger la nouvelle source d'image avec véritable crossfade simultané doux et tranquille
   useEffect(() => {
     const targetSrc = src || fallbackImage || '';
     if (!targetSrc) {
@@ -105,33 +172,56 @@ export const AppleProductImageViewer: React.FC<AppleProductImageViewerProps> = (
       return;
     }
 
-    if (targetSrc === currentSrc && !hasError && retryKey === 0) return;
+    const activeSrc = currentSrcRef.current;
+    if (targetSrc === activeSrc && !hasError && retryKey === 0) return;
 
+    clearPendingTimers();
     const currentReqId = ++requestIdRef.current;
+    const isReduced = perf.tier === 'low' || perf.prefersReducedMotion;
+    const transitionMs = isReduced ? 180 : 480;
 
-    if (currentSrc && currentSrc !== targetSrc) {
-      setPreviousSrc(currentSrc);
-      setIsAnimating(true);
-    } else {
+    const startCrossfade = (outgoingSrc: string | null) => {
+      if (requestIdRef.current !== currentReqId) return;
+
+      PRELOADED_URLS.add(targetSrc);
+      setHasError(false);
+      setIsLoading(false);
+
+      if (!outgoingSrc || outgoingSrc === targetSrc || isReduced) {
+        setCurrentSrc(targetSrc);
+        setPreviousSrc(null);
+        setPhase('idle');
+        return;
+      }
+
+      // Étape 1 : Monter l'image entrante à opacity: 0 pendant que l'ancienne reste visible à opacity: 1
+      setPreviousSrc(outgoingSrc);
+      setCurrentSrc(targetSrc);
+      setPhase('prepare');
+
+      // Étape 2 : Double rAF pour que le navigateur applique l'état initial avant de lancer le fondu croisé simultané
+      raf1Ref.current = requestAnimationFrame(() => {
+        if (requestIdRef.current !== currentReqId) return;
+        raf2Ref.current = requestAnimationFrame(() => {
+          if (requestIdRef.current !== currentReqId) return;
+          setPhase('crossfade');
+
+          cleanupTimerRef.current = window.setTimeout(() => {
+            if (requestIdRef.current === currentReqId) {
+              setPreviousSrc(null);
+              setPhase('idle');
+            }
+          }, transitionMs + 30);
+        });
+      });
+    };
+
+    if (!activeSrc) {
       setIsLoading(true);
     }
 
-    setHasError(false);
-
     if (PRELOADED_URLS.has(targetSrc)) {
-      setCurrentSrc(targetSrc);
-      setIsLoading(false);
-
-      if (currentSrc && currentSrc !== targetSrc) {
-        setTimeout(() => {
-          if (requestIdRef.current === currentReqId) {
-            setIsAnimating(false);
-            setPreviousSrc(null);
-          }
-        }, perf.tier === 'low' ? 160 : 360);
-      } else {
-        setIsAnimating(false);
-      }
+      startCrossfade(activeSrc || null);
       return;
     }
 
@@ -139,38 +229,19 @@ export const AppleProductImageViewer: React.FC<AppleProductImageViewerProps> = (
     img.decoding = 'async';
     img.src = targetSrc;
 
-    const applyTransition = () => {
-      if (requestIdRef.current !== currentReqId) return;
-
-      PRELOADED_URLS.add(targetSrc);
-      setCurrentSrc(targetSrc);
-      setIsLoading(false);
-
-      requestAnimationFrame(() => {
-        if (requestIdRef.current !== currentReqId) return;
-
-        setTimeout(() => {
-          if (requestIdRef.current === currentReqId) {
-            setIsAnimating(false);
-            setPreviousSrc(null);
-          }
-        }, perf.tier === 'low' ? 160 : 380);
-      });
-    };
-
     if (img.complete && img.naturalWidth > 0) {
-      applyTransition();
+      startCrossfade(activeSrc || null);
     } else {
-      img.onload = applyTransition;
+      img.onload = () => startCrossfade(activeSrc || null);
       img.onerror = () => {
         if (requestIdRef.current !== currentReqId) return;
         setIsLoading(false);
-        setIsAnimating(false);
+        setPhase('idle');
         setPreviousSrc(null);
         setHasError(true);
       };
     }
-  }, [src, fallbackImage, retryKey, perf.tier]);
+  }, [src, fallbackImage, retryKey, perf.tier, perf.prefersReducedMotion]);
 
   const handleRetry = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -179,32 +250,55 @@ export const AppleProductImageViewer: React.FC<AppleProductImageViewerProps> = (
     setRetryKey((prev) => prev + 1);
   };
 
-  const transitionClasses = perf.tier === 'low' || perf.prefersReducedMotion
-    ? (isAnimating ? 'opacity-0' : 'opacity-100')
-    : (isAnimating ? 'opacity-0 scale-[0.96] translate-x-1.5' : 'opacity-100 scale-100 translate-x-0');
+  const isReduced = perf.tier === 'low' || perf.prefersReducedMotion;
+  const rgbTuple = hexToRgbTuple(accentHex);
+
+  const outgoingClasses =
+    phase === 'prepare'
+      ? 'opacity-100 scale-100'
+      : 'opacity-0 scale-[0.985]';
+
+  const incomingClasses =
+    phase === 'prepare'
+      ? 'opacity-0 scale-[0.975]'
+      : 'opacity-100 scale-100';
+
+  const durationClass = isReduced ? 'duration-150' : 'duration-[480ms]';
+  const settleAnimationClass = !isReduced && settleTick > 0 && phase === 'idle' ? 'animate-color-settle' : '';
 
   return (
     <div ref={containerRef} className={containerClassName}>
+      {/* Halo ambiant discret teinté par la couleur Apple choisie (transition douce et tranquille) */}
+      {rgbTuple && !isReduced && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none z-0 transition-all duration-700 ease-out"
+          style={{
+            background: `radial-gradient(circle at 50% 52%, rgba(${rgbTuple}, 0.16) 0%, rgba(${rgbTuple}, 0.05) 45%, transparent 72%)`
+          }}
+        />
+      )}
+
       {/* Squelette shimmer doux pendant le premier chargement */}
       {isLoading && !previousSrc && !hasError && (
         <div className="absolute inset-2 rounded-2xl shimmer-surface z-0 pointer-events-none" />
       )}
 
-      {/* Sous-couche : Image précédente maintenue visible durant le changement de finition */}
-      {previousSrc && isAnimating && (
+      {/* Sous-couche : Image précédente qui s'efface en douceur pendant le fondu croisé */}
+      {previousSrc && (
         <img
           src={previousSrc}
           alt=""
-          className={`${className} absolute inset-0 m-auto pointer-events-none opacity-80 transition-opacity ${
-            perf.tier === 'low' ? 'duration-150' : 'duration-380'
-          } ease-[cubic-bezier(0.16,1,0.3,1)]`}
+          className={`${className} absolute inset-0 m-auto z-[5] pointer-events-none transition-[opacity,transform] ${durationClass} ease-[cubic-bezier(0.22,1,0.36,1)] ${outgoingClasses}`}
+          style={imageRoundedPx !== undefined ? { borderRadius: `${imageRoundedPx}px` } : undefined}
           aria-hidden="true"
         />
       )}
 
-      {/* Couche principale : Image active */}
+      {/* Couche principale : Nouvelle finition qui apparaît en fondu croisé */}
       {!hasError && currentSrc && (
         <img
+          key={settleTick > 0 ? `settle-${settleTick}` : 'active-img'}
           src={currentSrc}
           alt={alt}
           onLoad={() => {
@@ -215,9 +309,8 @@ export const AppleProductImageViewer: React.FC<AppleProductImageViewerProps> = (
             setIsLoading(false);
             setHasError(true);
           }}
-          className={`${className} relative z-10 transition-all ${
-            perf.tier === 'low' ? 'duration-150' : 'duration-380'
-          } ease-[cubic-bezier(0.16,1,0.3,1)] ${transitionClasses}`}
+          className={`${className} relative z-10 transition-[opacity,transform] ${durationClass} ease-[cubic-bezier(0.22,1,0.36,1)] ${incomingClasses} ${settleAnimationClass}`}
+          style={imageRoundedPx !== undefined ? { borderRadius: `${imageRoundedPx}px` } : undefined}
           loading={priority ? 'eager' : 'lazy'}
           fetchPriority={priority ? 'high' : 'auto'}
           decoding="async"

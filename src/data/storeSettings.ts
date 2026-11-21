@@ -1,5 +1,58 @@
 import { isSafeMediaUrl, purgeSensitiveClientStorage } from '../utils/security';
 
+export interface MediaStyleSettings {
+  heroRadius: number;    // 0 .. 48 px
+  productRadius: number; // 0 .. 40 px
+  videoRadius: number;   // 0 .. 44 px
+}
+
+export const DEFAULT_MEDIA_STYLE: MediaStyleSettings = {
+  heroRadius: 0,
+  productRadius: 20,
+  videoRadius: 24,
+};
+
+export interface StorePromotionSettings {
+  enabled: boolean;
+  discountPercent: number; // 0 .. 90
+  label: string;
+  excludedProductIds: string[];
+  bannerEnabled: boolean;
+  bannerHeadline: string;
+  bannerSubline: string;
+}
+
+export const DEFAULT_STORE_PROMOTION: StorePromotionSettings = {
+  enabled: false,
+  discountPercent: 15,
+  label: 'Promotion de Décembre',
+  excludedProductIds: [],
+  bannerEnabled: true,
+  bannerHeadline: 'PROMOTION DE DÉCEMBRE — OUMAR IPHONE ABIDJAN',
+  bannerSubline: 'FÊTES DE FIN D’ANNÉE · SÉLECTION APPLE CERTIFIÉE · RETRAIT EN BOUTIQUE · GARANTIE 12 MOIS',
+};
+
+export interface NewStoreTeaserSettings {
+  enabled: boolean;
+  badgeLabel: string;
+  title: string;
+  subtitle: string;
+  progressPercent: number; // 0 .. 100
+  videoUrl: string;
+  videoType: 'html5' | 'tiktok';
+}
+
+export const DEFAULT_NEW_STORE_TEASER: NewStoreTeaserSettings = {
+  enabled: true,
+  badgeLabel: 'OUVERTURE PROCHAINE',
+  title: 'Nouveau Magasin en Construction',
+  subtitle:
+    'Un nouvel espace OUMAR IPHONE est actuellement en construction à Abidjan pour vous accueillir dans un showroom Apple encore plus moderne.',
+  progressPercent: 72,
+  videoUrl: '',
+  videoType: 'html5',
+};
+
 export interface HeroSettings {
   kickerBrand: string;
   kickerLocation: string;
@@ -12,6 +65,9 @@ export interface HeroSettings {
   badgeProof2: string;
   badgeProof3: string;
   photoAltText: string;
+  mediaStyle?: MediaStyleSettings;
+  storePromotion?: StorePromotionSettings;
+  newStoreTeaser?: NewStoreTeaserSettings;
 }
 
 export const DEFAULT_HERO_SETTINGS: HeroSettings = {
@@ -25,8 +81,82 @@ export const DEFAULT_HERO_SETTINGS: HeroSettings = {
   badgeProof1: 'Garantie 12 Mois Oumar',
   badgeProof2: 'Test & Retrait en Boutique',
   badgeProof3: 'Échange Direct WhatsApp',
-  photoAltText: 'Oumar — Fondateur OUMAR IPHONE Abidjan'
+  photoAltText: 'Oumar — Fondateur OUMAR IPHONE Abidjan',
+  mediaStyle: DEFAULT_MEDIA_STYLE,
+  storePromotion: DEFAULT_STORE_PROMOTION,
+  newStoreTeaser: DEFAULT_NEW_STORE_TEASER,
 };
+
+export function clampMediaStyle(input?: Partial<MediaStyleSettings> | null): MediaStyleSettings {
+  const clamp = (val: unknown, min: number, max: number, fallback: number): number => {
+    const num = typeof val === 'number' ? val : Number(val);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(num)));
+  };
+  return {
+    heroRadius: clamp(input?.heroRadius, 0, 48, DEFAULT_MEDIA_STYLE.heroRadius),
+    productRadius: clamp(input?.productRadius, 0, 40, DEFAULT_MEDIA_STYLE.productRadius),
+    videoRadius: clamp(input?.videoRadius, 0, 44, DEFAULT_MEDIA_STYLE.videoRadius),
+  };
+}
+
+export function normalizeStorePromotion(input?: Partial<StorePromotionSettings> | null): StorePromotionSettings {
+  const rawPct = typeof input?.discountPercent === 'number' ? input.discountPercent : Number(input?.discountPercent);
+  const discountPercent = Number.isFinite(rawPct)
+    ? Math.min(90, Math.max(0, Math.round(rawPct)))
+    : DEFAULT_STORE_PROMOTION.discountPercent;
+
+  const excludedProductIds = Array.isArray(input?.excludedProductIds)
+    ? Array.from(new Set(input.excludedProductIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)))
+    : [];
+
+  return {
+    enabled: Boolean(input?.enabled),
+    discountPercent,
+    label: typeof input?.label === 'string' && input.label.trim() ? input.label.trim().slice(0, 80) : DEFAULT_STORE_PROMOTION.label,
+    excludedProductIds,
+    bannerEnabled: input?.bannerEnabled !== false,
+    bannerHeadline:
+      typeof input?.bannerHeadline === 'string' && input.bannerHeadline.trim()
+        ? input.bannerHeadline.trim().slice(0, 140)
+        : DEFAULT_STORE_PROMOTION.bannerHeadline,
+    bannerSubline:
+      typeof input?.bannerSubline === 'string' && input.bannerSubline.trim()
+        ? input.bannerSubline.trim().slice(0, 180)
+        : DEFAULT_STORE_PROMOTION.bannerSubline,
+  };
+}
+
+export function normalizeNewStoreTeaser(input?: Partial<NewStoreTeaserSettings> | null): NewStoreTeaserSettings {
+  const rawProgress = typeof input?.progressPercent === 'number' ? input.progressPercent : Number(input?.progressPercent);
+  const progressPercent = Number.isFinite(rawProgress)
+    ? Math.min(100, Math.max(0, Math.round(rawProgress)))
+    : DEFAULT_NEW_STORE_TEASER.progressPercent;
+
+  const rawVideoUrl = typeof input?.videoUrl === 'string' ? input.videoUrl.trim() : '';
+  const safeVideoUrl = rawVideoUrl && (isSafeMediaUrl(rawVideoUrl) || rawVideoUrl.includes('tiktok.com')) ? rawVideoUrl : '';
+  const detectedType: 'html5' | 'tiktok' =
+    input?.videoType === 'tiktok' || safeVideoUrl.toLowerCase().includes('tiktok.com') ? 'tiktok' : 'html5';
+
+  return {
+    enabled: input?.enabled !== false,
+    badgeLabel:
+      typeof input?.badgeLabel === 'string' && input.badgeLabel.trim()
+        ? input.badgeLabel.trim().slice(0, 60)
+        : DEFAULT_NEW_STORE_TEASER.badgeLabel,
+    title:
+      typeof input?.title === 'string' && input.title.trim()
+        ? input.title.trim().slice(0, 100)
+        : DEFAULT_NEW_STORE_TEASER.title,
+    subtitle:
+      typeof input?.subtitle === 'string' && input.subtitle.trim()
+        ? input.subtitle.trim().slice(0, 260)
+        : DEFAULT_NEW_STORE_TEASER.subtitle,
+    progressPercent,
+    videoUrl: safeVideoUrl,
+    videoType: detectedType,
+  };
+}
 
 export interface StoreSettings {
   whatsappPhone: string;
@@ -83,7 +213,10 @@ export function loadStoreSettings(): StoreSettings {
         ...parsed,
         heroSettings: {
           ...DEFAULT_HERO_SETTINGS,
-          ...(parsed.heroSettings || {})
+          ...(parsed.heroSettings || {}),
+          mediaStyle: clampMediaStyle(parsed.heroSettings?.mediaStyle),
+          storePromotion: normalizeStorePromotion(parsed.heroSettings?.storePromotion),
+          newStoreTeaser: normalizeNewStoreTeaser(parsed.heroSettings?.newStoreTeaser),
         }
       };
     }
@@ -109,20 +242,110 @@ export function getHeroSettings(): HeroSettings {
   const settings = loadStoreSettings();
   return {
     ...DEFAULT_HERO_SETTINGS,
-    ...(settings.heroSettings || {})
+    ...(settings.heroSettings || {}),
+    mediaStyle: clampMediaStyle(settings.heroSettings?.mediaStyle),
+    storePromotion: normalizeStorePromotion(settings.heroSettings?.storePromotion),
+    newStoreTeaser: normalizeNewStoreTeaser(settings.heroSettings?.newStoreTeaser),
   };
 }
 
 export function saveHeroSettings(hero: HeroSettings): void {
   const current = loadStoreSettings();
+  const normalizedHero: HeroSettings = {
+    ...hero,
+    mediaStyle: clampMediaStyle(hero.mediaStyle ?? current.heroSettings?.mediaStyle),
+    storePromotion: normalizeStorePromotion(hero.storePromotion ?? current.heroSettings?.storePromotion),
+    newStoreTeaser: normalizeNewStoreTeaser(hero.newStoreTeaser ?? current.heroSettings?.newStoreTeaser),
+  };
   const updated: StoreSettings = {
     ...current,
-    heroSettings: hero
+    heroSettings: normalizedHero
   };
   saveStoreSettings(updated);
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('oumar_hero_settings_updated', { detail: hero }));
+    window.dispatchEvent(new CustomEvent('oumar_hero_settings_updated', { detail: normalizedHero }));
+    window.dispatchEvent(new CustomEvent('oumar_media_style_updated', { detail: normalizedHero.mediaStyle }));
+    window.dispatchEvent(new CustomEvent('oumar_promotion_updated', { detail: normalizedHero.storePromotion }));
+    window.dispatchEvent(new CustomEvent('oumar_new_store_updated', { detail: normalizedHero.newStoreTeaser }));
   }
+}
+
+export function getMediaStyleSettings(): MediaStyleSettings {
+  return clampMediaStyle(getHeroSettings().mediaStyle);
+}
+
+export function saveMediaStyleSettings(mediaStyle: MediaStyleSettings): StoreSettings {
+  const current = loadStoreSettings();
+  const normalized = clampMediaStyle(mediaStyle);
+  const nextHero: HeroSettings = {
+    ...DEFAULT_HERO_SETTINGS,
+    ...(current.heroSettings || {}),
+    mediaStyle: normalized,
+    storePromotion: normalizeStorePromotion(current.heroSettings?.storePromotion),
+    newStoreTeaser: normalizeNewStoreTeaser(current.heroSettings?.newStoreTeaser),
+  };
+  const updated: StoreSettings = {
+    ...current,
+    heroSettings: nextHero
+  };
+  saveStoreSettings(updated);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('oumar_hero_settings_updated', { detail: nextHero }));
+    window.dispatchEvent(new CustomEvent('oumar_media_style_updated', { detail: normalized }));
+  }
+  return updated;
+}
+
+export function getStorePromotionSettings(): StorePromotionSettings {
+  return normalizeStorePromotion(getHeroSettings().storePromotion);
+}
+
+export function saveStorePromotionSettings(promo: StorePromotionSettings): StoreSettings {
+  const current = loadStoreSettings();
+  const normalized = normalizeStorePromotion(promo);
+  const nextHero: HeroSettings = {
+    ...DEFAULT_HERO_SETTINGS,
+    ...(current.heroSettings || {}),
+    mediaStyle: clampMediaStyle(current.heroSettings?.mediaStyle),
+    storePromotion: normalized,
+    newStoreTeaser: normalizeNewStoreTeaser(current.heroSettings?.newStoreTeaser),
+  };
+  const updated: StoreSettings = {
+    ...current,
+    heroSettings: nextHero
+  };
+  saveStoreSettings(updated);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('oumar_hero_settings_updated', { detail: nextHero }));
+    window.dispatchEvent(new CustomEvent('oumar_promotion_updated', { detail: normalized }));
+  }
+  return updated;
+}
+
+export function getNewStoreTeaserSettings(): NewStoreTeaserSettings {
+  return normalizeNewStoreTeaser(getHeroSettings().newStoreTeaser);
+}
+
+export function saveNewStoreTeaserSettings(teaser: NewStoreTeaserSettings): StoreSettings {
+  const current = loadStoreSettings();
+  const normalized = normalizeNewStoreTeaser(teaser);
+  const nextHero: HeroSettings = {
+    ...DEFAULT_HERO_SETTINGS,
+    ...(current.heroSettings || {}),
+    mediaStyle: clampMediaStyle(current.heroSettings?.mediaStyle),
+    storePromotion: normalizeStorePromotion(current.heroSettings?.storePromotion),
+    newStoreTeaser: normalized,
+  };
+  const updated: StoreSettings = {
+    ...current,
+    heroSettings: nextHero
+  };
+  saveStoreSettings(updated);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('oumar_hero_settings_updated', { detail: nextHero }));
+    window.dispatchEvent(new CustomEvent('oumar_new_store_updated', { detail: normalized }));
+  }
+  return updated;
 }
 
 export function getWhatsAppPhone(): string {

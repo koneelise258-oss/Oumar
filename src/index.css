@@ -460,6 +460,80 @@ html.dark .shimmer-surface {
   }
 }
 
+/* Transitions fluides et tranquilles au changement de couleur produit */
+@keyframes omr-color-label-in {
+  0% {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes omr-color-settle {
+  0% {
+    transform: scale(0.985);
+    opacity: 0.92;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-color-label {
+  animation: omr-color-label-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-color-settle {
+  animation: omr-color-settle 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Banderole défilante Promotion de Décembre */
+@keyframes omr-marquee {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.omr-marquee-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: omr-marquee 32s linear infinite;
+}
+
+.omr-marquee-group:hover .omr-marquee-track {
+  animation-play-state: paused;
+}
+
+/* Balayage lumineux architectural — Section Nouveau Magasin */
+@keyframes omr-beam-sweep {
+  0% {
+    transform: translate3d(-120%, 0, 0) skewX(-18deg);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.45;
+  }
+  70% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate3d(260%, 0, 0) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+.omr-beam-sweep {
+  animation: omr-beam-sweep 7.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
 /* Accessibility: Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *,

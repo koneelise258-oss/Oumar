@@ -5,6 +5,7 @@ import { getWhatsAppUrl, loadStoreSettings } from '../data/storeSettings';
 import { formatProductPrice, normalizeConditionName } from '../utils/pricingUtils';
 import { sanitizeText, sanitizePhone, openSafeExternalUrl } from '../utils/security';
 import { WhatsAppLogo } from './BrandIcons';
+import { useMediaStyle } from '../hooks/useMediaStyle';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onClearCart
 }) => {
+  const mediaStyle = useMediaStyle();
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -190,7 +192,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <img
                       src={thumbnailSrc}
                       alt={`${item.product.name} — ${item.chosenColor}`}
-                      className="w-16 h-16 object-contain rounded-lg bg-white dark:bg-slate-800 p-1.5 border border-slate-200/60 dark:border-slate-700/60 shrink-0"
+                      className="w-16 h-16 object-contain bg-white dark:bg-slate-800 p-1.5 border border-slate-200/60 dark:border-slate-700/60 shrink-0"
+                      style={{ borderRadius: `${Math.min(18, Math.round(mediaStyle.productRadius * 0.6))}px` }}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">

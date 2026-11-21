@@ -19,7 +19,10 @@ import { WHATSAPP_URL } from '../data/products';
 import { deduplicateColors } from '../services/storeService';
 import { AppleProductImageViewer } from './AppleProductImageViewer';
 import { WhatsAppLogo, IPhoneIcon } from './BrandIcons';
+import { useMediaStyle } from '../hooks/useMediaStyle';
+import { useStorePromotion } from '../hooks/useStorePromotion';
 import { 
+  applyStorePromotion,
   formatProductPrice, 
   formatWhatsAppPrice, 
   getCombinationPrice, 
@@ -38,6 +41,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   onBack,
   onAddToCart
 }) => {
+  const mediaStyle = useMediaStyle();
+  const { promotion } = useStorePromotion();
   const [selectedStorage, setSelectedStorage] = useState<string>(
     product.selectedStorage || product.storage[0] || 'Standard'
   );
@@ -63,9 +68,16 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [product]);
 
-  // Détermination stricte du prix indépendant selon la combinaison (Stockage, État, Couleur)
+  // Détermination stricte du prix indépendant selon la combinaison (Stockage, État, Couleur) + promotion globale
   const priceResult = getCombinationPrice(product, selectedStorage, selectedCondition, selectedColor);
-  const currentPrice: number | null = priceResult.price;
+  const promoResult = applyStorePromotion(priceResult.price, product.id, promotion);
+  const currentPrice: number | null = promoResult.finalPrice;
+  const crossedPrice =
+    promoResult.isDiscounted && promoResult.originalBasePrice
+      ? promoResult.originalBasePrice
+      : (typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice
+          ? product.originalPrice
+          : null);
   const matchingVariant = priceResult.matchedVariant;
 
   // Image et stock associés à la variante
@@ -202,7 +214,10 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
         </div>
 
         {/* Main Product Layout */}
-        <div className="bg-white dark:bg-[#0f172a] rounded-3xl overflow-hidden shadow-xl border border-slate-200/80 dark:border-slate-800 grid grid-cols-1 lg:grid-cols-12 transition-colors">
+        <div
+          className="bg-white dark:bg-[#0f172a] overflow-hidden shadow-xl border border-slate-200/80 dark:border-slate-800 grid grid-cols-1 lg:grid-cols-12 transition-colors"
+          style={{ borderRadius: `${Math.max(12, Math.round(mediaStyle.productRadius * 1.15))}px` }}
+        >
           
           {/* Left Column: Visual Stage & Gallery (5 cols) */}
           <div className="lg:col-span-5 bg-gradient-to-b from-slate-50 to-slate-100/70 dark:from-slate-900/80 dark:to-[#0b0f17] p-6 sm:p-10 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-slate-200/80 dark:border-slate-800">
@@ -217,21 +232,28 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                   Nouveauté
                 </span>
               )}
-              {currentPrice !== null && product.originalPrice && product.originalPrice > currentPrice && (
-                <span className="text-xs font-bold tracking-wider uppercase px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+              {promoResult.isDiscounted ? (
+                <span className="text-xs font-extrabold tracking-wider uppercase px-2.5 py-1 rounded bg-rose-600 text-white shadow-xs tabular-nums">
+                  -{promoResult.discountPercent}% Promo
+                </span>
+              ) : currentPrice !== null && product.originalPrice && product.originalPrice > currentPrice && (
+                <span className="text-xs font-bold tracking-wider uppercase px-2.5 py-1 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                   -{(product.originalPrice - currentPrice).toLocaleString('fr-FR')} FCFA
                 </span>
               )}
             </div>
 
-            {/* Main Image View avec transitions fluides style Apple et clé stable */}
+            {/* Main Image View avec transitions fluides style Apple et clé stable par produit */}
             <AppleProductImageViewer
-              key={`detail-${product.id}-${selectedColor}-${displayImage}`}
+              key={`detail-${product.id}`}
               src={displayImage || product.image || ''}
               alt={`${product.name} — Finition ${selectedColor}`}
               allImagesToPreload={allColorImages}
               fallbackImage={product.image}
               priority={true}
+              accentHex={currentColorObj?.hex}
+              colorKey={selectedColor}
+              imageRoundedPx={mediaStyle.productRadius}
               className="max-h-[85%] max-w-full object-contain drop-shadow-xl select-none"
               containerClassName="relative aspect-square w-full flex items-center justify-center my-auto py-4 overflow-hidden"
             />
@@ -241,10 +263,16 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
               <div className="my-3 p-3.5 bg-white/80 dark:bg-slate-900/80 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm backdrop-blur-sm">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2.5">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span
+                      className="w-2.5 h-2.5 rounded-full border border-black/10 transition-colors duration-300"
+                      style={{ backgroundColor: currentColorObj?.hex || '#f59e0b' }}
+                    />
                     <span>Finitions disponibles :</span>
                   </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-extrabold text-[11px]">
+                  <span
+                    key={`detail-chip-color-${selectedColor}`}
+                    className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-extrabold text-[11px] animate-color-label"
+                  >
                     {selectedColor}
                   </span>
                 </div>
@@ -258,7 +286,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                         type="button"
                         onClick={() => handleColorSelect(colorObj)}
                         aria-pressed={isSelected}
-                        className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                        className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 cursor-pointer ${
                           isSelected
                             ? 'border-amber-500 bg-slate-950 text-white dark:bg-white dark:text-slate-950 shadow-md ring-2 ring-amber-500 ring-offset-2 dark:ring-offset-slate-900 scale-105'
                             : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80'
@@ -266,7 +294,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                         title={`Choisir la finition ${colorObj.name}`}
                       >
                         <span 
-                          className="w-4 h-4 rounded-full border border-black/20 shadow-xs shrink-0" 
+                          className={`w-4 h-4 rounded-full border border-black/20 shadow-xs shrink-0 transition-transform duration-300 ${isSelected ? 'scale-110' : 'group-hover:scale-105'}`} 
                           style={{ backgroundColor: colorObj.hex }}
                         />
                         <span>{colorObj.name}</span>
@@ -280,20 +308,29 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
             {/* Thumbnails Strip */}
             {galleryImages.length > 1 && (
               <div className="flex items-center justify-center gap-3 pt-6 border-t border-slate-200/60 dark:border-slate-800">
-                {galleryImages.map((thumb, idx) => (
-                  <button
-                    key={`detail-thumb-${idx}-${thumb}`}
-                    type="button"
-                    onClick={() => setActiveImage(thumb)}
-                    className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl p-1 bg-white dark:bg-slate-800 border-2 transition-all overflow-hidden cursor-pointer ${
-                      activeImage === thumb 
-                        ? 'border-slate-950 dark:border-white shadow-md scale-105' 
-                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'
-                    }`}
-                  >
-                    <img src={thumb || undefined} alt={`Vue ${idx + 1}`} className="w-full h-full object-contain" />
-                  </button>
-                ))}
+                {galleryImages.map((thumb, idx) => {
+                  const thumbRadius = Math.min(20, Math.round(mediaStyle.productRadius * 0.7));
+                  return (
+                    <button
+                      key={`detail-thumb-${idx}-${thumb}`}
+                      type="button"
+                      onClick={() => setActiveImage(thumb)}
+                      className={`w-14 h-14 sm:w-16 sm:h-16 p-1 bg-white dark:bg-slate-800 border-2 transition-all overflow-hidden cursor-pointer ${
+                        activeImage === thumb 
+                          ? 'border-slate-950 dark:border-white shadow-md scale-105' 
+                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                      }`}
+                      style={{ borderRadius: `${thumbRadius}px` }}
+                    >
+                      <img
+                        src={thumb || undefined}
+                        alt={`Vue ${idx + 1}`}
+                        className="w-full h-full object-contain"
+                        style={{ borderRadius: `${Math.max(0, thumbRadius - 3)}px` }}
+                      />
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -329,7 +366,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
 
               {/* Price Tag & Source Reference note */}
               <div className="flex flex-col mb-6 pb-6 border-b border-slate-200/80 dark:border-slate-800 space-y-1">
-                <div className="flex items-baseline gap-3">
+                <div className="flex items-baseline gap-3 flex-wrap">
                   <span className={`text-3xl sm:text-4xl font-extrabold font-['Outfit'] tabular-nums tracking-tight ${
                     currentPrice === null || currentPrice === 0
                       ? 'text-amber-600 dark:text-amber-400 font-bold'
@@ -337,9 +374,14 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                   }`}>
                     {formatProductPrice(currentPrice)}
                   </span>
-                  {typeof currentPrice === 'number' && currentPrice > 0 && product.originalPrice && product.originalPrice > currentPrice && (
+                  {crossedPrice && (
                     <span className="text-lg text-slate-400 dark:text-slate-500 line-through tabular-nums">
-                      {product.originalPrice.toLocaleString('fr-FR')} FCFA
+                      {crossedPrice.toLocaleString('fr-FR')} FCFA
+                    </span>
+                  )}
+                  {promoResult.isDiscounted && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded bg-rose-600 text-white text-xs font-extrabold tabular-nums">
+                      -{promoResult.discountPercent}%
                     </span>
                   )}
                 </div>
@@ -396,7 +438,12 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                 <div className="mb-7">
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3">
                     <span>Finition & Couleur</span>
-                    <span className="font-bold text-slate-950 dark:text-white">{selectedColor}</span>
+                    <span
+                      key={`detail-head-color-${selectedColor}`}
+                      className="font-bold text-slate-950 dark:text-white animate-color-label"
+                    >
+                      {selectedColor}
+                    </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     {deduplicateColors(product.colors).map((colorObj, colIdx) => {
@@ -407,14 +454,14 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                           type="button"
                           onClick={() => handleColorSelect(colorObj)}
                           aria-pressed={isSelected}
-                          className={`group flex items-center gap-2.5 px-4 py-2 rounded-full border text-xs font-semibold transition-all cursor-pointer ${
+                          className={`group flex items-center gap-2.5 px-4 py-2 rounded-full border text-xs font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 cursor-pointer ${
                             isSelected
                               ? 'border-slate-950 dark:border-white bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-md ring-2 ring-slate-950 dark:ring-white ring-offset-2 dark:ring-offset-slate-900 scale-105'
                               : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60'
                           }`}
                         >
                           <span 
-                            className="w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600 shadow-xs shrink-0" 
+                            className={`w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600 shadow-xs shrink-0 transition-transform duration-300 ${isSelected ? 'scale-110' : 'group-hover:scale-105'}`} 
                             style={{ backgroundColor: colorObj.hex }}
                           />
                           <span>{colorObj.name}</span>
@@ -436,7 +483,7 @@ Merci de me confirmer la disponibilité réelle et de m'indiquer les modalités 
                     {product.storage.map((cap, capIdx) => {
                       const isSelected = selectedStorage === cap;
                       const capPriceResult = getCombinationPrice(product, cap, selectedCondition, selectedColor);
-                      const capPrice = capPriceResult.price;
+                      const capPrice = applyStorePromotion(capPriceResult.price, product.id, promotion).finalPrice;
 
                       return (
                         <button

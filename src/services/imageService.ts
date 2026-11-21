@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { APPLE_ASSET_IMAGES } from '../data/products';
-import { isSafeMediaUrl, validateImageFile } from '../utils/security';
+import { isSafeMediaUrl, validateImageFile, validateVideoFile } from '../utils/security';
 
 export interface ImageUploadResult {
   url: string;
@@ -205,6 +205,80 @@ export async function uploadSanitizedImageDataUrl(
     url: dataUrl,
     isRemoteStorage: false,
     message: 'Média recadré et optimisé avec succès.'
+  };
+}
+
+/**
+ * Valide et importe une vidéo MP4/WebM vers Supabase Storage si disponible,
+ * sinon convertit en Data URL si la taille permet le stockage local.
+ */
+export async function uploadStoreVideoFile(file: File): Promise<ImageUploadResult> {
+  const check = await validateVideoFile(file);
+  if (!check.valid) {
+    throw new Error(check.error || 'Fichier vidéo refusé par sécurité.');
+  }
+
+  if (isSupabaseConfigured) {
+    try {
+      const ext = file.type === 'video/webm' ? 'webm' : 'mp4';
+      const randomToken =
+        typeof crypto !== 'undefined' && crypto.getRandomValues
+          ? Array.from(crypto.getRandomValues(new Uint8Array(8)))
+              .map((b) => b.toString(16).padStart(2, '0'))
+              .join('')
+          : Math.random().toString(36).substring(2, 10);
+      const fileName = `videos/${Date.now()}-${randomToken}.${ext}`;
+
+      const { data, error } = await supabase.storage
+        .from('store-products')
+        .upload(fileName, file, {
+          contentType: file.type,
+          cacheControl: '31536000',
+          upsert: false
+        });
+
+      if (!error && data?.path) {
+        const { data: pubData } = supabase.storage
+          .from('store-products')
+          .getPublicUrl(data.path);
+
+        if (pubData?.publicUrl && isSafeMediaUrl(pubData.publicUrl)) {
+          return {
+            url: pubData.publicUrl,
+            isRemoteStorage: true,
+            message: 'Vidéo vérifiée et publiée sur le stockage en ligne !'
+          };
+        }
+      }
+    } catch {
+      // Fallback sur Data URL locale
+    }
+  }
+
+  if (file.size > 3.5 * 1024 * 1024) {
+    throw new Error(
+      'Vidéo trop volumineuse pour le mode local (> 3,5 Mo). Utilisez un lien HTTPS MP4 ou un lien TikTok, ou activez le stockage en ligne.'
+    );
+  }
+
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Impossible de lire le fichier vidéo.'));
+    reader.onload = (ev) => {
+      const res = ev.target?.result as string;
+      if (!isSafeMediaUrl(res)) {
+        reject(new Error('Format vidéo non autorisé.'));
+        return;
+      }
+      resolve(res);
+    };
+    reader.readAsDataURL(file);
+  });
+
+  return {
+    url: dataUrl,
+    isRemoteStorage: false,
+    message: 'Vidéo validée et importée avec succès.'
   };
 }
 

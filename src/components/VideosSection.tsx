@@ -3,6 +3,7 @@ import { VideoItem } from '../types';
 import { Volume2, VolumeX, RefreshCw } from 'lucide-react';
 import { extractSafeTikTokId, isSafeMediaUrl, isSafeTikTokUrl } from '../utils/security';
 import { useDevicePerformance } from '../utils/devicePerformance';
+import { useMediaStyle } from '../hooks/useMediaStyle';
 
 interface VideosSectionProps {
   id?: string;
@@ -51,6 +52,7 @@ const buildChromelessTikTokUrl = (tikTokId: string): string => {
  */
 const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, index }) => {
   const perf = useDevicePerformance();
+  const mediaStyle = useMediaStyle();
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -356,7 +358,8 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
       <div
         ref={containerRef}
         onClick={handleToggleMute}
-        className="relative w-full aspect-[9/16] rounded-2xl sm:rounded-[28px] overflow-hidden bg-[#090d16] shadow-md sm:shadow-lg border border-slate-200/60 dark:border-slate-800/80 cursor-pointer select-none transition-transform duration-300 md:hover:scale-[1.015]"
+        className="relative w-full aspect-[9/16] overflow-hidden bg-[#090d16] shadow-md sm:shadow-lg border border-slate-200/60 dark:border-slate-800/80 cursor-pointer select-none transition-transform duration-300 md:hover:scale-[1.015]"
+        style={{ borderRadius: `${mediaStyle.videoRadius}px` }}
       >
         {/* Squelette Shimmer fluide avant le démarrage de la lecture */}
         {!isLoaded && !hasError && (
@@ -445,7 +448,8 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
     <div
       ref={containerRef}
       onClick={handleToggleMute}
-      className="relative w-full aspect-[9/16] rounded-2xl sm:rounded-[28px] overflow-hidden bg-[#090d16] shadow-md sm:shadow-lg border border-slate-200/60 dark:border-slate-800/80 cursor-pointer select-none transition-transform duration-300 md:hover:scale-[1.015]"
+      className="relative w-full aspect-[9/16] overflow-hidden bg-[#090d16] shadow-md sm:shadow-lg border border-slate-200/60 dark:border-slate-800/80 cursor-pointer select-none transition-transform duration-300 md:hover:scale-[1.015]"
+      style={{ borderRadius: `${mediaStyle.videoRadius}px` }}
     >
       {/* Squelette Shimmer fluide avant la première image vidéo */}
       {!isLoaded && !hasError && (
@@ -489,9 +493,10 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
           onVolumeChange={() => {
             if (videoRef.current) setIsMuted(videoRef.current.muted);
           }}
-          className={`w-full h-full object-cover rounded-2xl sm:rounded-[28px] block border-0 outline-none transition-opacity duration-300 ${
+          className={`w-full h-full object-cover block border-0 outline-none transition-opacity duration-300 ${
             isLoaded ? 'opacity-100' : 'opacity-0'
           }`}
+          style={{ borderRadius: `${mediaStyle.videoRadius}px` }}
         />
       )}
 

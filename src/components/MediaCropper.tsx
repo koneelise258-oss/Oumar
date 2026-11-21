@@ -48,6 +48,52 @@ const ASPECT_PRESETS: AspectPreset[] = [
 
 type BgFill = 'transparent' | '#ffffff' | '#f1f5f9' | '#0b0f17';
 
+const RADIUS_PRESETS = [
+  { value: 0, label: 'Net (0%)' },
+  { value: 10, label: 'Doux (10%)' },
+  { value: 22, label: 'Apple (22%)' },
+  { value: 50, label: 'Rond (50%)' }
+];
+
+function getPreviewDimensions(ratio: number): { width: number; height: number } {
+  const maxPreviewW = 540;
+  const maxPreviewH = 420;
+  let pw = maxPreviewW;
+  let ph = pw / ratio;
+  if (ph > maxPreviewH) {
+    ph = maxPreviewH;
+    pw = ph * ratio;
+  }
+  return { width: Math.round(pw), height: Math.round(ph) };
+}
+
+function traceRoundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): void {
+  const r = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
+  ctx.beginPath();
+  if (r <= 0) {
+    ctx.rect(x, y, width, height);
+    ctx.closePath();
+    return;
+  }
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
 export const MediaCropper: React.FC<MediaCropperProps> = ({
   initialSrc,
   title,
@@ -65,6 +111,7 @@ export const MediaCropper: React.FC<MediaCropperProps> = ({
   const [flipH, setFlipH] = useState<boolean>(false);
   const [flipV, setFlipV] = useState<boolean>(false);
   const [offset, setOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [cornerRadius, setCornerRadius] = useState<number>(0); // 0 .. 50 (%)
   const [brightness, setBrightness] = useState<number>(100);
   const [contrast, setContrast] = useState<number>(100);
   const [saturation, setSaturation] = useState<number>(100);
@@ -134,12 +181,20 @@ export const MediaCropper: React.FC<MediaCropperProps> = ({
 
       ctx.clearRect(0, 0, targetWidth, targetHeight);
 
+      ctx.save();
+
+      // Appliquer l'arrondi des bords sur l'ensemble du cadre (laisse les coins extérieurs transparents)
+      if (cornerRadius > 0) {
+        const radiusPx = (Math.min(targetWidth, targetHeight) * cornerRadius) / 100;
+        traceRoundedRectPath(ctx, 0, 0, targetWidth, targetHeight, radiusPx);
+        ctx.clip();
+      }
+
       if (bgFill !== 'transparent') {
         ctx.fillStyle = bgFill;
         ctx.fillRect(0, 0, targetWidth, targetHeight);
       }
 
-      ctx.save();
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
@@ -172,7 +227,7 @@ export const MediaCropper: React.FC<MediaCropperProps> = ({
 
       ctx.restore();
     },
-    [imgElement, bgFill, brightness, contrast, saturation, rotation, fineAngle, zoom, offset, flipH, flipV]
+    [imgElement, bgFill, cornerRadius, brightness, contrast, saturation, rotation, fineAngle, zoom, offset, flipH, flipV]
   );
 
   // Redraw preview canvas whenever any transform changes
@@ -180,16 +235,9 @@ export const MediaCropper: React.FC<MediaCropperProps> = ({
     const canvas = previewCanvasRef.current;
     if (!canvas || !imgElement) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const maxPreviewW = 540;
-    const maxPreviewH = 420;
-    let pw = maxPreviewW;
-    let ph = pw / preset.ratio;
-    if (ph > maxPreviewH) {
-      ph = maxPreviewH;
-      pw = ph * preset.ratio;
-    }
-    canvas.style.width = `${Math.round(pw)}px`;
-    canvas.style.height = `${Math.round(ph)}px`;
+    const { width: pw, height: ph } = getPreviewDimensions(preset.ratio);
+    canvas.style.width = `${pw}px`;
+    canvas.style.height = `${ph}px`;
     renderToCanvas(canvas, Math.round(pw * dpr), Math.round(ph * dpr), false);
   }, [imgElement, preset.ratio, renderToCanvas]);
 
@@ -230,6 +278,7 @@ export const MediaCropper: React.FC<MediaCropperProps> = ({
     setFlipH(false);
     setFlipV(false);
     setOffset({ x: 0, y: 0 });
+    setCornerRadius(0);
     setBrightness(100);
     setContrast(100);
     setSaturation(100);
@@ -283,7 +332,7 @@ export const MediaCropper: React.FC<MediaCropperProps> = ({
         if (webp.startsWith('data:image/webp')) {
           dataUrl = webp;
         } else {
-          dataUrl = bgFill === 'transparent'
+          dataUrl = bgFill === 'transparent' || cornerRadius > 0
             ? exportCanvas.toDataURL('image/png')
             : exportCanvas.toDataURL('image/jpeg', 0.9);
         }
@@ -407,25 +456,36 @@ export const MediaCropper: React.FC<MediaCropperProps> = ({
                 </div>
               )}
 
-              <div className="relative shadow-2xl rounded-xl overflow-hidden ring-2 ring-slate-900/80 dark:ring-white/80">
-                <canvas
-                  ref={previewCanvasRef}
-                  onPointerDown={handlePointerDown}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                  onPointerCancel={handlePointerUp}
-                  className={`block max-w-full touch-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-                />
+              {(() => {
+                const dims = getPreviewDimensions(preset.ratio);
+                const previewRadiusPx = cornerRadius > 0
+                  ? Math.round((Math.min(dims.width, dims.height) * cornerRadius) / 100)
+                  : 0;
+                return (
+                  <div
+                    className="relative shadow-2xl overflow-hidden ring-2 ring-slate-900/80 dark:ring-white/80 transition-[border-radius] duration-150"
+                    style={{ borderRadius: `${previewRadiusPx}px` }}
+                  >
+                    <canvas
+                      ref={previewCanvasRef}
+                      onPointerDown={handlePointerDown}
+                      onPointerMove={handlePointerMove}
+                      onPointerUp={handlePointerUp}
+                      onPointerCancel={handlePointerUp}
+                      className={`block max-w-full touch-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                    />
 
-                {/* Rule-of-thirds overlay grid */}
-                {showGrid && (
-                  <div className="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3">
-                    {Array.from({ length: 9 }).map((_, idx) => (
-                      <div key={idx} className="border border-white/35 shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.2)]" />
-                    ))}
+                    {/* Rule-of-thirds overlay grid */}
+                    {showGrid && (
+                      <div className="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3">
+                        {Array.from({ length: 9 }).map((_, idx) => (
+                          <div key={idx} className="border border-white/35 shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.2)]" />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </div>
           )}
 
@@ -630,6 +690,41 @@ export const MediaCropper: React.FC<MediaCropperProps> = ({
                   onChange={(e) => setFineAngle(parseInt(e.target.value, 10))}
                   className="w-full accent-slate-900 dark:accent-white cursor-pointer"
                 />
+              </div>
+
+              {/* Arrondi des bords (Corner Radius) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-bold text-slate-800 dark:text-slate-200">Arrondi des bords</label>
+                  <span className="font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                    {cornerRadius}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  step="1"
+                  value={cornerRadius}
+                  onChange={(e) => setCornerRadius(parseInt(e.target.value, 10))}
+                  className="w-full accent-slate-900 dark:accent-white cursor-pointer mb-2"
+                />
+                <div className="grid grid-cols-4 gap-1.5">
+                  {RADIUS_PRESETS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setCornerRadius(opt.value)}
+                      className={`min-h-[34px] px-2 py-1 rounded-xl text-[11px] font-semibold border cursor-pointer transition-all ${
+                        cornerRadius === opt.value
+                          ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 border-transparent shadow-xs'
+                          : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Background Fill */}

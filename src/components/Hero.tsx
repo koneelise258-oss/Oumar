@@ -9,6 +9,7 @@ import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { LiquidGlassIcon } from './LiquidGlassIcon';
 import { AppleLogo, WhatsAppLogo, IPhoneIcon } from './BrandIcons';
 import { useDevicePerformance } from '../utils/devicePerformance';
+import { useMediaStyle } from '../hooks/useMediaStyle';
 import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
 
 if (typeof window !== 'undefined') {
@@ -25,6 +26,7 @@ const DEFAULT_OUMAR_PHOTO_PATH = heroTitaniumSample;
 
 export const Hero: React.FC<HeroProps> = () => {
   const perf = useDevicePerformance();
+  const mediaStyle = useMediaStyle();
   const heroRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
@@ -476,7 +478,16 @@ export const Hero: React.FC<HeroProps> = () => {
                   src={oumarPhotoSrc}
                   alt={heroContent.photoAltText || 'Oumar — Fondateur OUMAR IPHONE Abidjan'}
                   onError={handleImageError}
-                  className="hero__photo hero-portrait-img select-none transition-transform duration-700 ease-out"
+                  className="hero__photo hero-portrait-img select-none transition-[transform,border-radius] duration-500 ease-out"
+                  style={
+                    mediaStyle.heroRadius > 0
+                      ? {
+                          borderRadius: `${mediaStyle.heroRadius}px`,
+                          WebkitMaskImage: 'none',
+                          maskImage: 'none'
+                        }
+                      : undefined
+                  }
                   loading="eager"
                   decoding="sync"
                   fetchPriority="high"
@@ -487,7 +498,16 @@ export const Hero: React.FC<HeroProps> = () => {
                 <img
                   src={DEFAULT_OUMAR_PHOTO_PATH}
                   alt={heroContent.photoAltText || 'Oumar — Fondateur OUMAR IPHONE Abidjan'}
-                  className="hero__photo hero-portrait-img select-none transition-transform duration-700 ease-out"
+                  className="hero__photo hero-portrait-img select-none transition-[transform,border-radius] duration-500 ease-out"
+                  style={
+                    mediaStyle.heroRadius > 0
+                      ? {
+                          borderRadius: `${mediaStyle.heroRadius}px`,
+                          WebkitMaskImage: 'none',
+                          maskImage: 'none'
+                        }
+                      : undefined
+                  }
                   loading="eager"
                   decoding="sync"
                   fetchPriority="high"
