@@ -1,11 +1,15 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { APPLE_ASSET_IMAGES } from '../data/products';
 import { isSafeMediaUrl, validateImageFile, validateVideoFile } from '../utils/security';
+import { compressVideoFile } from './videoCompressionService';
 
 export interface ImageUploadResult {
   url: string;
   isRemoteStorage: boolean;
   message?: string;
+  originalSize?: number;
+  finalSize?: number;
+  wasCompressed?: boolean;
 }
 
 /**
@@ -209,16 +213,191 @@ export async function uploadSanitizedImageDataUrl(
 }
 
 /**
- * Valide et importe une vidéo MP4/MOV/M4V/WebM vers Supabase Storage si disponible,
- * sinon convertit en Data URL typée si la taille permet le stockage local.
+ * Encode une chaîne UTF-8 en Base64 standard pour les métadonnées TUS.
  */
-export async function uploadStoreVideoFile(file: File): Promise<ImageUploadResult> {
+function encodeTusMetadataValue(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+/**
+ * Téléversement fragmenté TUS (par tranches de 6 Mo) compatible Supabase Storage
+ * pour les vidéos haute définition très lourdes sans timeout ni saturation mémoire.
+ */
+async function uploadVideoViaTus(
+  bucketName: string,
+  fileName: string,
+  file: File,
+  resolvedMime: string,
+  accessToken: string,
+  onProgress?: (percent: number) => void
+): Promise<string> {
+  const { supabaseUrl, supabaseAnonKey } = await import('../lib/supabase');
+  const tusEndpoint = `${supabaseUrl.replace(/\/+$/, '')}/storage/v1/upload/resumable`;
+  const metadata = [
+    `bucketName ${encodeTusMetadataValue(bucketName)}`,
+    `objectName ${encodeTusMetadataValue(fileName)}`,
+    `contentType ${encodeTusMetadataValue(resolvedMime)}`,
+    `cacheControl ${encodeTusMetadataValue('31536000')}`
+  ].join(',');
+
+  const createRes = await fetch(tusEndpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      apikey: supabaseAnonKey,
+      'x-upsert': 'false',
+      'Tus-Resumable': '1.0.0',
+      'Upload-Length': String(file.size),
+      'Upload-Metadata': metadata
+    }
+  });
+
+  if (!createRes.ok) {
+    let reason = `HTTP ${createRes.status}`;
+    try {
+      const txt = await createRes.text();
+      if (txt) {
+        try {
+          const parsed = JSON.parse(txt);
+          reason = parsed?.message || parsed?.error || txt;
+        } catch {
+          reason = txt;
+        }
+      }
+    } catch {
+      // Ignore body read error
+    }
+    throw new Error(reason);
+  }
+
+  const rawLocation = createRes.headers.get('Location') || createRes.headers.get('location');
+  if (!rawLocation) {
+    throw new Error('En-tête Location TUS manquant dans la réponse Supabase Storage.');
+  }
+
+  const uploadUrl = rawLocation.startsWith('http')
+    ? rawLocation
+    : `${supabaseUrl.replace(/\/+$/, '')}${rawLocation.startsWith('/') ? '' : '/'}${rawLocation}`;
+
+  const CHUNK_SIZE = 6 * 1024 * 1024; // 6 Mo par tranche (recommandation Supabase TUS)
+  let offset = 0;
+
+  while (offset < file.size) {
+    const end = Math.min(offset + CHUNK_SIZE, file.size);
+    const chunk = file.slice(offset, end);
+
+    let chunkSuccess = false;
+    let lastChunkError = 'Erreur réseau lors du transfert par tranches.';
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const patchRes = await fetch(uploadUrl, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            apikey: supabaseAnonKey,
+            'Tus-Resumable': '1.0.0',
+            'Upload-Offset': String(offset),
+            'Content-Type': 'application/offset+octet-stream'
+          },
+          body: chunk
+        });
+
+        if (patchRes.ok) {
+          const nextOffsetHeader =
+            patchRes.headers.get('Upload-Offset') || patchRes.headers.get('upload-offset');
+          const parsedOffset = nextOffsetHeader ? Number(nextOffsetHeader) : end;
+          offset = Number.isFinite(parsedOffset) && parsedOffset > offset ? parsedOffset : end;
+          chunkSuccess = true;
+          break;
+        }
+
+        const errTxt = await patchRes.text().catch(() => '');
+        lastChunkError = errTxt || `HTTP ${patchRes.status}`;
+        if (patchRes.status === 413 || patchRes.status === 401 || patchRes.status === 403 || patchRes.status === 415) {
+          break; // Erreur non transitoire : inutile de retenter
+        }
+      } catch (err: any) {
+        lastChunkError = err?.message || lastChunkError;
+      }
+
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+    }
+
+    if (!chunkSuccess) {
+      throw new Error(lastChunkError);
+    }
+
+    if (onProgress) {
+      const pct = Math.min(99, Math.max(1, Math.round((offset / file.size) * 100)));
+      onProgress(pct);
+    }
+  }
+
+  const { data: pubData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+  if (!pubData?.publicUrl || !isSafeMediaUrl(pubData.publicUrl)) {
+    throw new Error('URL publique vidéo invalide après téléversement.');
+  }
+
+  onProgress?.(100);
+  return pubData.publicUrl;
+}
+
+export interface VideoUploadOptions {
+  autoCompress?: boolean;
+  onStatus?: (stage: 'compressing' | 'uploading', percent: number) => void;
+}
+
+/**
+ * Valide, compresse légèrement et automatiquement si activé, puis importe une vidéo
+ * vers Supabase Storage (envoi fragmenté TUS si > 6 Mo, standard sinon).
+ */
+export async function uploadStoreVideoFile(
+  file: File,
+  progressOrOptions?: ((percent: number) => void) | VideoUploadOptions
+): Promise<ImageUploadResult> {
+  const options: VideoUploadOptions =
+    typeof progressOrOptions === 'function'
+      ? { autoCompress: true, onStatus: (_stage, pct) => progressOrOptions(pct) }
+      : progressOrOptions || {};
+
+  const autoCompress = options.autoCompress !== false;
+  const onStatus = options.onStatus;
+
   const check = await validateVideoFile(file);
   if (!check.valid) {
     throw new Error(check.error || 'Fichier vidéo refusé par sécurité.');
   }
 
-  const resolvedMime = check.resolvedMime || 'video/mp4';
+  let workingFile = file;
+  let resolvedMime = check.resolvedMime || 'video/mp4';
+  let wasCompressed = false;
+  const originalSize = file.size;
+
+  if (autoCompress) {
+    onStatus?.('compressing', 1);
+    const compressedRes = await compressVideoFile(file, (pct) => {
+      onStatus?.('compressing', pct);
+    });
+    workingFile = compressedRes.file;
+    resolvedMime = compressedRes.resolvedMime || resolvedMime;
+    wasCompressed = compressedRes.wasCompressed;
+  }
+
+  const finalSize = workingFile.size;
+  const savedPct =
+    wasCompressed && originalSize > 0
+      ? Math.max(1, Math.round((1 - finalSize / originalSize) * 100))
+      : 0;
+  const compressionSummary = wasCompressed
+    ? ` (${(originalSize / (1024 * 1024)).toFixed(1)} Mo → ${(finalSize / (1024 * 1024)).toFixed(1)} Mo, -${savedPct}%)`
+    : '';
+
   const ext =
     resolvedMime === 'video/webm'
       ? 'webm'
@@ -226,6 +405,10 @@ export async function uploadStoreVideoFile(file: File): Promise<ImageUploadResul
       ? 'mov'
       : resolvedMime === 'video/x-m4v'
       ? 'm4v'
+      : resolvedMime === 'video/x-matroska'
+      ? 'mkv'
+      : resolvedMime === 'video/3gpp'
+      ? '3gp'
       : 'mp4';
 
   let remoteFailureReason = '';
@@ -238,10 +421,46 @@ export async function uploadStoreVideoFile(file: File): Promise<ImageUploadResul
             .join('')
         : Math.random().toString(36).substring(2, 10);
     const fileName = `videos/${Date.now()}-${randomToken}.${ext}`;
-    const typedBlob = new Blob([file], { type: resolvedMime });
+    const TUS_THRESHOLD_BYTES = 6 * 1024 * 1024;
 
-    for (const bucketName of ['store-products', 'store-videos']) {
+    const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+    const accessToken = sessionData?.session?.access_token;
+
+    for (const bucketName of ['store-videos', 'store-products']) {
+      // 1) Pour les vidéos > 6 Mo avec session admin active : protocole TUS par tranches de 6 Mo
+      if (workingFile.size > TUS_THRESHOLD_BYTES && accessToken) {
+        try {
+          onStatus?.('uploading', 2);
+          const publicUrl = await uploadVideoViaTus(
+            bucketName,
+            fileName,
+            workingFile,
+            resolvedMime,
+            accessToken,
+            (pct) => onStatus?.('uploading', pct)
+          );
+          return {
+            url: publicUrl,
+            isRemoteStorage: true,
+            originalSize,
+            finalSize,
+            wasCompressed,
+            message: wasCompressed
+              ? `Vidéo compressée${compressionSummary} et publiée sur Supabase Storage.`
+              : `Vidéo de ${(finalSize / (1024 * 1024)).toFixed(1)} Mo importée et publiée sur Supabase Storage.`
+          };
+        } catch (tusErr: any) {
+          remoteFailureReason = tusErr?.message || 'Erreur lors du transfert fragmenté Supabase Storage';
+          if (workingFile.size > 45 * 1024 * 1024) {
+            continue;
+          }
+        }
+      }
+
+      // 2) Envoi direct standard (<= 6 Mo, ou repli <= 45 Mo si TUS indisponible)
       try {
+        onStatus?.('uploading', 15);
+        const typedBlob = new Blob([workingFile], { type: resolvedMime });
         const { data, error } = await supabase.storage
           .from(bucketName)
           .upload(fileName, typedBlob, {
@@ -256,10 +475,16 @@ export async function uploadStoreVideoFile(file: File): Promise<ImageUploadResul
             .getPublicUrl(data.path);
 
           if (pubData?.publicUrl && isSafeMediaUrl(pubData.publicUrl)) {
+            onStatus?.('uploading', 100);
             return {
               url: pubData.publicUrl,
               isRemoteStorage: true,
-              message: 'Vidéo vérifiée et publiée sur le stockage en ligne.'
+              originalSize,
+              finalSize,
+              wasCompressed,
+              message: wasCompressed
+                ? `Vidéo compressée${compressionSummary} et publiée sur le stockage en ligne.`
+                : 'Vidéo vérifiée et publiée sur le stockage en ligne.'
             };
           }
         } else if (error?.message) {
@@ -271,17 +496,18 @@ export async function uploadStoreVideoFile(file: File): Promise<ImageUploadResul
     }
   }
 
-  if (file.size > 2.0 * 1024 * 1024) {
+  if (workingFile.size > 2.0 * 1024 * 1024) {
+    const sizeLabel = `${(workingFile.size / (1024 * 1024)).toFixed(1)} Mo`;
     const storageHint = remoteFailureReason
-      ? ` (Stockage cloud : ${remoteFailureReason} — mettez à jour le script SQL Storage pour autoriser les vidéos jusqu'à 50 Mo)`
-      : '';
+      ? ` Détail serveur : ${remoteFailureReason}. Exécutez le script SQL de déblocage Storage (Paramètres → Script SQL) et vérifiez la limite globale dans Supabase → Storage → Settings.`
+      : ' Vérifiez votre connexion administrateur Supabase Storage pour téléverser les vidéos lourdes en ligne.';
     throw new Error(
-      `Vidéo de ${(file.size / (1024 * 1024)).toFixed(1)} Mo trop lourde pour le mode hors-ligne (max 2,0 Mo sans stockage cloud)${storageHint}.`
+      `Impossible d’enregistrer cette vidéo de ${sizeLabel}${compressionSummary} sans le stockage cloud Supabase.${storageHint}`
     );
   }
 
   // Toujours créer un Blob typé explicitement pour éviter "data:application/octet-stream" sur mobile
-  const safeVideoBlob = new Blob([file], { type: resolvedMime });
+  const safeVideoBlob = new Blob([workingFile], { type: resolvedMime });
 
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -297,11 +523,17 @@ export async function uploadStoreVideoFile(file: File): Promise<ImageUploadResul
     reader.readAsDataURL(safeVideoBlob);
   });
 
+  onStatus?.('uploading', 100);
   return {
     url: dataUrl,
     isRemoteStorage: false,
+    originalSize,
+    finalSize,
+    wasCompressed,
     message: remoteFailureReason
-      ? 'Vidéo importée localement (le stockage cloud a refusé ce format, pensez à exécuter la mise à jour SQL).'
+      ? `Vidéo compressée${compressionSummary} importée localement (le stockage cloud a refusé le transfert, pensez à exécuter le script SQL Storage).`
+      : wasCompressed
+      ? `Vidéo compressée${compressionSummary} et importée avec succès.`
       : 'Vidéo validée et importée avec succès.'
   };
 }

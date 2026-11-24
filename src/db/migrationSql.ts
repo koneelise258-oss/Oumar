@@ -583,13 +583,65 @@ DO $$ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
--- 12. SÉCURISATION SUPABASE STORAGE (store-products : images + vidéos MP4/MOV/WebM, 50 Mo max, blocage SVG, écriture admins uniquement)
+-- 12. SÉCURISATION SUPABASE STORAGE (store-videos & store-products : vidéos lourdes sans limite bucket + images, écriture admins uniquement)
 DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'store-products') THEN
-    UPDATE storage.buckets
-    SET file_size_limit = 52428800, allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v']
-    WHERE id = 'store-products';
-  END IF;
+  INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  VALUES (
+    'store-videos',
+    'store-videos',
+    true,
+    NULL,
+    ARRAY[
+      'video/mp4',
+      'video/webm',
+      'video/quicktime',
+      'video/x-m4v',
+      'video/x-matroska',
+      'video/3gpp',
+      'video/mpeg',
+      'application/mp4'
+    ]
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    public = true,
+    file_size_limit = NULL,
+    allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+  INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  VALUES (
+    'store-products',
+    'store-products',
+    true,
+    NULL,
+    ARRAY[
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+      'video/mp4',
+      'video/webm',
+      'video/quicktime',
+      'video/x-m4v',
+      'video/x-matroska',
+      'video/3gpp',
+      'video/mpeg',
+      'application/mp4'
+    ]
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    public = true,
+    file_size_limit = NULL,
+    allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+  DROP POLICY IF EXISTS "Public read store-videos" ON storage.objects;
+  CREATE POLICY "Public read store-videos" ON storage.objects FOR SELECT USING (bucket_id = 'store-videos');
+  DROP POLICY IF EXISTS "Admins upload store-videos" ON storage.objects;
+  CREATE POLICY "Admins upload store-videos" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'store-videos' AND private.is_store_admin());
+  DROP POLICY IF EXISTS "Admins update store-videos" ON storage.objects;
+  CREATE POLICY "Admins update store-videos" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'store-videos' AND private.is_store_admin()) WITH CHECK (bucket_id = 'store-videos' AND private.is_store_admin());
+  DROP POLICY IF EXISTS "Admins delete store-videos" ON storage.objects;
+  CREATE POLICY "Admins delete store-videos" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'store-videos' AND private.is_store_admin());
+
   DROP POLICY IF EXISTS "Public read store-products" ON storage.objects;
   CREATE POLICY "Public read store-products" ON storage.objects FOR SELECT USING (bucket_id = 'store-products');
   DROP POLICY IF EXISTS "Admins upload store-products" ON storage.objects;

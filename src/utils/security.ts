@@ -526,9 +526,9 @@ export function isSafeMediaUrl(rawUrl?: string | null): boolean {
   const trimmed = rawUrl.trim();
   if (!trimmed) return false;
 
-  // Autoriser les data URLs strictement raster (images sans SVG, ou vidéos MP4/MOV/M4V/WebM)
+  // Autoriser les data URLs strictement raster (images sans SVG, ou vidéos MP4/MOV/M4V/WebM/MKV/3GP)
   if (trimmed.startsWith('data:')) {
-    return /^data:(image\/(jpeg|jpg|png|webp|gif|avif)|video\/(mp4|webm|quicktime|x-m4v));base64,[A-Za-z0-9+/=\s]+$/i.test(
+    return /^data:(image\/(jpeg|jpg|png|webp|gif|avif)|video\/(mp4|webm|quicktime|x-m4v|x-matroska|3gpp));base64,[A-Za-z0-9+/=\s]+$/i.test(
       trimmed
     );
   }
@@ -611,21 +611,27 @@ const ALLOWED_VIDEO_MIMES = new Set([
   'video/webm',
   'video/quicktime',
   'video/x-m4v',
+  'video/x-matroska',
+  'video/3gpp',
   'application/mp4'
 ]);
-const ALLOWED_VIDEO_EXTENSIONS = /\.(mp4|mov|m4v|webm)$/i;
+const ALLOWED_VIDEO_EXTENSIONS = /\.(mp4|mov|m4v|webm|mkv|3gp)$/i;
 
 export function resolveVideoMimeType(file: File): string {
   const mime = (file.type || '').toLowerCase();
   if (mime === 'video/webm') return 'video/webm';
   if (mime === 'video/quicktime') return 'video/quicktime';
   if (mime === 'video/x-m4v') return 'video/x-m4v';
+  if (mime === 'video/x-matroska') return 'video/x-matroska';
+  if (mime === 'video/3gpp') return 'video/3gpp';
   if (mime === 'video/mp4' || mime === 'application/mp4') return 'video/mp4';
 
   const name = (file.name || '').toLowerCase();
   if (name.endsWith('.webm')) return 'video/webm';
   if (name.endsWith('.mov')) return 'video/quicktime';
   if (name.endsWith('.m4v')) return 'video/x-m4v';
+  if (name.endsWith('.mkv')) return 'video/x-matroska';
+  if (name.endsWith('.3gp')) return 'video/3gpp';
   return 'video/mp4';
 }
 
@@ -695,7 +701,8 @@ export async function validateImageFile(file: File): Promise<{ valid: boolean; e
 }
 
 /**
- * Valide une vidéo avant upload : taille <= 50 Mo, MP4/MOV/M4V/WebM, vérification des magic bytes.
+ * Valide une vidéo avant upload : MP4/MOV/M4V/WebM/MKV/3GP (sans limite artificielle de mégaoctets),
+ * avec vérification des magic bytes.
  * Détecte explicitement les fichiers audio MP3 (sans piste vidéo) pour guider l'administrateur.
  */
 export async function validateVideoFile(
@@ -707,10 +714,6 @@ export async function validateVideoFile(
     return { valid: false, error: 'Le fichier sélectionné est vide.' };
   }
 
-  if (file.size > 50 * 1024 * 1024) {
-    return { valid: false, error: 'La vidéo dépasse la limite de 50 Mo.' };
-  }
-
   const lowerName = (file.name || '').toLowerCase();
   const mime = (file.type || '').toLowerCase();
 
@@ -718,12 +721,19 @@ export async function validateVideoFile(
     const bytes = await readFileHeaderBytes(file, 16);
 
     // Détecter d'abord si c'est une vraie signature vidéo (même si extension inhabituelle ou MIME vide sur mobile)
-    // MP4 / MOV / M4V : box 'ftyp', 'moov', 'mdat' ou 'wide' aux octets 4..7
+    // MP4 / MOV / M4V / 3GP : box ISO BMFF aux octets 4..7
     const boxTag = String.fromCharCode(bytes[4] || 0, bytes[5] || 0, bytes[6] || 0, bytes[7] || 0);
     const isMp4Family =
-      boxTag === 'ftyp' || boxTag === 'moov' || boxTag === 'mdat' || boxTag === 'wide' || boxTag === 'free';
+      boxTag === 'ftyp' ||
+      boxTag === 'moov' ||
+      boxTag === 'mdat' ||
+      boxTag === 'wide' ||
+      boxTag === 'free' ||
+      boxTag === 'skip' ||
+      boxTag === 'pnot' ||
+      boxTag === 'uuid';
     // WebM / MKV : EBML header 0x1A 0x45 0xDF 0xA3
-    const isWebm =
+    const isWebmOrMkv =
       bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3;
 
     // Détection explicite d'un fichier audio MP3 sans image vidéo (ID3 ou trame MPEG audio)
@@ -731,7 +741,7 @@ export async function validateVideoFile(
     const isMpegFrame =
       bytes[0] === 0xff && (bytes[1] === 0xfb || bytes[1] === 0xf3 || bytes[1] === 0xf2 || bytes[1] === 0xe3);
 
-    if (!isMp4Family && !isWebm && (isId3Audio || isMpegFrame || mime === 'audio/mpeg' || lowerName.endsWith('.mp3'))) {
+    if (!isMp4Family && !isWebmOrMkv && (isId3Audio || isMpegFrame || mime === 'audio/mpeg' || lowerName.endsWith('.mp3'))) {
       return {
         valid: false,
         error:
@@ -748,19 +758,22 @@ export async function validateVideoFile(
     if (!mimeAllowed) {
       return {
         valid: false,
-        error: 'Format non autorisé. Formats vidéo acceptés : MP4, MOV (iPhone), M4V ou WebM.'
+        error: 'Format non autorisé. Formats vidéo acceptés : MP4, MOV (iPhone), M4V, WebM ou MKV.'
       };
     }
 
-    if (!isMp4Family && !isWebm) {
+    if (!isMp4Family && !isWebmOrMkv) {
       return {
         valid: false,
         error:
-          'Signature binaire invalide : sélectionnez une vraie vidéo MP4, MOV (iPhone), M4V ou WebM.'
+          'Signature binaire invalide : sélectionnez une vraie vidéo MP4, MOV (iPhone), M4V, WebM ou MKV.'
       };
     }
 
-    const resolvedMime = isWebm ? 'video/webm' : resolveVideoMimeType(file);
+    const resolvedMime =
+      isWebmOrMkv && !lowerName.endsWith('.mkv') && mime !== 'video/x-matroska'
+        ? 'video/webm'
+        : resolveVideoMimeType(file);
     return { valid: true, resolvedMime };
   } catch {
     return { valid: false, error: 'Impossible de vérifier l’intégrité du fichier vidéo.' };

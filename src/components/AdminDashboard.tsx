@@ -797,6 +797,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isAddingVideo, setIsAddingVideo] = useState(false);
   const [editingVideoId, setEditingVideoId] = useState<string | null>(null);
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [videoProcessStage, setVideoProcessStage] = useState<'compressing' | 'uploading' | null>(null);
+  const [videoUploadProgress, setVideoUploadProgress] = useState<number | null>(null);
+  const [autoCompressVideo, setAutoCompressVideo] = useState(true);
+  const [videoCompressionBadge, setVideoCompressionBadge] = useState<string | null>(null);
   const [savingVideo, setSavingVideo] = useState(false);
   const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
   const [videoDeleteConfirmId, setVideoDeleteConfirmId] = useState<string | null>(null);
@@ -809,6 +813,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setVideoDescriptionInput('');
     setVideoTypeInput('html5');
     setVideoUploadError(null);
+    setVideoCompressionBadge(null);
     setIsAddingVideo(true);
   };
 
@@ -820,6 +825,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setVideoDescriptionInput(vid.description || '');
     setVideoTypeInput(vid.type === 'tiktok' || vid.url.includes('tiktok.com') ? 'tiktok' : 'html5');
     setVideoUploadError(null);
+    setVideoCompressionBadge(null);
   };
 
   const closeVideoForm = () => {
@@ -955,11 +961,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!file) return;
 
     setIsUploadingVideo(true);
+    setVideoProcessStage(autoCompressVideo ? 'compressing' : 'uploading');
+    setVideoUploadProgress(0);
     setVideoUploadError(null);
+    setVideoCompressionBadge(null);
     try {
-      const uploadRes = await uploadStoreVideoFile(file);
+      const uploadRes = await uploadStoreVideoFile(file, {
+        autoCompress: autoCompressVideo,
+        onStatus: (stage, percent) => {
+          setVideoProcessStage(stage);
+          setVideoUploadProgress(percent);
+        }
+      });
       setVideoUrlInput(uploadRes.url);
       setVideoTypeInput('html5');
+      if (uploadRes.wasCompressed && uploadRes.originalSize && uploadRes.finalSize) {
+        const origMb = (uploadRes.originalSize / (1024 * 1024)).toFixed(1);
+        const finalMb = (uploadRes.finalSize / (1024 * 1024)).toFixed(1);
+        const pct = Math.max(1, Math.round((1 - uploadRes.finalSize / uploadRes.originalSize) * 100));
+        setVideoCompressionBadge(`Compressée automatiquement : ${origMb} Mo → ${finalMb} Mo (-${pct}%)`);
+      }
       if (!videoTitleInput.trim()) {
         setVideoTitleInput(sanitizeText(file.name.replace(/\.[^/.]+$/, ''), 120));
       }
@@ -970,6 +991,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       triggerNotification(errMsg);
     } finally {
       setIsUploadingVideo(false);
+      setVideoProcessStage(null);
+      setVideoUploadProgress(null);
       if (e.target) e.target.value = '';
     }
   };
@@ -2901,20 +2924,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-950 hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer"
                           >
                             <Upload className="w-3.5 h-3.5" />
-                            <span>{isUploadingVideo ? 'Import en cours...' : 'Importer Vidéo (MP4 / MOV)'}</span>
+                            <span>
+                              {isUploadingVideo
+                                ? `${videoProcessStage === 'compressing' ? 'Compression' : 'Envoi'}${videoUploadProgress !== null ? ` (${videoUploadProgress}%)` : '...'}`
+                                : 'Importer Vidéo (MP4 / MOV)'}
+                            </span>
                           </button>
                         </div>
                         <input
                           ref={videoFileInputRef}
                           type="file"
-                          accept="video/mp4,video/quicktime,video/x-m4v,video/webm,.mp4,.mov,.m4v,.webm"
+                          accept="video/mp4,video/quicktime,video/x-m4v,video/webm,video/x-matroska,video/3gpp,.mp4,.mov,.m4v,.webm,.mkv,.3gp"
                           onChange={handleVideoFileUpload}
                           className="hidden"
                         />
                       </div>
 
+                      <label className="inline-flex items-center gap-2 text-[11px] font-medium text-slate-700 dark:text-slate-300 cursor-pointer select-none pt-0.5">
+                        <input
+                          type="checkbox"
+                          checked={autoCompressVideo}
+                          disabled={isUploadingVideo}
+                          onChange={(e) => setAutoCompressVideo(e.target.checked)}
+                          className="rounded border-slate-300 dark:border-slate-600 text-slate-900 focus:ring-slate-900"
+                        />
+                        <span>
+                          Compression légère automatique à l’importation (réduit le poids en Mo tout en gardant la qualité HD & le son)
+                        </span>
+                      </label>
+
+                      {isUploadingVideo && (
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                            <span>
+                              {videoProcessStage === 'compressing'
+                                ? 'Compression automatique de la vidéo en cours...'
+                                : 'Envoi sécurisé par tranches vers Supabase Storage...'}
+                            </span>
+                            <span>{videoUploadProgress ?? 0}%</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                            <div
+                              className="h-full bg-slate-900 dark:bg-white transition-all duration-200 rounded-full"
+                              style={{ width: `${Math.max(4, videoUploadProgress ?? 0)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {videoCompressionBadge && !isUploadingVideo && (
+                        <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-700 dark:text-emerald-300 font-semibold">
+                          {videoCompressionBadge}
+                        </div>
+                      )}
+
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Formats vidéo supportés : MP4, MOV (iPhone), M4V, WebM (jusqu’à 50 Mo en mode cloud ou 3,5 Mo en mode local). Note : un fichier audio <strong>.mp3</strong> seul ne contient pas d’image vidéo.
+                        Formats vidéo supportés : MP4, MOV (iPhone), M4V, WebM, MKV — les vidéos importées sont automatiquement allégées si nécessaire puis envoyées par tranches vers Supabase Storage. Note : un fichier audio <strong>.mp3</strong> seul ne contient pas d’image vidéo.
                       </p>
 
                       {videoUploadError && (
