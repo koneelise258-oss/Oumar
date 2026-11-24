@@ -25,15 +25,40 @@ export default defineConfig(() => {
       minify: 'esbuild',
       rollupOptions: {
         output: {
-          // Isole les composants d'administration et l'éditeur média dans un chunk dédié chargé uniquement à la demande
+          // Isole les composants d'administration et découpe les librairies tierces en chunks dédiés
           manualChunks: (id) => {
             if (
               id.includes('AdminDashboard') ||
               id.includes('AdminAuthModal') ||
+              id.includes('AdminAnalyticsPanel') ||
               id.includes('MediaCropper') ||
               id.includes('migrationSql')
             ) {
               return 'internal-ops';
+            }
+            if (id.includes('node_modules/@supabase/')) {
+              return 'vendor-supabase';
+            }
+            if (
+              id.includes('node_modules/motion/') ||
+              id.includes('node_modules/framer-motion/') ||
+              id.includes('node_modules/gsap/')
+            ) {
+              return 'vendor-motion';
+            }
+            if (
+              id.includes('node_modules/react-dom/') ||
+              id.includes('node_modules/react/') ||
+              id.includes('node_modules/scheduler/')
+            ) {
+              return 'vendor-react';
+            }
+            if (
+              id.includes('node_modules/lucide-react/') ||
+              id.includes('node_modules/react-icons/') ||
+              id.includes('node_modules/simple-icons/')
+            ) {
+              return 'vendor-icons';
             }
             return undefined;
           }
