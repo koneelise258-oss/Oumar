@@ -2,24 +2,28 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-// Synchronise dynamiquement le favicon officiel Apple (noir en mode clair, blanc en mode sombre)
-// sur SVG, PNG et apple-touch-icon (indispensable pour iOS Safari lors des changements clair/sombre).
+// Synchronise dynamiquement le favicon officiel Apple :
+// - Navigateur en mode sombre -> logo Apple BLANC
+// - Navigateur en mode clair  -> logo Apple NOIR
 if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
   const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
   const applyFaviconForScheme = (isDark: boolean) => {
     const svgIcon = document.getElementById('omr-dynamic-favicon') as HTMLLinkElement | null;
     if (svgIcon) {
-      svgIcon.href = isDark ? '/favicon-dark.svg?v=5' : '/favicon-light.svg?v=5';
+      svgIcon.href = isDark ? '/favicon-dark.svg?v=6' : '/favicon-light.svg?v=6';
     }
-    const pngIcon = document.getElementById('omr-dynamic-png') as HTMLLinkElement | null;
-    if (pngIcon) {
-      pngIcon.media = 'all';
-      pngIcon.href = isDark ? '/favicon-dark-192x192.png?v=5' : '/favicon-192x192.png?v=5';
-    }
-    const appleIcon = document.getElementById('omr-apple-touch-icon') as HTMLLinkElement | null;
-    if (appleIcon) {
-      appleIcon.media = 'all';
-      appleIcon.href = isDark ? '/apple-touch-icon-dark.png?v=5' : '/apple-touch-icon.png?v=5';
+    const pngUpdates: Array<[string, string, string]> = [
+      ['omr-dynamic-png-192', '/favicon-dark-192x192.png?v=6', '/favicon-192x192.png?v=6'],
+      ['omr-dynamic-png-96', '/favicon-dark-96x96.png?v=6', '/favicon-96x96.png?v=6'],
+      ['omr-dynamic-png-48', '/favicon-dark-48x48.png?v=6', '/favicon-48x48.png?v=6'],
+      ['omr-apple-touch-icon', '/apple-touch-icon-dark.png?v=6', '/apple-touch-icon.png?v=6']
+    ];
+    for (const [id, darkHref, lightHref] of pngUpdates) {
+      const el = document.getElementById(id) as HTMLLinkElement | null;
+      if (el) {
+        el.media = 'all';
+        el.href = isDark ? darkHref : lightHref;
+      }
     }
   };
   applyFaviconForScheme(darkQuery.matches);
