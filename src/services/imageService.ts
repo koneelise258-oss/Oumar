@@ -423,7 +423,11 @@ export async function uploadStoreVideoFile(
     const fileName = `videos/${Date.now()}-${randomToken}.${ext}`;
     const TUS_THRESHOLD_BYTES = 6 * 1024 * 1024;
 
-    const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+    let { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+    if (!sessionData?.session?.access_token) {
+      const refreshed = await supabase.auth.refreshSession().catch(() => ({ data: { session: null } }));
+      sessionData = refreshed.data as any;
+    }
     const accessToken = sessionData?.session?.access_token;
 
     for (const bucketName of ['store-videos', 'store-products']) {
@@ -494,15 +498,21 @@ export async function uploadStoreVideoFile(
         remoteFailureReason = err?.message || 'Erreur réseau Supabase Storage';
       }
     }
+
+    // Ne jamais injecter une grosse Data URL base64 dans la table Postgres store_videos
+    // (sinon Postgres déclenche "canceling statement due to statement timeout").
+    const sizeLabel = `${(workingFile.size / (1024 * 1024)).toFixed(1)} Mo`;
+    throw new Error(
+      `Échec de l’envoi vers Supabase Storage (${sizeLabel}${compressionSummary})${
+        remoteFailureReason ? ` : ${remoteFailureReason}` : ''
+      }. Vérifiez votre session administrateur et exécutez le script SQL Storage dans Supabase.`
+    );
   }
 
   if (workingFile.size > 2.0 * 1024 * 1024) {
     const sizeLabel = `${(workingFile.size / (1024 * 1024)).toFixed(1)} Mo`;
-    const storageHint = remoteFailureReason
-      ? ` Détail serveur : ${remoteFailureReason}. Exécutez le script SQL de déblocage Storage (Paramètres → Script SQL) et vérifiez la limite globale dans Supabase → Storage → Settings.`
-      : ' Vérifiez votre connexion administrateur Supabase Storage pour téléverser les vidéos lourdes en ligne.';
     throw new Error(
-      `Impossible d’enregistrer cette vidéo de ${sizeLabel}${compressionSummary} sans le stockage cloud Supabase.${storageHint}`
+      `Vidéo de ${sizeLabel}${compressionSummary} trop lourde pour le mode hors-ligne (max 2,0 Mo sans Supabase Storage).`
     );
   }
 

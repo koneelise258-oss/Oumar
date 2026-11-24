@@ -55,7 +55,9 @@ import { saveVideos, resetVideos } from '../data/videos';
 import {
   upsertProductRemote,
   deleteProductRemote,
-  syncVideosRemote,
+  saveSingleVideoRemote,
+  toggleVideoPublishRemote,
+  reorderVideosRemote,
   deleteVideoRemote,
   saveStoreSettingsRemote,
   syncHeroPhotoRemote,
@@ -861,33 +863,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setVideoUploadError(null);
     try {
       const isEditing = Boolean(editingVideoId);
-      const updated = isEditing
-        ? videos.map((v) =>
-            v.id === editingVideoId
-              ? {
-                  ...v,
-                  url: rawUrl,
-                  type: detectedType,
-                  title: cleanTitle,
-                  description: cleanDescription || undefined
-                }
-              : v
-          )
-        : [
-            {
-              id: `vid-${Date.now()}`,
-              url: rawUrl,
-              type: detectedType,
-              title: cleanTitle,
-              description: cleanDescription || undefined,
-              published: true,
-              order: 1,
-              createdAt: Date.now()
-            },
-            ...videos
-          ].map((v, i) => ({ ...v, order: i + 1 }));
+      const targetVideo: VideoItem = isEditing
+        ? {
+            ...(videos.find((v) => v.id === editingVideoId) as VideoItem),
+            url: rawUrl,
+            type: detectedType,
+            title: cleanTitle,
+            description: cleanDescription || undefined
+          }
+        : {
+            id: `vid-${Date.now()}`,
+            url: rawUrl,
+            type: detectedType,
+            title: cleanTitle,
+            description: cleanDescription || undefined,
+            published: true,
+            order: 1,
+            createdAt: Date.now()
+          };
 
-      const res = await syncVideosRemote(updated);
+      const updated = isEditing
+        ? videos.map((v) => (v.id === editingVideoId ? targetVideo : v))
+        : [targetVideo, ...videos].map((v, i) => ({ ...v, order: i + 1 }));
+
+      const res = await saveSingleVideoRemote(targetVideo, updated);
       if (res.success) {
         onVideosUpdated(updated);
         closeVideoForm();
@@ -902,10 +901,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleToggleVideoPublish = async (id: string) => {
+    const target = videos.find((v) => v.id === id);
+    if (!target) return;
+    const nextPublished = !target.published;
     const updated = videos.map((v) =>
-      v.id === id ? { ...v, published: !v.published } : v
+      v.id === id ? { ...v, published: nextPublished } : v
     );
-    const res = await syncVideosRemote(updated);
+    const res = await toggleVideoPublishRemote(id, nextPublished, updated);
     if (res.success) {
       onVideosUpdated(updated);
     } else {
@@ -920,7 +922,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const [moved] = clone.splice(index, 1);
     clone.splice(targetIndex, 0, moved);
     const reordered = clone.map((v, i) => ({ ...v, order: i + 1 }));
-    const res = await syncVideosRemote(reordered);
+    const res = await reorderVideosRemote(reordered);
     if (res.success) {
       onVideosUpdated(reordered);
     } else {

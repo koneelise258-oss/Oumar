@@ -386,15 +386,42 @@ export async function fetchVideosRemote(): Promise<VideoItem[]> {
       .select('*')
       .order('display_order', { ascending: true });
 
-    if (error) {
+    let rowsData: any[] | null = data;
+
+    // Si une ancienne vidéo en base64 alourdit le SELECT *, charger les métadonnées puis chaque URL une par une
+    if (error && error.message?.toLowerCase().includes('timeout')) {
+      const { data: metaRows, error: metaErr } = await supabase
+        .from('store_videos')
+        .select('id, type, title, description, published, display_order, created_at')
+        .order('display_order', { ascending: true });
+
+      if (!metaErr && Array.isArray(metaRows)) {
+        const recovered: any[] = [];
+        for (const meta of metaRows) {
+          try {
+            const { data: urlRow, error: urlErr } = await supabase
+              .from('store_videos')
+              .select('url')
+              .eq('id', meta.id)
+              .maybeSingle();
+            if (!urlErr && urlRow?.url) {
+              recovered.push({ ...meta, url: urlRow.url });
+            }
+          } catch {
+            // Ignorer la ligne qui expire pour ne pas bloquer toute la boutique
+          }
+        }
+        rowsData = recovered;
+      }
+    } else if (error) {
       console.warn('Supabase fetchVideos warning, using local cache:', error.message);
       return loadVideos();
     }
 
-    if (data) {
+    if (rowsData) {
       const localById = new Map(loadVideos().map((v) => [v.id, v]));
       // Never present Google sample clips as official store content.
-      const mapped = data
+      const mapped = rowsData
         .map(rowToVideo)
         .filter((video) => !video.url.includes('commondatastorage.googleapis.com/gtv-videos-bucket/sample/'))
         .map((video) => {
@@ -414,13 +441,146 @@ export async function fetchVideosRemote(): Promise<VideoItem[]> {
   return loadVideos();
 }
 
+function validateVideoEntry(v: VideoItem): boolean {
+  if (!v || !v.url) return false;
+  const isTikTok = v.type === 'tiktok' || v.url.includes('tiktok.com');
+  return isTikTok ? isSafeTikTokUrl(v.url) : isSafeMediaUrl(v.url);
+}
+
+async function upsertSingleVideoRow(v: VideoItem): Promise<{ error: any }> {
+  const rowWithDesc = videoToRow(v, true);
+  let { error } = await supabase
+    .from('store_videos')
+    .upsert(rowWithDesc, { onConflict: 'id' });
+
+  if (error && error.message?.includes('description')) {
+    const fallbackRow = videoToRow(v, false);
+    const retryRes = await supabase
+      .from('store_videos')
+      .upsert(fallbackRow, { onConflict: 'id' });
+    error = retryRes.error;
+  }
+
+  return { error };
+}
+
+/**
+ * Enregistre UNE seule vidéo ciblée (sans ré-envoyer les lourdes colonnes URL des autres vidéos)
+ * puis met à jour uniquement `display_order` sur les autres lignes si nécessaire.
+ */
+export async function saveSingleVideoRemote(
+  targetVideo: VideoItem,
+  allVideos: VideoItem[]
+): Promise<{ success: boolean; message?: string }> {
+  if (!validateVideoEntry(targetVideo)) {
+    return {
+      success: false,
+      message:
+        'Cette URL vidéo ne respecte pas les règles de sécurité (HTTPS, Data vidéo ou TikTok officiel requis).'
+    };
+  }
+
+  if (!isSupabaseConfigured) {
+    const saved = saveVideos(allVideos, { allowStripLargeDataUrls: false });
+    if (!saved) {
+      return {
+        success: false,
+        message:
+          'Mémoire locale du navigateur saturée pour stocker cette vidéo directement. Compressez la vidéo (< 2 Mo) ou utilisez un lien HTTPS.'
+      };
+    }
+    return { success: true };
+  }
+
+  // Empêcher l'envoi d'une vidéo base64 massive (> 350 Ko) dans la table SQL Postgres
+  if (targetVideo.url.startsWith('data:video/') && targetVideo.url.length > 350_000) {
+    return {
+      success: false,
+      message:
+        'Cette vidéo est encodée en base64 brut (trop lourde pour la base SQL). Réimportez le fichier via le bouton "Importer Vidéo" afin qu’il soit stocké sur Supabase Storage.'
+    };
+  }
+
+  try {
+    const { error } = await upsertSingleVideoRow(targetVideo);
+    if (error) {
+      console.error('Error saving single video to Supabase:', error);
+      return { success: false, message: `Échec de l'enregistrement en ligne: ${error.message}` };
+    }
+
+    // Mettre à jour uniquement display_order (quelques octets) pour les autres vidéos
+    const otherVideos = allVideos.filter((v) => v.id !== targetVideo.id);
+    for (const item of otherVideos) {
+      await supabase
+        .from('store_videos')
+        .update({ display_order: item.order })
+        .eq('id', item.id);
+    }
+
+    saveVideos(allVideos);
+    return { success: true };
+  } catch (err: any) {
+    console.error('Network error saving single video to Supabase:', err);
+    return { success: false, message: err?.message || 'Erreur réseau lors de la mise à jour de la vidéo.' };
+  }
+}
+
+export async function toggleVideoPublishRemote(
+  videoId: string,
+  published: boolean,
+  allVideos: VideoItem[]
+): Promise<{ success: boolean; message?: string }> {
+  if (!isSupabaseConfigured) {
+    saveVideos(allVideos);
+    return { success: true };
+  }
+
+  try {
+    const { error } = await supabase
+      .from('store_videos')
+      .update({ published })
+      .eq('id', videoId);
+
+    if (error) {
+      return { success: false, message: `Échec de l'enregistrement en ligne: ${error.message}` };
+    }
+
+    saveVideos(allVideos);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Erreur réseau lors de la mise à jour.' };
+  }
+}
+
+export async function reorderVideosRemote(
+  reorderedVideos: VideoItem[]
+): Promise<{ success: boolean; message?: string }> {
+  if (!isSupabaseConfigured) {
+    saveVideos(reorderedVideos);
+    return { success: true };
+  }
+
+  try {
+    for (const item of reorderedVideos) {
+      const { error } = await supabase
+        .from('store_videos')
+        .update({ display_order: item.order })
+        .eq('id', item.id);
+      if (error) {
+        return { success: false, message: `Échec de l'enregistrement en ligne: ${error.message}` };
+      }
+    }
+
+    saveVideos(reorderedVideos);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Erreur réseau lors de la réorganisation.' };
+  }
+}
+
 export async function syncVideosRemote(videos: VideoItem[]): Promise<{ success: boolean; message?: string }> {
   // Validation stricte de chaque URL vidéo (anti-XSS / anti-injection)
-  const sanitizedVideos = videos.filter((v) => {
-    if (!v || !v.url) return false;
-    const isTikTok = v.type === 'tiktok' || v.url.includes('tiktok.com');
-    return isTikTok ? isSafeTikTokUrl(v.url) : isSafeMediaUrl(v.url);
-  });
+  const sanitizedVideos = videos.filter(validateVideoEntry);
 
   if (sanitizedVideos.length !== videos.length) {
     return { success: false, message: 'Une ou plusieurs URLs vidéo ne respectent pas les règles de sécurité (HTTPS, Data vidéo ou TikTok officiel requis).' };
@@ -438,23 +598,13 @@ export async function syncVideosRemote(videos: VideoItem[]): Promise<{ success: 
   }
 
   try {
-    const rows = sanitizedVideos.map((v) => videoToRow(v, true));
-    let { error } = await supabase
-      .from('store_videos')
-      .upsert(rows, { onConflict: 'id' });
-
-    // Si la colonne description n'existe pas encore dans la table distante, réessayer sans elle
-    if (error && error.message?.includes('description')) {
-      const fallbackRows = sanitizedVideos.map((v) => videoToRow(v, false));
-      const retryRes = await supabase
-        .from('store_videos')
-        .upsert(fallbackRows, { onConflict: 'id' });
-      error = retryRes.error;
-    }
-
-    if (error) {
-      console.error('Error syncing videos to Supabase:', error);
-      return { success: false, message: `Échec de l'enregistrement en ligne: ${error.message}` };
+    // Upsert ligne par ligne pour éviter tout statement_timeout Postgres
+    for (const video of sanitizedVideos) {
+      const { error } = await upsertSingleVideoRow(video);
+      if (error) {
+        console.error('Error syncing videos to Supabase:', error);
+        return { success: false, message: `Échec de l'enregistrement en ligne: ${error.message}` };
+      }
     }
 
     saveVideos(sanitizedVideos);
@@ -939,22 +1089,13 @@ export async function syncLocalDataToSupabase(
       throw new Error(`Erreur sync produits: ${productsError.message}`);
     }
 
-    // 3. Sync Videos
-    const videoRows = videos.map((v) => videoToRow(v, true));
-    let { error: videosError } = await supabase
-      .from('store_videos')
-      .upsert(videoRows, { onConflict: 'id' });
-
-    if (videosError && videosError.message?.includes('description')) {
-      const fallbackVideoRows = videos.map((v) => videoToRow(v, false));
-      const retryVideos = await supabase
-        .from('store_videos')
-        .upsert(fallbackVideoRows, { onConflict: 'id' });
-      videosError = retryVideos.error;
-    }
-
-    if (videosError) {
-      throw new Error(`Erreur sync vidéos: ${videosError.message}`);
+    // 3. Sync Videos (ligne par ligne pour éviter tout timeout Postgres)
+    for (const v of videos) {
+      if (v.url.startsWith('data:video/') && v.url.length > 350_000) continue;
+      const { error: videosError } = await upsertSingleVideoRow(v);
+      if (videosError) {
+        throw new Error(`Erreur sync vidéos: ${videosError.message}`);
+      }
     }
 
     return {

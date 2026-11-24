@@ -14,6 +14,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { applyStorePromotion, getCombinationPrice, normalizeConditionName } from './utils/pricingUtils';
 import { useStorePromotion } from './hooks/useStorePromotion';
 import { DecemberPromoBanner } from './components/DecemberPromoBanner';
+import { AppleHelloSplash } from './components/AppleHelloSplash';
 import { startVisitorPresenceTracking, trackAnalyticsEvent } from './services/analyticsService';
 import {
   MASKED_ADMIN_PATH,
@@ -132,6 +133,22 @@ function StoreApp() {
   const [adminView, setAdminView] = useState<AdminViewState>(null);
   const adminViewRef = useRef<AdminViewState>(null);
   adminViewRef.current = adminView;
+
+  // Écran d'accueil iPhone "hello" au premier chargement de la boutique publique
+  const [showHelloSplash, setShowHelloSplash] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const cleanPath = window.location.pathname || '/';
+    const lowerPath = cleanPath.toLowerCase();
+    const rawHash = window.location.hash || '';
+    const isPortalRoute =
+      lowerPath === MASKED_ADMIN_PATH ||
+      window.location.search.toLowerCase().includes('portail=') ||
+      rawHash.toLowerCase().includes('portail=');
+    if (isPortalRoute || isDecoyAdminLocation(lowerPath, rawHash) || !isKnownPublicPath(cleanPath)) {
+      return false;
+    }
+    return true;
+  });
 
   // Interactivité : Barre de progression GPU + bouton retour en haut + toast panier
   const scrollProgressRef = useRef<HTMLDivElement>(null);
@@ -814,6 +831,11 @@ function StoreApp() {
   // =========================================================================
   return (
     <div className="min-h-screen flex flex-col bg-[#fafbfc] dark:bg-[#0b0f17] text-[#0f172a] dark:text-[#f8fafc] transition-colors duration-300">
+      {/* Écran de chargement officiel iPhone "hello" */}
+      {showHelloSplash && !isNotFound && (
+        <AppleHelloSplash onComplete={() => setShowHelloSplash(false)} />
+      )}
+
       {/* Fine barre de progression de lecture (GPU transform only) */}
       {!isNotFound && !activeDetailProduct && (
         <div
