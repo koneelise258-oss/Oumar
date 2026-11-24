@@ -491,7 +491,7 @@ html.dark .shimmer-surface {
   animation: omr-color-settle 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Banderole défilante Promotion de Décembre */
+/* Banderole défilante Promotion de Décembre (défilement continu sans pause au toucher) */
 @keyframes omr-marquee {
   0% {
     transform: translate3d(0, 0, 0);
@@ -501,15 +501,47 @@ html.dark .shimmer-surface {
   }
 }
 
+@keyframes omr-promo-glint {
+  0% {
+    transform: translate3d(-120%, 0, 0) skewX(-20deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.55;
+  }
+  55% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(260%, 0, 0) skewX(-20deg);
+    opacity: 0;
+  }
+}
+
+@keyframes omr-promo-rail {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 .omr-marquee-track {
   display: flex;
   width: max-content;
   will-change: transform;
-  animation: omr-marquee 32s linear infinite;
+  animation: omr-marquee 24s linear infinite;
 }
 
-.omr-marquee-group:hover .omr-marquee-track {
-  animation-play-state: paused;
+.omr-promo-glint {
+  will-change: transform, opacity;
+  animation: omr-promo-glint 5.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.omr-promo-rail {
+  will-change: transform;
+  animation: omr-promo-rail 9s linear infinite;
 }
 
 /* Balayage lumineux architectural — Section Nouveau Magasin */

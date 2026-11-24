@@ -45,7 +45,7 @@ import {
 } from '../data/storeSettings';
 import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
 import { loadProducts, saveProducts, resetProducts } from '../data/products';
-import { processAndUploadProductImage, APPLE_ASSET_IMAGES } from '../services/imageService';
+import { processAndUploadProductImage, uploadStoreVideoFile, APPLE_ASSET_IMAGES } from '../services/imageService';
 import { MediaCropper, AspectPresetKey } from './MediaCropper';
 import { AdminPromotionsPanel } from './admin/AdminPromotionsPanel';
 import { AdminNewStorePanel } from './admin/AdminNewStorePanel';
@@ -77,7 +77,6 @@ import {
   isSafeMediaUrl,
   isSafeTikTokUrl,
   validateImageFile,
-  validateVideoFile,
   sanitizeText,
   getSecretPortalUrl,
   getActivePortalKeyForCopy,
@@ -790,42 +789,106 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // ==========================================
   const [videoUrlInput, setVideoUrlInput] = useState('');
   const [videoTitleInput, setVideoTitleInput] = useState('');
+  const [videoDescriptionInput, setVideoDescriptionInput] = useState('');
   const [videoTypeInput, setVideoTypeInput] = useState<'html5' | 'tiktok'>('html5');
   const [isAddingVideo, setIsAddingVideo] = useState(false);
+  const [editingVideoId, setEditingVideoId] = useState<string | null>(null);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [savingVideo, setSavingVideo] = useState(false);
+  const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
   const [videoDeleteConfirmId, setVideoDeleteConfirmId] = useState<string | null>(null);
   const videoFileInputRef = useRef<HTMLInputElement>(null);
 
+  const openAddVideoForm = () => {
+    setEditingVideoId(null);
+    setVideoUrlInput('');
+    setVideoTitleInput('');
+    setVideoDescriptionInput('');
+    setVideoTypeInput('html5');
+    setVideoUploadError(null);
+    setIsAddingVideo(true);
+  };
+
+  const openEditVideoForm = (vid: VideoItem) => {
+    setIsAddingVideo(false);
+    setEditingVideoId(vid.id);
+    setVideoUrlInput(vid.url || '');
+    setVideoTitleInput(vid.title || '');
+    setVideoDescriptionInput(vid.description || '');
+    setVideoTypeInput(vid.type === 'tiktok' || vid.url.includes('tiktok.com') ? 'tiktok' : 'html5');
+    setVideoUploadError(null);
+  };
+
+  const closeVideoForm = () => {
+    setIsAddingVideo(false);
+    setEditingVideoId(null);
+    setVideoUrlInput('');
+    setVideoTitleInput('');
+    setVideoDescriptionInput('');
+    setVideoUploadError(null);
+  };
+
   const handleSaveVideo = async () => {
     const rawUrl = videoUrlInput.trim();
-    if (!rawUrl) return;
+    if (!rawUrl) {
+      setVideoUploadError('Veuillez saisir une URL vidéo ou importer un fichier vidéo.');
+      return;
+    }
 
     const detectedType = rawUrl.includes('tiktok.com') ? 'tiktok' : videoTypeInput;
     const isUrlAllowed = detectedType === 'tiktok' ? isSafeTikTokUrl(rawUrl) : isSafeMediaUrl(rawUrl);
 
     if (!isUrlAllowed) {
-      triggerNotification('Lien vidéo refusé par sécurité : utilisez une URL HTTPS (MP4/WebM) ou un lien officiel TikTok.');
+      const msg = 'Lien vidéo refusé par sécurité : utilisez une URL HTTPS (MP4/MOV/WebM), un fichier vidéo importé ou un lien officiel TikTok.';
+      setVideoUploadError(msg);
+      triggerNotification(msg);
       return;
     }
 
-    const newVid: VideoItem = {
-      id: `vid-${Date.now()}`,
-      url: rawUrl,
-      type: detectedType,
-      title: sanitizeText(videoTitleInput, 120) || `Vidéo OUMAR IPHONE #${videos.length + 1}`,
-      published: true,
-      order: videos.length + 1,
-      createdAt: Date.now()
-    };
-    const updated = [newVid, ...videos];
-    const res = await syncVideosRemote(updated);
-    if (res.success) {
-      onVideosUpdated(updated);
-      setVideoUrlInput('');
-      setVideoTitleInput('');
-      setIsAddingVideo(false);
-      triggerNotification('Nouvelle vidéo ajoutée');
-    } else {
-      triggerNotification(`Impossible d'ajouter la vidéo : ${res.message}`);
+    const cleanTitle = sanitizeText(videoTitleInput, 140) || `Vidéo OUMAR IPHONE #${videos.length + 1}`;
+    const cleanDescription = sanitizeText(videoDescriptionInput, 320);
+
+    setSavingVideo(true);
+    setVideoUploadError(null);
+    try {
+      const isEditing = Boolean(editingVideoId);
+      const updated = isEditing
+        ? videos.map((v) =>
+            v.id === editingVideoId
+              ? {
+                  ...v,
+                  url: rawUrl,
+                  type: detectedType,
+                  title: cleanTitle,
+                  description: cleanDescription || undefined
+                }
+              : v
+          )
+        : [
+            {
+              id: `vid-${Date.now()}`,
+              url: rawUrl,
+              type: detectedType,
+              title: cleanTitle,
+              description: cleanDescription || undefined,
+              published: true,
+              order: 1,
+              createdAt: Date.now()
+            },
+            ...videos
+          ].map((v, i) => ({ ...v, order: i + 1 }));
+
+      const res = await syncVideosRemote(updated);
+      if (res.success) {
+        onVideosUpdated(updated);
+        closeVideoForm();
+        triggerNotification(isEditing ? 'Modifications de la vidéo enregistrées.' : 'Nouvelle vidéo ajoutée avec succès.');
+      } else {
+        setVideoUploadError(res.message || "Impossible d'enregistrer la vidéo.");
+        triggerNotification(`Impossible d'enregistrer la vidéo : ${res.message}`);
+      }
+    } finally {
+      setSavingVideo(false);
     }
   };
 
@@ -863,6 +926,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         .filter((v) => v.id !== id)
         .map((v, i) => ({ ...v, order: i + 1 }));
       onVideosUpdated(updated);
+      if (editingVideoId === id) closeVideoForm();
       setVideoDeleteConfirmId(null);
       triggerNotification('Vidéo supprimée');
     } else {
@@ -878,33 +942,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (window.confirm('Voulez-vous vraiment vider la liste des vidéos locales ?')) {
       const emptyVideos = resetVideos();
       onVideosUpdated(emptyVideos);
+      closeVideoForm();
       triggerNotification('Liste locale des vidéos vidée');
     }
   };
 
   const handleVideoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const check = await validateVideoFile(file);
-      if (!check.valid) {
-        triggerNotification(check.error || 'Fichier vidéo refusé par sécurité.');
-        e.target.value = '';
-        return;
+    if (!file) return;
+
+    setIsUploadingVideo(true);
+    setVideoUploadError(null);
+    try {
+      const uploadRes = await uploadStoreVideoFile(file);
+      setVideoUrlInput(uploadRes.url);
+      setVideoTypeInput('html5');
+      if (!videoTitleInput.trim()) {
+        setVideoTitleInput(sanitizeText(file.name.replace(/\.[^/.]+$/, ''), 120));
       }
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        if (!isSafeMediaUrl(dataUrl)) {
-          triggerNotification('Format vidéo non autorisé.');
-          return;
-        }
-        setVideoUrlInput(dataUrl);
-        setVideoTypeInput('html5');
-        if (!videoTitleInput) {
-          setVideoTitleInput(sanitizeText(file.name.replace(/\.[^/.]+$/, ''), 100));
-        }
-      };
-      reader.readAsDataURL(file);
+      triggerNotification(uploadRes.message || 'Fichier vidéo importé et prêt à enregistrer.');
+    } catch (err: any) {
+      const errMsg = err?.message || "Impossible d'importer ce fichier vidéo.";
+      setVideoUploadError(errMsg);
+      triggerNotification(errMsg);
+    } finally {
+      setIsUploadingVideo(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -2674,7 +2737,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Vidéos du mur immersif ({videos.length})
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Lecture automatique en boucle sans habillage (seul le bouton son est affiché). Les liens TikTok sont lus en mode épuré et les fichiers MP4 directs offrent un rendu 100 % natif sans filigrane.
+                    Importez directement des fichiers vidéo (MP4, MOV iPhone, M4V, WebM) ou utilisez un lien TikTok. Lecture automatique en boucle sans habillage (seul le bouton son est affiché).
                   </p>
                 </div>
 
@@ -2699,7 +2762,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setIsAddingVideo(!isAddingVideo)}
+                    onClick={() => {
+                      if (isAddingVideo && !editingVideoId) {
+                        closeVideoForm();
+                      } else {
+                        openAddVideoForm();
+                      }
+                    }}
                     className="px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-950 rounded-xl hover:opacity-90 active:scale-[0.98] shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
@@ -2708,17 +2777,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Add Video Form Drawer/Box */}
-              {isAddingVideo && (
+              {/* Add / Edit Video Form Drawer/Box */}
+              {(isAddingVideo || editingVideoId !== null) && (
                 <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 animate-in fade-in">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Nouvelle vidéo de démonstration
-                  </h4>
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                      {editingVideoId
+                        ? 'Modifier la vidéo & ses annotations textuelles'
+                        : 'Nouvelle vidéo de démonstration'}
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={closeVideoForm}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                      aria-label="Fermer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Titre / Référence interne
+                        Titre / Référence de la vidéo
                       </label>
                       <input
                         type="text"
@@ -2735,69 +2816,117 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </label>
                       <select
                         value={videoTypeInput}
-                        onChange={(e) => setVideoTypeInput(e.target.value as any)}
+                        onChange={(e) => setVideoTypeInput(e.target.value as 'html5' | 'tiktok')}
                         className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-white focus:outline-none"
                       >
-                        <option value="html5">Fichier Vidéo direct (MP4, WebM)</option>
+                        <option value="html5">Fichier Vidéo direct (MP4, MOV iPhone, M4V, WebM)</option>
                         <option value="tiktok">Lien Vidéo TikTok (@oumar_iphone.0)</option>
                       </select>
                     </div>
 
                     <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        URL de la vidéo ou lien TikTok (détection automatique du format)
+                        Texte / Notes de modification (suivi interne des changements)
                       </label>
-                      <div className="flex gap-2">
+                      <textarea
+                        rows={2}
+                        value={videoDescriptionInput}
+                        onChange={(e) => setVideoDescriptionInput(e.target.value)}
+                        placeholder="Ex: Remplacement du lien TikTok par fichier MP4 natif, recadrage 9:16 et son vérifié..."
+                        className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-white focus:outline-none resize-y"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2 space-y-2">
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Fichier vidéo importé ou URL (MP4 / MOV / WebM ou TikTok)
+                      </label>
+                      <div className="flex flex-col sm:flex-row gap-2">
                         <input
                           type="text"
-                          value={videoUrlInput}
+                          value={
+                            videoUrlInput.startsWith('data:video/')
+                              ? '[Fichier vidéo local importé et vérifié — prêt à enregistrer]'
+                              : videoUrlInput
+                          }
+                          readOnly={videoUrlInput.startsWith('data:video/')}
                           onChange={(e) => {
                             const val = e.target.value;
                             setVideoUrlInput(val);
+                            setVideoUploadError(null);
                             const lower = val.trim().toLowerCase();
                             if (lower.includes('tiktok.com')) {
                               setVideoTypeInput('tiktok');
-                            } else if (/\.(mp4|webm|mov)(\?|$)/i.test(lower) || lower.startsWith('data:video/')) {
+                            } else if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(lower) || lower.startsWith('data:video/')) {
                               setVideoTypeInput('html5');
                             }
                           }}
                           placeholder="https://.../video.mp4 ou https://www.tiktok.com/@oumar_iphone.0/video/..."
                           className="flex-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-white focus:outline-none"
                         />
-                        <button
-                          type="button"
-                          onClick={() => videoFileInputRef.current?.click()}
-                          className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
-                        >
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>Importer MP4</span>
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {videoUrlInput.startsWith('data:video/') && (
+                            <button
+                              type="button"
+                              onClick={() => setVideoUrlInput('')}
+                              className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                            >
+                              Vider
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={isUploadingVideo}
+                            onClick={() => videoFileInputRef.current?.click()}
+                            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-950 hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>{isUploadingVideo ? 'Import en cours...' : 'Importer Vidéo (MP4 / MOV)'}</span>
+                          </button>
+                        </div>
                         <input
                           ref={videoFileInputRef}
                           type="file"
-                          accept="video/mp4,video/webm"
+                          accept="video/mp4,video/quicktime,video/x-m4v,video/webm,.mp4,.mov,.m4v,.webm"
                           onChange={handleVideoFileUpload}
                           className="hidden"
                         />
                       </div>
+
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Formats vidéo supportés : MP4, MOV (iPhone), M4V, WebM (jusqu’à 50 Mo en mode cloud ou 3,5 Mo en mode local). Note : un fichier audio <strong>.mp3</strong> seul ne contient pas d’image vidéo.
+                      </p>
+
+                      {videoUploadError && (
+                        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-200 font-medium">
+                          {videoUploadError}
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex justify-end gap-2 pt-2">
                     <button
                       type="button"
-                      onClick={() => setIsAddingVideo(false)}
-                      className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                      onClick={closeVideoForm}
+                      className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white cursor-pointer"
                     >
                       Annuler
                     </button>
                     <button
                       type="button"
                       onClick={handleSaveVideo}
-                      disabled={!videoUrlInput.trim()}
-                      className="px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-950 rounded-xl hover:opacity-90 disabled:opacity-40"
+                      disabled={!videoUrlInput.trim() || isUploadingVideo || savingVideo}
+                      className="px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-950 rounded-xl hover:opacity-90 disabled:opacity-40 cursor-pointer flex items-center gap-1.5"
                     >
-                      Enregistrer la vidéo
+                      <Check className="w-3.5 h-3.5" />
+                      <span>
+                        {savingVideo
+                          ? 'Enregistrement...'
+                          : editingVideoId
+                          ? 'Enregistrer les modifications'
+                          : 'Enregistrer la vidéo'}
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -2808,7 +2937,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {videos.map((vid, idx) => (
                   <div
                     key={`admin-vid-${vid.id || idx}-${idx}`}
-                    className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col justify-between p-3.5"
+                    className={`bg-white dark:bg-slate-900 rounded-2xl border overflow-hidden flex flex-col justify-between p-3.5 transition-colors ${
+                      editingVideoId === vid.id
+                        ? 'border-blue-500 ring-2 ring-blue-500/20'
+                        : 'border-slate-200 dark:border-slate-800'
+                    }`}
                   >
                     {/* Video Player Preview */}
                     <div
@@ -2848,9 +2981,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     {/* Metadata & Actions */}
                     <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate mb-2">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
                         {vid.title || 'Vidéo de présentation'}
                       </h4>
+                      {vid.description ? (
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 mt-1 mb-2">
+                          {vid.description}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-slate-400/80 italic mt-0.5 mb-2">
+                          Aucune note de modification
+                        </p>
+                      )}
 
                       <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-2.5">
                         <div className="flex items-center gap-1">
@@ -2858,7 +3000,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             type="button"
                             disabled={idx === 0}
                             onClick={() => handleMoveVideo(idx, 'up')}
-                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:hover:text-white disabled:opacity-30 rounded-lg"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:hover:text-white disabled:opacity-30 rounded-lg cursor-pointer"
                             title="Déplacer vers la gauche / haut"
                           >
                             <ArrowUp className="w-4 h-4" />
@@ -2867,7 +3009,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             type="button"
                             disabled={idx === videos.length - 1}
                             onClick={() => handleMoveVideo(idx, 'down')}
-                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:hover:text-white disabled:opacity-30 rounded-lg"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:hover:text-white disabled:opacity-30 rounded-lg cursor-pointer"
                             title="Déplacer vers la droite / bas"
                           >
                             <ArrowDown className="w-4 h-4" />
@@ -2875,10 +3017,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <button
                             type="button"
                             onClick={() => handleToggleVideoPublish(vid.id)}
-                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-lg"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:hover:text-white rounded-lg cursor-pointer"
                             title={vid.published ? 'Masquer' : 'Publier'}
                           >
                             {vid.published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4 text-rose-500" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openEditVideoForm(vid)}
+                            className="px-2 py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 rounded-lg flex items-center gap-1 cursor-pointer"
+                            title="Modifier le texte, la note ou remplacer la vidéo"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Éditer</span>
                           </button>
                         </div>
 
@@ -2887,14 +3038,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <button
                               type="button"
                               onClick={() => handleDeleteVideo(vid.id)}
-                              className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded-md"
+                              className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded-md cursor-pointer"
                             >
                               Supprimer
                             </button>
                             <button
                               type="button"
                               onClick={() => setVideoDeleteConfirmId(null)}
-                              className="p-1 text-slate-400"
+                              className="p-1 text-slate-400 cursor-pointer"
                             >
                               <X className="w-3 h-3" />
                             </button>
@@ -2903,7 +3054,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <button
                             type="button"
                             onClick={() => setVideoDeleteConfirmId(vid.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
                             title="Supprimer la vidéo"
                           >
                             <Trash2 className="w-4 h-4" />

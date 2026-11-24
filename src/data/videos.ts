@@ -26,14 +26,16 @@ export function loadVideos(): VideoItem[] {
   return [];
 }
 
-export function saveVideos(videos: VideoItem[]): void {
-  if (typeof window === 'undefined') return;
+export function saveVideos(videos: VideoItem[]): boolean {
+  if (typeof window === 'undefined') return true;
   try {
     const sorted = [...videos].sort((a, b) => a.order - b.order);
     localStorage.setItem(STORAGE_KEY_VIDEOS, JSON.stringify(sorted));
     window.dispatchEvent(new CustomEvent('oumar_videos_updated', { detail: sorted }));
+    return true;
   } catch (err) {
     console.error('Error saving videos to localStorage', err);
+    return false;
   }
 }
 

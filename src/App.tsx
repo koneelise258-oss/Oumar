@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense, useCallback } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense, useCallback, ComponentType } from 'react';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { Catalogue } from './components/Catalogue';
@@ -66,16 +66,37 @@ function loadPersistedCart(catalog: Product[]): CartItem[] {
   }
 }
 
-// Chargement différé des composants secondaires et pages dédiées
-const VideosSection = lazy(() => import('./components/VideosSection').then(m => ({ default: m.VideosSection })));
-const NewStoreBannerSection = lazy(() => import('./components/NewStoreBannerSection').then(m => ({ default: m.NewStoreBannerSection })));
-const SocialSection = lazy(() => import('./components/SocialSection').then(m => ({ default: m.SocialSection })));
-const BoutiqueInfo = lazy(() => import('./components/BoutiqueInfo').then(m => ({ default: m.BoutiqueInfo })));
-const ProductDetailPage = lazy(() => import('./components/ProductDetailPage').then(m => ({ default: m.ProductDetailPage })));
-const CartDrawer = lazy(() => import('./components/CartDrawer').then(m => ({ default: m.CartDrawer })));
-const GlobalSearchModal = lazy(() => import('./components/GlobalSearchModal').then(m => ({ default: m.GlobalSearchModal })));
-const AdminAuthModal = lazy(() => import('./components/AdminAuthModal').then(m => ({ default: m.AdminAuthModal })));
-const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+// Chargement différé résilient (protège contre les erreurs de chunk après un nouveau déploiement Vercel)
+function lazyWithRetry<T extends ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return lazy(async () => {
+    try {
+      const mod = await factory();
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('omr_chunk_reload_v1');
+      }
+      return mod;
+    } catch (err) {
+      if (typeof window !== 'undefined' && !sessionStorage.getItem('omr_chunk_reload_v1')) {
+        sessionStorage.setItem('omr_chunk_reload_v1', '1');
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw err;
+    }
+  });
+}
+
+const VideosSection = lazyWithRetry(() => import('./components/VideosSection').then(m => ({ default: m.VideosSection })));
+const NewStoreBannerSection = lazyWithRetry(() => import('./components/NewStoreBannerSection').then(m => ({ default: m.NewStoreBannerSection })));
+const SocialSection = lazyWithRetry(() => import('./components/SocialSection').then(m => ({ default: m.SocialSection })));
+const BoutiqueInfo = lazyWithRetry(() => import('./components/BoutiqueInfo').then(m => ({ default: m.BoutiqueInfo })));
+const ProductDetailPage = lazyWithRetry(() => import('./components/ProductDetailPage').then(m => ({ default: m.ProductDetailPage })));
+const CartDrawer = lazyWithRetry(() => import('./components/CartDrawer').then(m => ({ default: m.CartDrawer })));
+const GlobalSearchModal = lazyWithRetry(() => import('./components/GlobalSearchModal').then(m => ({ default: m.GlobalSearchModal })));
+const AdminAuthModal = lazyWithRetry(() => import('./components/AdminAuthModal').then(m => ({ default: m.AdminAuthModal })));
+const AdminDashboard = lazyWithRetry(() => import('./components/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 
 type AdminViewState = null | 'login' | 'dashboard';
 

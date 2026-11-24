@@ -62,16 +62,22 @@ CREATE INDEX IF NOT EXISTS idx_store_products_category ON public.store_products 
 CREATE INDEX IF NOT EXISTS idx_store_products_published ON public.store_products (published);
 CREATE INDEX IF NOT EXISTS idx_store_products_in_stock ON public.store_products (in_stock);
 
--- 3. TABLE DES VIDÉOS IMMERSIVES (Média MP4, WebM & TikTok)
+-- 3. TABLE DES VIDÉOS IMMERSIVES (Média MP4, MOV, WebM & TikTok)
 CREATE TABLE IF NOT EXISTS public.store_videos (
   id TEXT PRIMARY KEY,
   url TEXT NOT NULL,
   type TEXT NOT NULL DEFAULT 'html5' CHECK (type IN ('html5', 'tiktok')),
   title TEXT,
+  description TEXT,
   published BOOLEAN NOT NULL DEFAULT true,
   display_order INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+DO $$ BEGIN
+  ALTER TABLE public.store_videos ADD COLUMN IF NOT EXISTS description TEXT;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_store_videos_order ON public.store_videos (display_order ASC);
 CREATE INDEX IF NOT EXISTS idx_store_videos_published ON public.store_videos (published);
@@ -577,11 +583,11 @@ DO $$ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
--- 12. SÉCURISATION SUPABASE STORAGE (store-products : blocage SVG, 10 Mo max, écriture admins uniquement)
+-- 12. SÉCURISATION SUPABASE STORAGE (store-products : images + vidéos MP4/MOV/WebM, 50 Mo max, blocage SVG, écriture admins uniquement)
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM storage.buckets WHERE id = 'store-products') THEN
     UPDATE storage.buckets
-    SET file_size_limit = 10485760, allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    SET file_size_limit = 52428800, allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v']
     WHERE id = 'store-products';
   END IF;
   DROP POLICY IF EXISTS "Public read store-products" ON storage.objects;

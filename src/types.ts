@@ -78,9 +78,10 @@ export interface CartItem {
 
 export interface VideoItem {
   id: string;
-  url: string; // Direct MP4/WebM URL, Data URL, or TikTok link
+  url: string; // Direct MP4/MOV/M4V/WebM URL, Data URL, or TikTok link
   type: 'html5' | 'tiktok';
   title?: string; // Internal admin reference label
+  description?: string; // Notes / modifications textuelles dans l'espace administrateur
   published: boolean;
   order: number;
   createdAt: number;

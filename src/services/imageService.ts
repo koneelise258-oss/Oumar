@@ -209,8 +209,8 @@ export async function uploadSanitizedImageDataUrl(
 }
 
 /**
- * Valide et importe une vidéo MP4/WebM vers Supabase Storage si disponible,
- * sinon convertit en Data URL si la taille permet le stockage local.
+ * Valide et importe une vidéo MP4/MOV/M4V/WebM vers Supabase Storage si disponible,
+ * sinon convertit en Data URL typée si la taille permet le stockage local.
  */
 export async function uploadStoreVideoFile(file: File): Promise<ImageUploadResult> {
   const check = await validateVideoFile(file);
@@ -218,48 +218,70 @@ export async function uploadStoreVideoFile(file: File): Promise<ImageUploadResul
     throw new Error(check.error || 'Fichier vidéo refusé par sécurité.');
   }
 
+  const resolvedMime = check.resolvedMime || 'video/mp4';
+  const ext =
+    resolvedMime === 'video/webm'
+      ? 'webm'
+      : resolvedMime === 'video/quicktime'
+      ? 'mov'
+      : resolvedMime === 'video/x-m4v'
+      ? 'm4v'
+      : 'mp4';
+
+  let remoteFailureReason = '';
+
   if (isSupabaseConfigured) {
-    try {
-      const ext = file.type === 'video/webm' ? 'webm' : 'mp4';
-      const randomToken =
-        typeof crypto !== 'undefined' && crypto.getRandomValues
-          ? Array.from(crypto.getRandomValues(new Uint8Array(8)))
-              .map((b) => b.toString(16).padStart(2, '0'))
-              .join('')
-          : Math.random().toString(36).substring(2, 10);
-      const fileName = `videos/${Date.now()}-${randomToken}.${ext}`;
+    const randomToken =
+      typeof crypto !== 'undefined' && crypto.getRandomValues
+        ? Array.from(crypto.getRandomValues(new Uint8Array(8)))
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('')
+        : Math.random().toString(36).substring(2, 10);
+    const fileName = `videos/${Date.now()}-${randomToken}.${ext}`;
+    const typedBlob = new Blob([file], { type: resolvedMime });
 
-      const { data, error } = await supabase.storage
-        .from('store-products')
-        .upload(fileName, file, {
-          contentType: file.type,
-          cacheControl: '31536000',
-          upsert: false
-        });
+    for (const bucketName of ['store-products', 'store-videos']) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(bucketName)
+          .upload(fileName, typedBlob, {
+            contentType: resolvedMime,
+            cacheControl: '31536000',
+            upsert: false
+          });
 
-      if (!error && data?.path) {
-        const { data: pubData } = supabase.storage
-          .from('store-products')
-          .getPublicUrl(data.path);
+        if (!error && data?.path) {
+          const { data: pubData } = supabase.storage
+            .from(bucketName)
+            .getPublicUrl(data.path);
 
-        if (pubData?.publicUrl && isSafeMediaUrl(pubData.publicUrl)) {
-          return {
-            url: pubData.publicUrl,
-            isRemoteStorage: true,
-            message: 'Vidéo vérifiée et publiée sur le stockage en ligne !'
-          };
+          if (pubData?.publicUrl && isSafeMediaUrl(pubData.publicUrl)) {
+            return {
+              url: pubData.publicUrl,
+              isRemoteStorage: true,
+              message: 'Vidéo vérifiée et publiée sur le stockage en ligne.'
+            };
+          }
+        } else if (error?.message) {
+          remoteFailureReason = error.message;
         }
+      } catch (err: any) {
+        remoteFailureReason = err?.message || 'Erreur réseau Supabase Storage';
       }
-    } catch {
-      // Fallback sur Data URL locale
     }
   }
 
   if (file.size > 3.5 * 1024 * 1024) {
+    const storageHint = remoteFailureReason
+      ? ` (Stockage cloud : ${remoteFailureReason} — mettez à jour le script SQL Storage pour autoriser les vidéos jusqu'à 50 Mo)`
+      : '';
     throw new Error(
-      'Vidéo trop volumineuse pour le mode local (> 3,5 Mo). Utilisez un lien HTTPS MP4 ou un lien TikTok, ou activez le stockage en ligne.'
+      `Vidéo de ${(file.size / (1024 * 1024)).toFixed(1)} Mo trop lourde pour le mode hors-ligne (max 3,5 Mo sans stockage cloud)${storageHint}.`
     );
   }
+
+  // Toujours créer un Blob typé explicitement pour éviter "data:application/octet-stream" sur mobile
+  const safeVideoBlob = new Blob([file], { type: resolvedMime });
 
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -267,18 +289,20 @@ export async function uploadStoreVideoFile(file: File): Promise<ImageUploadResul
     reader.onload = (ev) => {
       const res = ev.target?.result as string;
       if (!isSafeMediaUrl(res)) {
-        reject(new Error('Format vidéo non autorisé.'));
+        reject(new Error('Format vidéo non autorisé après encodage.'));
         return;
       }
       resolve(res);
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(safeVideoBlob);
   });
 
   return {
     url: dataUrl,
     isRemoteStorage: false,
-    message: 'Vidéo validée et importée avec succès.'
+    message: remoteFailureReason
+      ? 'Vidéo importée localement (le stockage cloud a refusé ce format, pensez à exécuter la mise à jour SQL).'
+      : 'Vidéo validée et importée avec succès.'
   };
 }
 
