@@ -485,6 +485,15 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                           </div>
                         </div>
                       )}
+                      {product.specs.ports && (
+                        <div className="sm:col-span-2 flex items-start gap-2 text-slate-600 dark:text-slate-300">
+                          <Package className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-semibold block text-slate-900 dark:text-white">Connectivité & Ports</span>
+                            <span>{product.specs.ports}</span>
+                          </div>
+                        </div>
+                      )}
                       {product.specs.boxContents && (
                         <div className="sm:col-span-2 flex items-start gap-2 text-slate-600 dark:text-slate-300 pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
                           <Package className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
@@ -508,7 +517,7 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                     <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
                     <span>Contrôle qualité en boutique</span>
                   </div>
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800">
+                  <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800">
                     <WhatsAppLogo className="w-4 h-4 text-emerald-500 shrink-0" />
                     <span>Contact direct sur WhatsApp</span>
                   </div>
@@ -522,6 +531,11 @@ Pourriez-vous me confirmer la disponibilité et les modalités de retrait en bou
                   href={WHATSAPP_URL(whatsappMessage)}
                   target="_blank"
                   rel="noopener noreferrer"
+                  data-analytics-product-id={product.id}
+                  data-analytics-product-name={product.name}
+                  data-analytics-product-image={activeImage || product.image || ''}
+                  data-analytics-variant={`${selectedCondition} · ${selectedStorage} · ${selectedColor}`}
+                  data-analytics-price={String(currentPrice ?? 0)}
                   className="flex-1 py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
                 >
                   <WhatsAppLogo className="w-4 h-4 shrink-0" />

@@ -600,4 +600,122 @@ DO $$ BEGIN
   CREATE POLICY "Admins delete store-products" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'store-products' AND private.is_store_admin());
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
+
+-- 13. ANALYTICS & TRAFIC VISITEURS (Écriture via RPC validé, lecture/suppression strictement réservée aux admins)
+CREATE TABLE IF NOT EXISTS public.store_analytics_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  visitor_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  event_type TEXT NOT NULL CHECK (
+    event_type IN (
+      'page_view',
+      'heartbeat',
+      'product_click',
+      'product_view',
+      'add_to_cart',
+      'whatsapp_click',
+      'whatsapp_order'
+    )
+  ),
+  product_id TEXT,
+  product_name TEXT,
+  product_image TEXT,
+  variant_label TEXT,
+  amount BIGINT DEFAULT 0,
+  customer_label TEXT,
+  device_type TEXT DEFAULT 'Mobile',
+  viewport TEXT,
+  page_path TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_store_analytics_created_at ON public.store_analytics_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_store_analytics_event_type ON public.store_analytics_events (event_type);
+CREATE INDEX IF NOT EXISTS idx_store_analytics_visitor_id ON public.store_analytics_events (visitor_id);
+CREATE INDEX IF NOT EXISTS idx_store_analytics_product_id ON public.store_analytics_events (product_id);
+
+ALTER TABLE public.store_analytics_events ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Admins can read analytics events" ON public.store_analytics_events;
+  CREATE POLICY "Admins can read analytics events" ON public.store_analytics_events
+    FOR SELECT TO authenticated USING (private.is_store_admin());
+  DROP POLICY IF EXISTS "Admins can delete analytics events" ON public.store_analytics_events;
+  CREATE POLICY "Admins can delete analytics events" ON public.store_analytics_events
+    FOR DELETE TO authenticated USING (private.is_store_admin());
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.log_store_analytics_event(
+  p_visitor_id TEXT,
+  p_session_id TEXT,
+  p_event_type TEXT,
+  p_product_id TEXT DEFAULT NULL,
+  p_product_name TEXT DEFAULT NULL,
+  p_product_image TEXT DEFAULT NULL,
+  p_variant_label TEXT DEFAULT NULL,
+  p_amount BIGINT DEFAULT 0,
+  p_customer_label TEXT DEFAULT NULL,
+  p_device_type TEXT DEFAULT 'Mobile',
+  p_viewport TEXT DEFAULT NULL,
+  p_page_path TEXT DEFAULT '/'
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF p_visitor_id IS NULL OR LENGTH(TRIM(p_visitor_id)) < 4 THEN
+    RETURN false;
+  END IF;
+  IF p_session_id IS NULL OR LENGTH(TRIM(p_session_id)) < 4 THEN
+    RETURN false;
+  END IF;
+  IF p_event_type NOT IN (
+    'page_view',
+    'heartbeat',
+    'product_click',
+    'product_view',
+    'add_to_cart',
+    'whatsapp_click',
+    'whatsapp_order'
+  ) THEN
+    RETURN false;
+  END IF;
+
+  INSERT INTO public.store_analytics_events (
+    visitor_id,
+    session_id,
+    event_type,
+    product_id,
+    product_name,
+    product_image,
+    variant_label,
+    amount,
+    customer_label,
+    device_type,
+    viewport,
+    page_path
+  ) VALUES (
+    LEFT(TRIM(p_visitor_id), 80),
+    LEFT(TRIM(p_session_id), 80),
+    p_event_type,
+    NULLIF(LEFT(TRIM(COALESCE(p_product_id, '')), 120), ''),
+    NULLIF(LEFT(TRIM(COALESCE(p_product_name, '')), 160), ''),
+    NULLIF(LEFT(TRIM(COALESCE(p_product_image, '')), 600), ''),
+    NULLIF(LEFT(TRIM(COALESCE(p_variant_label, '')), 180), ''),
+    GREATEST(0, COALESCE(p_amount, 0)),
+    NULLIF(LEFT(TRIM(COALESCE(p_customer_label, '')), 120), ''),
+    COALESCE(NULLIF(LEFT(TRIM(COALESCE(p_device_type, '')), 40), ''), 'Mobile'),
+    NULLIF(LEFT(TRIM(COALESCE(p_viewport, '')), 40), ''),
+    COALESCE(NULLIF(LEFT(TRIM(COALESCE(p_page_path, '')), 200), ''), '/')
+  );
+
+  RETURN true;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.log_store_analytics_event(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, BIGINT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.log_store_analytics_event(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, BIGINT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;
 `;

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 28 28" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2.5 -2.5 29 29" width="512" height="512">
   <style>
     .apple-mark { fill: #000000; }
     @media (prefers-color-scheme: dark) { .apple-mark { fill: #FFFFFF; } }

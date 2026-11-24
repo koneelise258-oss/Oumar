@@ -67,14 +67,14 @@ export const DEFAULT_PRODUCTS: Product[] = [
     stockLocation: 'Boutique Cocody & Plateau',
     featured: true,
     isNew: true,
-    description: 'Le summum de la technologie mobile. Châssis en titane de grade 5, écran Super Retina XDR 6,9 pouces avec bordures ultra-fines, puce A18 Pro et nouvelle commande de l’appareil photo.',
+    description: 'L’iPhone 16 Pro Max incarne le sommet de l’ingénierie Apple. Conçu dans un châssis en titane de grade 5 microbillé à la fois ultra-léger et d’une solidité exceptionnelle, il arbore le plus grand écran jamais intégré sur un iPhone : une dalle Super Retina XDR de 6,9 pouces bord à bord dotée de la technologie ProMotion 120 Hz et de l’écran toujours activé. Propulsé par la nouvelle puce A18 Pro gravée en 3 nanomètres, il offre des performances graphiques et d’intelligence embarquée inégalées pour le jeu AAA, le montage vidéo 4K à 120 i/s en Dolby Vision et le multitâche intensif. La nouvelle touche physique « Commande de l’appareil photo » permet d’ajuster instantanément l’exposition, la profondeur de champ ou le zoom optique 5x d’un simple glissement du doigt. Livré neuf scellé d’origine Apple avec vérification complète du numéro de série et garantie boutique OUMAR IPHONE à Abidjan.',
     specs: {
-      screen: 'Super Retina XDR 6,9" OLED ProMotion 120Hz Always-On',
-      chip: 'Puce Apple A18 Pro (Gravure 3nm de 2e génération)',
-      camera: 'Système photo Pro Fusion 48 Mpx, Ultra grand-angle 48 Mpx, Téléobjectif 5x',
-      battery: 'Jusqu’à 33 heures de lecture vidéo, recharge rapide MagSafe 25W',
-      ports: 'USB-C avec débits USB 3 jusqu’à 10 Gb/s',
-      boxContents: 'iPhone avec iOS 18, Câble de charge USB-C tissé (1 m), Documentation'
+      screen: 'Super Retina XDR OLED 6,9" (2868 × 1320 px, 460 ppp), ProMotion 1–120 Hz, Always-On, luminosité jusqu’à 2000 nits en extérieur, Ceramic Shield dernière génération',
+      chip: 'Puce Apple A18 Pro (CPU 6 cœurs, GPU 6 cœurs avec Ray Tracing matériel, Neural Engine 16 cœurs, gravure 3 nm 2e gén.)',
+      camera: 'Triple système Pro : Capteur principal Fusion 48 Mpx (f/1,78, OIS capteur), Ultra grand-angle 48 Mpx macro, Téléobjectif tétraprisme 12 Mpx Zoom optique 5x · Vidéo 4K Dolby Vision jusqu’à 120 i/s & ProRes Log',
+      battery: 'Jusqu’à 33 heures de lecture vidéo, recharge rapide USB-C (50 % en 30 min), charge sans fil MagSafe jusqu’à 25 W et Qi2',
+      ports: 'Connecteur USB-C (débits USB 3 jusqu’à 10 Gb/s), Double SIM (Nano-SIM + eSIM / Double eSIM), Wi-Fi 7, Bluetooth 5.3, 5G & NFC',
+      boxContents: 'iPhone 16 Pro Max neuf scellé sous iOS 18, Câble de charge USB-C vers USB-C tressé (1 m), Documentation officielle Apple'
     },
     published: true
   },
@@ -108,14 +108,14 @@ export const DEFAULT_PRODUCTS: Product[] = [
     stockLocation: 'Boutique Cocody',
     featured: true,
     isNew: true,
-    description: 'Toute la puissance Pro dans un format compact et maniable de 6,3 pouces. Téléobjectif tétraprisme 5x, autonomie accrue et bouton Commande de l’appareil photo.',
+    description: 'Toute l’architecture Pro d’Apple concentrée dans un format ergonomique et équilibré de 6,3 pouces. L’iPhone 16 Pro adopte désormais le téléobjectif tétraprisme à zoom optique 5x auparavant réservé au Pro Max, ainsi que le capteur ultra grand-angle de 48 Mpx et les 4 microphones de qualité studio avec réduction active du bruit du vent pour des vidéos d’une clarté cinéma. Son châssis en titane de grade 5 assure une excellente dissipation thermique et une prise en main confortable toute la journée. Idéal pour les utilisateurs exigeants qui veulent la pleine puissance de la puce A18 Pro sans compromis sur la compacité.',
     specs: {
-      screen: 'Super Retina XDR 6,3" OLED ProMotion 120Hz',
-      chip: 'Puce Apple A18 Pro avec Neural Engine 16 cœurs',
-      camera: 'Triple capteur Pro 48 Mpx + 48 Mpx + 12 Mpx (Zoom optique 5x)',
-      battery: 'Jusqu’à 27 heures de lecture vidéo',
-      ports: 'USB-C compatible USB 3',
-      boxContents: 'iPhone 16 Pro, Câble USB-C tressé, Notice'
+      screen: 'Super Retina XDR OLED 6,3" (2622 × 1206 px, 460 ppp), ProMotion 120 Hz adaptatif, Always-On & Dynamic Island',
+      chip: 'Puce Apple A18 Pro (CPU 6 cœurs, GPU 6 cœurs, Neural Engine 16 cœurs, bande passante mémoire accrue)',
+      camera: 'Triple capteur Pro : Fusion 48 Mpx, Ultra grand-angle 48 Mpx, Téléobjectif 5x 120 mm · Capture vidéo 4K 120 i/s Dolby Vision & Audio spatial 4 micros studio',
+      battery: 'Jusqu’à 27 heures de lecture vidéo, recharge rapide filaire et MagSafe 25 W',
+      ports: 'USB-C compatible USB 3 (10 Gb/s), Wi-Fi 7, 5G, Bluetooth 5.3, Face ID haute précision, résistance IP68',
+      boxContents: 'iPhone 16 Pro sous iOS 18, Câble USB-C tressé (1 m), Notice et documentation Apple'
     },
     published: true
   },
@@ -146,14 +146,14 @@ export const DEFAULT_PRODUCTS: Product[] = [
     stockLocation: 'Boutique Cocody & Plateau',
     featured: true,
     isNew: true,
-    description: 'Offre exclusive Duo OUMAR IPHONE : pack de deux iPhones neufs scellés avec garantie boutique. Idéal pour couples, associés ou cadeaux d’exception à Abidjan.',
+    description: 'Le Pack Duo exclusif OUMAR IPHONE réunit deux iPhones authentiques dans un tarif préférentiel pensé pour les couples, collaborateurs, dirigeants ou cadeaux d’exception à Abidjan. Chaque appareil est remis avec son propre coffret scellé, son numéro IMEI vérifiable officiellement sur le site Apple et sa facture nominative. Profitez d’une économie immédiate par rapport à l’achat unitaire tout en bénéficiant de l’accompagnement complet en boutique (transfert de données, configuration iCloud et conseils personnalisés).',
     specs: {
-      screen: 'Écrans Super Retina XDR OLED ProMotion 120Hz',
-      chip: 'Puces Apple Silicon A18 / A17 Pro haute efficacité',
-      camera: 'Système photo Pro 48 Mpx avec enregistrement vidéo 4K Dolby Vision',
-      battery: 'Batteries scellées d’origine Apple avec autonomie maximale',
-      ports: 'USB-C haute vitesse',
-      boxContents: 'Deux coffrets neufs scellés individuels avec câbles de charge tressés'
+      screen: 'Écrans Super Retina XDR OLED ProMotion 120 Hz avec protection Ceramic Shield et True Tone',
+      chip: 'Puces Apple Silicon A18 Pro / A17 Pro haute efficacité énergétique et Neural Engine 16 cœurs',
+      camera: 'Systèmes photo Pro 48 Mpx avec mode Portrait avancé, mode Nuit et vidéo 4K Dolby Vision stabilisée',
+      battery: 'Deux batteries neuves Apple certifiées à 100 % de capacité avec charge rapide USB-C et MagSafe',
+      ports: 'Connectique USB-C haute vitesse, 5G multi-bandes, Wi-Fi 6E/7, Face ID et étanchéité IP68',
+      boxContents: 'Deux coffrets iPhone neufs scellés individuels + 2 câbles USB-C tressés d’origine + Factures & garanties boutique'
     },
     published: true
   },
@@ -185,14 +185,14 @@ export const DEFAULT_PRODUCTS: Product[] = [
     stockLocation: 'Boutique Cocody & Plateau',
     featured: true,
     isNew: true,
-    description: 'Design ultra-fin d’exception. Écran Ultra Retina XDR à technologie tandem OLED, propulsé par la puce M4 pour les créateurs et professionnels.',
+    description: 'L’appareil Apple le plus fin jamais conçu (seulement 5,1 mm d’épaisseur) équipé du révolutionnaire écran Ultra Retina XDR à technologie OLED en tandem. Cette double dalle OLED délivre une précision colorimétrique de niveau studio avec un contraste extrême de 2 000 000:1 et une luminosité HDR jusqu’à 1600 nits. Animé par la puce Apple M4, cet iPad Pro surpasse de nombreux ordinateurs portables en rendu 3D, retouche photo RAW, montage Final Cut Pro et prise de notes avancée avec l’Apple Pencil Pro.',
     specs: {
-      screen: '13 pouces Ultra Retina XDR Tandem OLED, luminosité 1000 nits',
-      chip: 'Puce Apple M4 avec Neural Engine 38 TOPS',
-      camera: 'Caméra arrière 12 Mpx LiDAR + Caméra avant paysage 12 Mpx',
-      battery: 'Jusqu’à 10 heures d’autonomie en navigation web Wi-Fi',
-      ports: 'Thunderbolt / USB 4 avec recharge rapide',
-      boxContents: 'iPad Pro 13", Câble de charge USB-C tressé, Adaptateur secteur 20W'
+      screen: '13 pouces Ultra Retina XDR Tandem OLED (2752 × 2064 px), ProMotion 10–120 Hz, large gamme P3, revêtement antireflet',
+      chip: 'Puce Apple M4 (CPU jusqu’à 10 cœurs, GPU 10 cœurs avec Ray Tracing matériel, Neural Engine 38 TOPS)',
+      camera: 'Caméra arrière 12 Mpx grand-angle + Scanner LiDAR + Flash True Tone adaptatif · Caméra avant paysage 12 Mpx Cadre centré & Face ID',
+      battery: 'Batterie Li-Po 38,99 Wh offrant jusqu’à 10 heures d’autonomie en Wi-Fi ou vidéo',
+      ports: 'Port Thunderbolt / USB 4 (jusqu’à 40 Gb/s), Smart Connector magnétique, Wi-Fi 6E & Bluetooth 5.3',
+      boxContents: 'iPad Pro 13" M4 neuf scellé, Câble de charge USB-C tressé (1 m), Adaptateur secteur USB-C 20W, Chiffonette (modèles 1 To+)'
     },
     published: true
   },
@@ -226,14 +226,14 @@ export const DEFAULT_PRODUCTS: Product[] = [
     stockLocation: 'Boutique Cocody',
     featured: false,
     isNew: true,
-    description: 'Performances M2 impressionnantes dans un design ultra-léger et coloré. Écran Liquid Retina 11 pouces avec couleur large P3.',
+    description: 'L’iPad Air 11 pouces franchit un cap décisif avec l’intégration de la puce Apple M2, offrant un bond spectaculaire en fluidité pour les études, la bureautique professionnelle, le dessin numérique et le divertissement. Sa caméra frontale ultra grand-angle de 12 Mpx désormais placée sur le bord paysage rend les appels FaceTime, réunions Zoom et cours en ligne parfaitement naturels, avec le suivi automatique Cadre centré. Compatible avec l’Apple Pencil Pro et le Magic Keyboard, il remplace aisément un ordinateur du quotidien dans un format fin et léger.',
     specs: {
-      screen: '11 pouces Liquid Retina True Tone P3',
-      chip: 'Puce Apple M2 avec GPU 10 cœurs',
-      camera: 'Caméra 12 Mpx grand-angle + Caméra avant paysage 12 Mpx Ultra grand-angle',
-      battery: 'Jusqu’à 10 heures d’autonomie',
-      ports: 'USB-C haute vitesse',
-      boxContents: 'iPad Air 11", Câble de charge USB-C, Adaptateur secteur'
+      screen: '11 pouces Liquid Retina IPS (2360 × 1640 px, 264 ppp), affichage laminé antireflet, True Tone & gamme P3',
+      chip: 'Puce Apple M2 (CPU 8 cœurs, GPU 9 cœurs, Neural Engine 16 cœurs, 8 Go de mémoire unifiée)',
+      camera: 'Caméra arrière 12 Mpx (4K 60 i/s) + Caméra avant paysage 12 Mpx ultra grand-angle avec Cadre centré',
+      battery: 'Jusqu’à 10 heures de navigation web Wi-Fi ou de lecture vidéo continue',
+      ports: 'USB-C rapide (10 Gb/s), Touch ID intégré au bouton supérieur, Wi-Fi 6E, Bluetooth 5.3, haut-parleurs stéréo paysage',
+      boxContents: 'iPad Air 11" M2, Câble de charge USB-C tressé (1 m), Adaptateur secteur USB-C 20W, Documentation'
     },
     published: true
   },
@@ -264,14 +264,14 @@ export const DEFAULT_PRODUCTS: Product[] = [
     inStock: true,
     stockLocation: 'Boutique Plateau',
     featured: false,
-    description: 'Le premier iPhone en titane aérospatial avec le téléobjectif optique 5x et le bouton Action programmable. Rigoureusement inspecté par l’équipe Oumar iPhone.',
+    description: 'Premier iPhone conçu en titane aérospatial brossé, l’iPhone 15 Pro Max demeure une référence incontournable pour son rapport performances/prix à Abidjan. Il intègre le bouton Action personnalisable (appareil photo, lampe, mode silencieux ou raccourcis), un port USB-C ultra rapide pour transférer vos fichiers vidéo ProRes directement sur disque dur externe, et un téléobjectif périscopique 5x particulièrement apprécié pour les portraits et prises de vue à distance. Chaque exemplaire proposé par OUMAR IPHONE subit plus de 35 points de contrôle matériel (Face ID, caméras, écran original True Tone, étanchéité et batterie vérifiée).',
     specs: {
-      screen: 'Super Retina XDR 6,7" OLED ProMotion 120Hz',
-      chip: 'Puce A17 Pro avec GPU 6 cœurs et Ray Tracing matériel',
-      camera: 'Objectif principal 48 Mpx, Téléobjectif 5x 120 mm',
-      battery: 'Batterie certifiée 100% santé avec cycles vérifiés',
-      ports: 'USB-C (USB 3 jusqu’à 10 Gb/s)',
-      boxContents: 'iPhone 15 Pro Max boîte reconditionnée avec chargeur et câble'
+      screen: 'Super Retina XDR OLED 6,7" (2796 × 1290 px), ProMotion 120 Hz, Dynamic Island & Always-On Display',
+      chip: 'Puce Apple A17 Pro gravée en 3 nm (GPU 6 cœurs avec Ray Tracing matériel, 8 Go RAM)',
+      camera: 'Capteur principal 48 Mpx ProRAW, Ultra grand-angle 12 Mpx macro, Téléobjectif tétraprisme Zoom optique 5x (120 mm)',
+      battery: 'Batterie contrôlée et certifiée en boutique avec santé optimale et autonomie jusqu’à 29h vidéo',
+      ports: 'USB-C (débit USB 3 jusqu’à 10 Gb/s), Double eSIM / Nano-SIM, Wi-Fi 6E, 5G, NFC & Face ID',
+      boxContents: 'iPhone 15 Pro Max contrôlé Grade A+, Câble USB-C rapide inclus, Facture & Garantie OUMAR IPHONE'
     },
     published: true
   },
@@ -302,14 +302,14 @@ export const DEFAULT_PRODUCTS: Product[] = [
     stockLocation: 'Boutique Cocody',
     featured: true,
     isNew: false,
-    description: 'La station de travail portable ultime. Boîtier en aluminium anodisé Noir Sidéral anti-traces, écran Liquid Retina XDR à 120 Hz.',
+    description: 'Une véritable station de travail mobile pensée pour les développeurs, monteurs vidéo, architectes, designers et entrepreneurs exigeants. Son boîtier monocoque en aluminium anodisé Noir Sidéral reçoit un traitement exclusif limitant les traces de doigts. Son écran Liquid Retina XDR 14,2 pouces offre une luminosité soutenue de 1000 nits (1600 nits en pointe HDR) et un taux de rafraîchissement ProMotion 120 Hz. Doté de 18 Go de mémoire unifiée et de la puce M3 Pro, il maintient un silence quasi total tout en délivrant jusqu’à 18 heures d’autonomie réelle sans prise secteur.',
     specs: {
-      screen: 'Liquid Retina XDR 14,2" 3024 x 1964 pixels avec ProMotion 120Hz',
-      chip: 'Puce Apple M3 Pro (CPU 11 cœurs, GPU 14 cœurs)',
-      camera: 'Caméra FaceTime HD 1080p avec système audio 6 haut-parleurs',
-      battery: 'Batterie 70 Wh avec jusqu’à 18h de lecture vidéo',
-      ports: '3 ports Thunderbolt 4, HDMI, Lecteur de carte SDXC, MagSafe 3',
-      boxContents: 'MacBook Pro 14", Adaptateur secteur USB-C 70W, Câble MagSafe 3'
+      screen: 'Liquid Retina XDR 14,2" Mini-LED (3024 × 1964 px), ProMotion 120 Hz, 1600 nits pointe HDR, calibrage XDR de référence',
+      chip: 'Puce Apple M3 Pro (CPU 11 cœurs, GPU 14 cœurs, 18 Go mémoire unifiée, SSD NVMe haute vitesse)',
+      camera: 'Caméra FaceTime HD 1080p, système audio haute fidélité 6 haut-parleurs Spatial Audio & 3 micros qualité studio',
+      battery: 'Batterie 70 Wh offrant jusqu’à 18 heures de lecture vidéo et charge rapide 50 % en 30 min',
+      ports: '3× Thunderbolt 4 (USB-C), 1× HDMI (jusqu’à 8K/4K 240Hz), Lecteur carte SDXC, Port MagSafe 3, Prise casque haute impédance',
+      boxContents: 'MacBook Pro 14" neuf scellé, Adaptateur secteur USB-C 70W, Câble USB-C vers MagSafe 3 tressé (2 m)'
     },
     published: true
   },
@@ -338,14 +338,14 @@ export const DEFAULT_PRODUCTS: Product[] = [
     stockLocation: 'En stock dans toutes les boutiques',
     featured: false,
     isNew: false,
-    description: 'Réduction active du bruit jusqu’à 2x plus efficace. Puce H2 pour un son plus immersif et boîtier MagSafe avec port USB-C.',
+    description: 'Les écouteurs sans fil phares d’Apple dans leur version USB-C dotée d’une résistance renforcée IP54 à la poussière, à la transpiration et aux éclaboussures. Grâce à la puce Apple H2, la Réduction active du bruit bloque jusqu’à deux fois plus de nuisances ambiantes que la génération précédente, tandis que le mode Audio adaptatif ajuste automatiquement l’isolation selon votre environnement à Abidjan. Contrôle tactile du volume directement sur la tige, détection des conversations et localisation ultra-précise du boîtier via la puce U1 et son haut-parleur intégré.',
     specs: {
-      screen: 'Non applicable',
-      chip: 'Puce Apple H2 pour écouteurs + Puce U1 dans le boîtier MagSafe',
-      camera: 'Audio spatial personnalisé avec suivi dynamique des mouvements',
-      battery: 'Jusqu’à 6h d’écoute continue, 30h au total avec le boîtier',
-      ports: 'Connecteur USB-C, recharge sans fil MagSafe et Qi',
-      boxContents: 'AirPods Pro 2, Boîtier de charge MagSafe (USB-C), 4 paires d’embouts, Câble'
+      screen: 'Voyant LED d’état de charge intégré sur le boîtier + indicateur batterie sur iOS',
+      chip: 'Puce Apple H2 dans chaque écouteur + Puce Ultra Wideband U1 dans le boîtier MagSafe pour Localiser',
+      camera: 'Audio spatial personnalisé avec suivi dynamique de la tête & détection automatique des conversations',
+      battery: 'Jusqu’à 6h d’écoute avec Réduction du bruit activée, et jusqu’à 30h au total avec le boîtier',
+      ports: 'Port USB-C (rechargeable par câble d’iPhone), charge sans fil MagSafe, Apple Watch et chargeurs Qi, indice IP54',
+      boxContents: 'AirPods Pro 2 USB-C neufs scellés, Boîtier MagSafe avec encoche dragonne, 4 paires d’embouts silicone (XS/S/M/L), Câble USB-C'
     },
     published: true
   }
@@ -396,7 +396,17 @@ export const loadProducts = (): Product[] => {
             ...p,
             condition: cond,
             colors,
-            batteryHealth: battery || '100%'
+            batteryHealth: battery || '100%',
+            description:
+              defaultRef && (!p.description || p.description.trim().length < 190)
+                ? defaultRef.description
+                : p.description,
+            specs: defaultRef
+              ? {
+                  ...defaultRef.specs,
+                  ...(p.specs || {})
+                }
+              : p.specs
           };
         });
       }

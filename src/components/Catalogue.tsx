@@ -704,6 +704,11 @@ export const Catalogue: React.FC<CatalogueProps> = ({
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
+                        data-analytics-product-id={product.id}
+                        data-analytics-product-name={product.name}
+                        data-analytics-product-image={cardImage || product.image || ''}
+                        data-analytics-variant={`${conditionName} · ${currentStorage} · ${currentColor}`}
+                        data-analytics-price={String(currentPrice ?? 0)}
                         className="w-full min-h-[40px] sm:min-h-[42px] py-2 sm:py-2.5 px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 transition-colors active:scale-[0.97] min-w-0"
                       >
                         <WhatsAppLogo className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />

@@ -49,6 +49,7 @@ import { processAndUploadProductImage, uploadStoreVideoFile, APPLE_ASSET_IMAGES 
 import { MediaCropper, AspectPresetKey } from './MediaCropper';
 import { AdminPromotionsPanel } from './admin/AdminPromotionsPanel';
 import { AdminNewStorePanel } from './admin/AdminNewStorePanel';
+import { AdminAnalyticsPanel } from './admin/AdminAnalyticsPanel';
 import { useTheme } from '../context/ThemeContext';
 import { saveVideos, resetVideos } from '../data/videos';
 import {
@@ -145,7 +146,8 @@ import {
   Percent,
   Building2,
   Layers,
-  Tag
+  Tag,
+  BarChart3
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -158,6 +160,7 @@ interface AdminDashboardProps {
 }
 
 type AdminTab =
+  | 'analytics'
   | 'products'
   | 'orders'
   | 'promotions'
@@ -1552,6 +1555,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }[];
   }[] = [
     {
+      groupTitle: 'Trafic & Statistiques',
+      items: [
+        { id: 'analytics', label: 'Statistiques & Visiteurs', shortLabel: 'Stats', icon: <BarChart3 className="w-4 h-4" /> }
+      ]
+    },
+    {
       groupTitle: 'Catalogue & Ventes',
       items: [
         { id: 'products', label: 'Catalogue & Catégories', shortLabel: 'Catalogue', icon: <Package className="w-4 h-4" />, badge: products.length },
@@ -2695,6 +2704,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </>
               )}
             </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* TAB: STATISTIQUES & VISITEURS                             */}
+          {/* ========================================================= */}
+          {activeTab === 'analytics' && (
+            <AdminAnalyticsPanel
+              products={products}
+              orders={orders}
+              onNotify={triggerNotification}
+            />
           )}
 
           {/* ========================================================= */}

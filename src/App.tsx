@@ -14,6 +14,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { applyStorePromotion, getCombinationPrice, normalizeConditionName } from './utils/pricingUtils';
 import { useStorePromotion } from './hooks/useStorePromotion';
 import { DecemberPromoBanner } from './components/DecemberPromoBanner';
+import { startVisitorPresenceTracking, trackAnalyticsEvent } from './services/analyticsService';
 import {
   MASKED_ADMIN_PATH,
   isDecoyAdminLocation,
@@ -147,6 +148,42 @@ function StoreApp() {
       // Ignore storage access errors
     }
   }, []);
+
+  const activeDetailProductRef = useRef<Product | null>(null);
+  activeDetailProductRef.current = activeDetailProduct;
+
+  // Suivi analytique : présence temps réel + visites + clics globaux WhatsApp
+  useEffect(() => {
+    if (adminView !== null) return;
+    const stopPresence = startVisitorPresenceTracking(false);
+
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const link = target?.closest?.('a[href*="wa.me"], a[href*="api.whatsapp.com"]') as HTMLAnchorElement | null;
+      if (!link) return;
+
+      const currentProd = activeDetailProductRef.current;
+      const productId = link.dataset.analyticsProductId || currentProd?.id;
+      const productName = link.dataset.analyticsProductName || currentProd?.name || 'Contact Boutique';
+      const productImage = link.dataset.analyticsProductImage || currentProd?.image;
+      const variantLabel = link.dataset.analyticsVariant || 'Bouton WhatsApp direct';
+      const parsedPrice = Number(link.dataset.analyticsPrice || 0);
+
+      trackAnalyticsEvent('whatsapp_click', {
+        productId,
+        productName,
+        productImage,
+        variantLabel,
+        amount: Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : 0
+      });
+    };
+
+    document.addEventListener('click', handleDocumentClick, { capture: true });
+    return () => {
+      stopPresence();
+      document.removeEventListener('click', handleDocumentClick, { capture: true });
+    };
+  }, [adminView]);
 
   // Sauvegarde automatique du panier dans localStorage (sans aucune PII client)
   useEffect(() => {
@@ -610,6 +647,14 @@ function StoreApp() {
     setActiveDetailProduct(product);
     document.body.style.overflow = 'hidden';
     window.history.pushState({ isProductDetail: true }, '', `/produit/${product.id}`);
+
+    trackAnalyticsEvent('product_click', {
+      productId: product.id,
+      productName: product.name,
+      productImage: product.image,
+      variantLabel: `${product.category} · ${product.selectedStorage || product.storage?.[0] || ''}`,
+      amount: typeof product.price === 'number' ? product.price : 0
+    });
   };
 
   const handleBackToCatalog = () => {
@@ -668,6 +713,18 @@ function StoreApp() {
           }
         ];
       }
+    });
+
+    // Suivi analytique de l'ajout au panier
+    const chosenColorObj = product.colors?.find(
+      (c) => c.name && chosenColor && c.name.trim().toLowerCase() === chosenColor.trim().toLowerCase()
+    );
+    trackAnalyticsEvent('add_to_cart', {
+      productId: product.id,
+      productName: product.name,
+      productImage: chosenColorObj?.image || product.image,
+      variantLabel: [chosenCondition, chosenStorage, chosenColor].filter(Boolean).join(' · '),
+      amount: resolvedPrice
     });
 
     // Notification discrète et interactive

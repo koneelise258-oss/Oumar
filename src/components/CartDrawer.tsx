@@ -6,6 +6,7 @@ import { formatProductPrice, normalizeConditionName } from '../utils/pricingUtil
 import { sanitizeText, sanitizePhone, openSafeExternalUrl } from '../utils/security';
 import { WhatsAppLogo } from './BrandIcons';
 import { useMediaStyle } from '../hooks/useMediaStyle';
+import { trackAnalyticsEvent } from '../services/analyticsService';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -114,6 +115,29 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       // Ouvrir WhatsApp via lien sécurisé avec rel="noopener noreferrer" (protection anti-tabnabbing)
       const whatsappUrl = getWhatsAppUrl(whatsappMessage);
       openSafeExternalUrl(whatsappUrl);
+
+      // Suivi analytique de la commande validée sur WhatsApp
+      const firstItem = items[0];
+      const summaryName =
+        items.length > 1
+          ? `${firstItem?.product.name || 'iPhone'} (+${items.length - 1})`
+          : firstItem?.product.name || 'Commande Panier';
+      const firstChosenColor = firstItem?.product.colors?.find(
+        (c) =>
+          c.name &&
+          firstItem.chosenColor &&
+          c.name.trim().toLowerCase() === firstItem.chosenColor.trim().toLowerCase()
+      );
+      trackAnalyticsEvent('whatsapp_order', {
+        customerLabel: cleanName,
+        productId: firstItem?.product.id,
+        productName: summaryName,
+        productImage: firstChosenColor?.image || firstItem?.product.image,
+        variantLabel: items
+          .map((it) => `${it.chosenStorage} · ${it.chosenColor} (x${it.quantity})`)
+          .join(', '),
+        amount: total
+      });
 
       setOrderSent(true);
       setTimeout(() => {
