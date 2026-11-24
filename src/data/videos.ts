@@ -26,15 +26,49 @@ export function loadVideos(): VideoItem[] {
   return [];
 }
 
-export function saveVideos(videos: VideoItem[]): boolean {
+export interface SaveVideosOptions {
+  allowStripLargeDataUrls?: boolean;
+}
+
+export function saveVideos(videos: VideoItem[], options: SaveVideosOptions = {}): boolean {
   if (typeof window === 'undefined') return true;
+  const allowStripLargeDataUrls = options.allowStripLargeDataUrls !== false;
+  const sorted = [...videos].sort((a, b) => a.order - b.order);
+
+  // Toujours notifier l'application en mémoire même si le cache localStorage est saturé
+  window.dispatchEvent(new CustomEvent('oumar_videos_updated', { detail: sorted }));
+
   try {
-    const sorted = [...videos].sort((a, b) => a.order - b.order);
     localStorage.setItem(STORAGE_KEY_VIDEOS, JSON.stringify(sorted));
-    window.dispatchEvent(new CustomEvent('oumar_videos_updated', { detail: sorted }));
     return true;
-  } catch (err) {
-    console.error('Error saving videos to localStorage', err);
+  } catch (err: any) {
+    const isQuotaError =
+      err?.name === 'QuotaExceededError' ||
+      err?.code === 22 ||
+      err?.code === 1014 ||
+      String(err?.message || '').toLowerCase().includes('quota');
+
+    if (isQuotaError && allowStripLargeDataUrls) {
+      // Conserver uniquement les vidéos légères (URLs HTTPS, TikTok ou petits blobs) dans le cache local
+      try {
+        const lightweight = sorted.filter(
+          (v) => !v.url.startsWith('data:') || v.url.length <= 150_000
+        );
+        localStorage.setItem(STORAGE_KEY_VIDEOS, JSON.stringify(lightweight));
+        return true;
+      } catch {
+        try {
+          localStorage.removeItem(STORAGE_KEY_VIDEOS);
+        } catch {
+          // Ignore storage cleanup error
+        }
+        return false;
+      }
+    }
+
+    if (!isQuotaError) {
+      console.warn('Unable to cache videos in localStorage:', err);
+    }
     return false;
   }
 }

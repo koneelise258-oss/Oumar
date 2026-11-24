@@ -420,11 +420,11 @@ export const loadProducts = (): Product[] => {
 // Save products to localStorage with event broadcast
 export const saveProducts = (products: Product[]) => {
   if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('oumar_products_updated', { detail: products }));
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
-    window.dispatchEvent(new CustomEvent('oumar_products_updated', { detail: products }));
   } catch (err) {
-    console.error('Failed to save products to localStorage', err);
+    console.warn('Unable to cache products in localStorage:', err);
   }
 };
 

@@ -228,13 +228,13 @@ export function loadStoreSettings(): StoreSettings {
 
 export function saveStoreSettings(settings: StoreSettings): void {
   if (typeof window === 'undefined') return;
+  const cleanSettings = { ...settings };
+  delete (cleanSettings as any).adminPin;
+  window.dispatchEvent(new CustomEvent('oumar_settings_updated', { detail: cleanSettings }));
   try {
-    const cleanSettings = { ...settings };
-    delete (cleanSettings as any).adminPin;
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(cleanSettings));
-    window.dispatchEvent(new CustomEvent('oumar_settings_updated', { detail: cleanSettings }));
   } catch (err) {
-    console.error('Error saving store settings', err);
+    console.warn('Unable to cache store settings in localStorage:', err);
   }
 }
 
@@ -420,15 +420,15 @@ export function getHeroCustomPhoto(): string | null {
 
 export function saveHeroCustomPhoto(dataUrl: string | null): void {
   if (typeof window === 'undefined') return;
+  if (dataUrl && !isSafeMediaUrl(dataUrl)) return;
+  window.dispatchEvent(new CustomEvent('oumar_hero_photo_updated', { detail: dataUrl }));
   try {
     if (dataUrl) {
-      if (!isSafeMediaUrl(dataUrl)) return;
       localStorage.setItem(HERO_PHOTO_STORAGE_KEY, dataUrl);
     } else {
       localStorage.removeItem(HERO_PHOTO_STORAGE_KEY);
     }
-    window.dispatchEvent(new CustomEvent('oumar_hero_photo_updated', { detail: dataUrl }));
   } catch (err) {
-    console.error('Error saving hero photo', err);
+    console.warn('Unable to cache hero photo in localStorage:', err);
   }
 }

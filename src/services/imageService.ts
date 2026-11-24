@@ -271,12 +271,12 @@ export async function uploadStoreVideoFile(file: File): Promise<ImageUploadResul
     }
   }
 
-  if (file.size > 3.5 * 1024 * 1024) {
+  if (file.size > 2.0 * 1024 * 1024) {
     const storageHint = remoteFailureReason
       ? ` (Stockage cloud : ${remoteFailureReason} — mettez à jour le script SQL Storage pour autoriser les vidéos jusqu'à 50 Mo)`
       : '';
     throw new Error(
-      `Vidéo de ${(file.size / (1024 * 1024)).toFixed(1)} Mo trop lourde pour le mode hors-ligne (max 3,5 Mo sans stockage cloud)${storageHint}.`
+      `Vidéo de ${(file.size / (1024 * 1024)).toFixed(1)} Mo trop lourde pour le mode hors-ligne (max 2,0 Mo sans stockage cloud)${storageHint}.`
     );
   }
 

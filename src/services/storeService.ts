@@ -427,7 +427,7 @@ export async function syncVideosRemote(videos: VideoItem[]): Promise<{ success: 
   }
 
   if (!isSupabaseConfigured) {
-    const saved = saveVideos(sanitizedVideos);
+    const saved = saveVideos(sanitizedVideos, { allowStripLargeDataUrls: false });
     if (!saved) {
       return {
         success: false,
