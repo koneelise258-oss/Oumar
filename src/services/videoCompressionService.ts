@@ -9,20 +9,22 @@ export interface VideoCompressionResult {
   note?: string;
 }
 
-function pickSupportedRecorderMime(): { recorderMime: string; baseMime: 'video/mp4' | 'video/webm' } | null {
+function pickSupportedRecorderMime(
+  inputMime: string
+): { recorderMime: string; baseMime: 'video/mp4' | 'video/webm' } | null {
   if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
     return null;
   }
 
-  const candidates: Array<{ recorderMime: string; baseMime: 'video/mp4' | 'video/webm' }> = [
+  // Toujours privilégier MP4 (H.264/AAC) pour garantir la lecture fluide sur iPhone Safari, Android & Desktop.
+  // Ne jamais convertir un MP4/MOV en WebM (WebM produit par MediaRecorder casse le seek/durée et iOS Safari).
+  const mp4Candidates: Array<{ recorderMime: string; baseMime: 'video/mp4' }> = [
+    { recorderMime: 'video/mp4;codecs=avc1.4d401f,mp4a.40.2', baseMime: 'video/mp4' },
     { recorderMime: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', baseMime: 'video/mp4' },
-    { recorderMime: 'video/mp4', baseMime: 'video/mp4' },
-    { recorderMime: 'video/webm;codecs=vp9,opus', baseMime: 'video/webm' },
-    { recorderMime: 'video/webm;codecs=vp8,opus', baseMime: 'video/webm' },
-    { recorderMime: 'video/webm', baseMime: 'video/webm' }
+    { recorderMime: 'video/mp4', baseMime: 'video/mp4' }
   ];
 
-  for (const item of candidates) {
+  for (const item of mp4Candidates) {
     try {
       if (MediaRecorder.isTypeSupported(item.recorderMime)) {
         return item;
@@ -32,14 +34,35 @@ function pickSupportedRecorderMime(): { recorderMime: string; baseMime: 'video/m
     }
   }
 
+  // Uniquement autoriser WebM si la source importée est déjà au format WebM
+  if (inputMime === 'video/webm') {
+    const webmCandidates: Array<{ recorderMime: string; baseMime: 'video/webm' }> = [
+      { recorderMime: 'video/webm;codecs=vp9,opus', baseMime: 'video/webm' },
+      { recorderMime: 'video/webm;codecs=vp8,opus', baseMime: 'video/webm' },
+      { recorderMime: 'video/webm', baseMime: 'video/webm' }
+    ];
+    for (const item of webmCandidates) {
+      try {
+        if (MediaRecorder.isTypeSupported(item.recorderMime)) {
+          return item;
+        }
+      } catch {
+        // Ignorer un codec non reconnu
+      }
+    }
+  }
+
   return null;
 }
 
 /**
- * Compresse légèrement et automatiquement une vidéo côté navigateur avant l'envoi :
- * - Redimensionne si > 1280 px sur le grand côté (conserve un rendu HD net sur smartphone & desktop)
- * - Ajuste le débit vidéo pour faire baisser nettement le poids en Mo tout en préservant l'audio
- * - Ne remplace le fichier que si la taille finale baisse réellement (>= 6% d'économie)
+ * Compresse légèrement et proprement une vidéo lourde côté navigateur avant l'envoi :
+ * - Laisse passer directement les MP4/MOV déjà légers et fluides (<= 8 Mo & <= 1280px, ou <= 2,6 Mbps)
+ *   pour éviter tout ré-encodage inutile et préserver la fluidité matérielle d'origine.
+ * - Synchronise la capture image par image via `requestVideoFrameCallback` (+ `requestFrame()` si dispo)
+ *   afin d'éliminer les saccades et sauts d'images.
+ * - Ne remplace jamais un MP4/MOV par du WebM (compatibilité iPhone / Safari).
+ * - N'applique le fichier compressé que si le gain réel est d'au moins 12 %.
  */
 export async function compressVideoFile(
   file: File,
@@ -63,12 +86,12 @@ export async function compressVideoFile(
     return fallbackResult;
   }
 
-  // Ne pas recompresser un fichier déjà très léger (< 3 Mo)
-  if (file.size <= 3 * 1024 * 1024) {
+  // Fichier déjà léger (< 4 Mo) : envoi direct ultra-rapide sans perte ni latence
+  if (file.size <= 4 * 1024 * 1024) {
     return fallbackResult;
   }
 
-  const codecChoice = pickSupportedRecorderMime();
+  const codecChoice = pickSupportedRecorderMime(fallbackMime);
   if (!codecChoice) {
     return fallbackResult;
   }
@@ -76,17 +99,18 @@ export async function compressVideoFile(
   const objectUrl = URL.createObjectURL(file);
   const video = document.createElement('video');
   video.playsInline = true;
-  video.preload = 'auto';
+  video.preload = 'metadata';
   video.crossOrigin = 'anonymous';
   video.src = objectUrl;
 
   let audioCtx: AudioContext | null = null;
   let rafId = 0;
-  let backupTimer = 0;
+  let rvfcId = 0;
+  let stallWatchdog = 0;
   let safetyTimeout = 0;
 
   try {
-    // 1. Lire les métadonnées (dimensions & durée)
+    // 1. Lire rapidement les métadonnées (dimensions & durée)
     await new Promise<void>((resolve, reject) => {
       const timeout = window.setTimeout(() => reject(new Error('Délai métadonnées dépassé')), 10_000);
       video.onloadedmetadata = () => {
@@ -103,20 +127,29 @@ export async function compressVideoFile(
     const srcW = video.videoWidth;
     const srcH = video.videoHeight;
 
-    // Ignorer si durée invalide ou vidéo très longue (> 4 minutes) pour ne pas bloquer le navigateur
+    // Ignorer si durée invalide ou vidéo très longue (> 4 minutes) pour ne pas bloquer l'interface
     if (!Number.isFinite(duration) || duration <= 0.4 || duration > 240 || !srcW || !srcH) {
       return fallbackResult;
     }
 
+    const maxSrcSide = Math.max(srcW, srcH);
     const origBitrate = (file.size * 8) / duration;
-    // Si la vidéo est déjà optimisée (<= 1,8 Mbps et <= 1080px), inutile de la recompresser
-    if (origBitrate > 0 && origBitrate <= 1_800_000 && Math.max(srcW, srcH) <= 1080) {
+
+    // Préserver les vidéos déjà propres pour un import instantané sans aucune saccade
+    const isAlreadyCompactMp4 =
+      fallbackMime === 'video/mp4' && file.size <= 8 * 1024 * 1024 && maxSrcSide <= 1280;
+    const isAlreadyOptimizedBitrate =
+      origBitrate > 0 && origBitrate <= 2_600_000 && maxSrcSide <= 1280;
+
+    if (isAlreadyCompactMp4 || isAlreadyOptimizedBitrate) {
       return fallbackResult;
     }
 
+    // Charger complètement les données locales uniquement si une compression est nécessaire
+    video.preload = 'auto';
+
     // 2. Calculer des dimensions paires (exigées par les encodeurs matériels H.264/VP9)
     const MAX_LONG_SIDE = 1280;
-    const maxSrcSide = Math.max(srcW, srcH);
     const scale = maxSrcSide > MAX_LONG_SIDE ? MAX_LONG_SIDE / maxSrcSide : 1;
     const targetW = Math.max(2, Math.round(srcW * scale) & ~1);
     const targetH = Math.max(2, Math.round(srcH * scale) & ~1);
@@ -124,21 +157,41 @@ export async function compressVideoFile(
     const canvas = document.createElement('canvas');
     canvas.width = targetW;
     canvas.height = targetH;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     if (!ctx || typeof canvas.captureStream !== 'function') {
       return fallbackResult;
     }
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
-    // 3. Débit cible pour une compression légère mais efficace
-    let targetVideoBps = Math.min(Math.max(Math.round(origBitrate * 0.48), 1_400_000), 2_800_000);
+    // 3. Débit cible pour une compression légère mais fluide (2.0 à 3.0 Mbps selon source)
+    let targetVideoBps = Math.min(Math.max(Math.round(origBitrate * 0.55), 1_600_000), 3_000_000);
     if (file.size > 40 * 1024 * 1024) {
-      const maxFor40Mb = Math.floor((40 * 1024 * 1024 * 8) / duration) - 128_000;
-      if (maxFor40Mb >= 850_000) {
-        targetVideoBps = Math.min(targetVideoBps, maxFor40Mb);
+      const maxFor38Mb = Math.floor((38 * 1024 * 1024 * 8) / duration) - 128_000;
+      if (maxFor38Mb >= 1_100_000) {
+        targetVideoBps = Math.min(targetVideoBps, maxFor38Mb);
       }
     }
 
-    const canvasStream = canvas.captureStream(30);
+    const supportsRvfc = typeof (video as any).requestVideoFrameCallback === 'function';
+    // Mode capture manuelle image par image si requestFrame() + requestVideoFrameCallback disponibles
+    const probeStream = canvas.captureStream(0);
+    const probeTrack = probeStream.getVideoTracks()[0] as
+      | (MediaStreamTrack & { requestFrame?: () => void })
+      | undefined;
+    const useManualFrameSync = supportsRvfc && typeof probeTrack?.requestFrame === 'function';
+
+    let canvasStream: MediaStream;
+    let manualVideoTrack: (MediaStreamTrack & { requestFrame?: () => void }) | undefined;
+
+    if (useManualFrameSync) {
+      canvasStream = probeStream;
+      manualVideoTrack = probeTrack;
+    } else {
+      probeStream.getTracks().forEach((t) => t.stop());
+      canvasStream = canvas.captureStream(30);
+    }
+
     const tracks: MediaStreamTrack[] = [...canvasStream.getVideoTracks()];
 
     // Capturer l'audio silencieusement sans le diffuser dans les haut-parleurs
@@ -181,12 +234,33 @@ export async function compressVideoFile(
 
     const recordedBlob = await new Promise<Blob>((resolve, reject) => {
       let finished = false;
+      let lastDrawnMediaTime = -1;
+      let lastProgressPct = 0;
+      let lastProgressTs = 0;
+
+      const reportProgress = (mediaTime: number) => {
+        if (!onProgress || duration <= 0) return;
+        const now = performance.now();
+        const pct = Math.min(99, Math.max(1, Math.round((mediaTime / duration) * 100)));
+        if (pct - lastProgressPct >= 2 || now - lastProgressTs >= 250) {
+          lastProgressPct = pct;
+          lastProgressTs = now;
+          onProgress(pct);
+        }
+      };
 
       const finish = () => {
         if (finished) return;
         finished = true;
         window.cancelAnimationFrame(rafId);
-        window.clearInterval(backupTimer);
+        if (rvfcId && typeof (video as any).cancelVideoFrameCallback === 'function') {
+          try {
+            (video as any).cancelVideoFrameCallback(rvfcId);
+          } catch {
+            // Ignore cancel errors
+          }
+        }
+        window.clearInterval(stallWatchdog);
         window.clearTimeout(safetyTimeout);
         try {
           if (recorder.state !== 'inactive') {
@@ -206,38 +280,62 @@ export async function compressVideoFile(
         if (!finished) {
           finished = true;
           window.cancelAnimationFrame(rafId);
-          window.clearInterval(backupTimer);
+          window.clearInterval(stallWatchdog);
           window.clearTimeout(safetyTimeout);
           reject(new Error('Erreur durant la compression vidéo'));
         }
       };
 
-      const drawFrame = () => {
+      const paintFrame = (mediaTime: number) => {
         if (finished) return;
-        if (video.readyState >= 2) {
-          ctx.drawImage(video, 0, 0, targetW, targetH);
+        ctx.drawImage(video, 0, 0, targetW, targetH);
+        if (manualVideoTrack?.requestFrame) {
+          manualVideoTrack.requestFrame();
         }
-        if (onProgress && duration > 0) {
-          const pct = Math.min(99, Math.max(1, Math.round((video.currentTime / duration) * 100)));
-          onProgress(pct);
-        }
-        if (video.ended || video.currentTime >= duration - 0.04) {
-          finish();
+        lastDrawnMediaTime = mediaTime;
+        reportProgress(mediaTime);
+      };
+
+      const scheduleNextFrame = () => {
+        if (finished) return;
+
+        if (supportsRvfc) {
+          rvfcId = (video as any).requestVideoFrameCallback((_now: number, metadata: any) => {
+            if (finished) return;
+            const mediaTime = typeof metadata?.mediaTime === 'number' ? metadata.mediaTime : video.currentTime;
+            if (mediaTime !== lastDrawnMediaTime && video.readyState >= 2) {
+              paintFrame(mediaTime);
+            }
+            if (video.ended || video.currentTime >= duration - 0.03) {
+              finish();
+              return;
+            }
+            scheduleNextFrame();
+          });
           return;
         }
-        rafId = window.requestAnimationFrame(drawFrame);
+
+        rafId = window.requestAnimationFrame(() => {
+          if (finished) return;
+          if (video.readyState >= 2 && Math.abs(video.currentTime - lastDrawnMediaTime) >= 0.008) {
+            paintFrame(video.currentTime);
+          }
+          if (video.ended || video.currentTime >= duration - 0.03) {
+            finish();
+            return;
+          }
+          scheduleNextFrame();
+        });
       };
 
       video.onended = finish;
       safetyTimeout = window.setTimeout(finish, Math.round(duration * 1000) + 12_000);
-      backupTimer = window.setInterval(() => {
-        if (!finished && video.readyState >= 2) {
-          ctx.drawImage(video, 0, 0, targetW, targetH);
-        }
-        if (!finished && (video.ended || video.currentTime >= duration - 0.04)) {
+      // Watchdog léger uniquement en fin de lecture si l'événement `ended` tarde
+      stallWatchdog = window.setInterval(() => {
+        if (!finished && (video.ended || video.currentTime >= duration - 0.03)) {
           finish();
         }
-      }, 120);
+      }, 300);
 
       video.currentTime = 0;
       recorder.start(500);
@@ -246,7 +344,10 @@ export async function compressVideoFile(
       video
         .play()
         .then(() => {
-          rafId = window.requestAnimationFrame(drawFrame);
+          if (video.readyState >= 2) {
+            paintFrame(video.currentTime);
+          }
+          scheduleNextFrame();
         })
         .catch(() => {
           // Si le navigateur bloque l'autoplay non muet, repasser en muet et réessayer
@@ -254,11 +355,14 @@ export async function compressVideoFile(
           video
             .play()
             .then(() => {
-              rafId = window.requestAnimationFrame(drawFrame);
+              if (video.readyState >= 2) {
+                paintFrame(video.currentTime);
+              }
+              scheduleNextFrame();
             })
             .catch((err) => {
               finished = true;
-              window.clearInterval(backupTimer);
+              window.clearInterval(stallWatchdog);
               window.clearTimeout(safetyTimeout);
               reject(err);
             });
@@ -267,8 +371,8 @@ export async function compressVideoFile(
 
     onProgress?.(100);
 
-    // Conserver le fichier compressé uniquement s'il est réellement plus léger (>= 6% d'économie)
-    if (recordedBlob.size > 0 && recordedBlob.size < file.size * 0.94) {
+    // Conserver le fichier compressé uniquement s'il apporte une vraie baisse de poids (>= 12%)
+    if (recordedBlob.size > 0 && recordedBlob.size < file.size * 0.88) {
       const baseName = (file.name || 'video').replace(/\.[^/.]+$/, '');
       const nextExt = codecChoice.baseMime === 'video/mp4' ? 'mp4' : 'webm';
       const compressedFile = new File([recordedBlob], `${baseName}.${nextExt}`, {
@@ -289,7 +393,14 @@ export async function compressVideoFile(
     return fallbackResult;
   } finally {
     window.cancelAnimationFrame(rafId);
-    window.clearInterval(backupTimer);
+    if (rvfcId && typeof (video as any).cancelVideoFrameCallback === 'function') {
+      try {
+        (video as any).cancelVideoFrameCallback(rvfcId);
+      } catch {
+        // Ignore cancel errors
+      }
+    }
+    window.clearInterval(stallWatchdog);
     window.clearTimeout(safetyTimeout);
     video.pause();
     video.removeAttribute('src');

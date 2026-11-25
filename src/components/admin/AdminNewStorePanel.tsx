@@ -21,13 +21,23 @@ export const AdminNewStorePanel: React.FC<AdminNewStorePanelProps> = ({
 }) => {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadStage, setUploadStage] = useState<'compressing' | 'uploading' | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
 
   const handleVideoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingVideo(true);
+    setUploadStage('compressing');
+    setUploadProgress(0);
     try {
-      const res = await uploadStoreVideoFile(file);
+      const res = await uploadStoreVideoFile(file, {
+        autoCompress: true,
+        onStatus: (stage, pct) => {
+          setUploadStage(stage);
+          setUploadProgress(pct);
+        }
+      });
       onChange({
         ...form,
         videoUrl: res.url,
@@ -38,6 +48,8 @@ export const AdminNewStorePanel: React.FC<AdminNewStorePanelProps> = ({
       onNotify(err?.message || 'Impossible de charger cette vidéo.');
     } finally {
       setUploadingVideo(false);
+      setUploadStage(null);
+      setUploadProgress(0);
       e.target.value = '';
     }
   };
@@ -208,7 +220,11 @@ export const AdminNewStorePanel: React.FC<AdminNewStorePanelProps> = ({
                 className="min-h-[42px] px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-white inline-flex items-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50"
               >
                 {uploadingVideo ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                <span>{uploadingVideo ? 'Envoi...' : 'Importer vidéo'}</span>
+                <span>
+                  {uploadingVideo
+                    ? `${uploadStage === 'compressing' ? 'Optimisation' : 'Envoi'} ${uploadProgress}%`
+                    : 'Importer vidéo'}
+                </span>
               </button>
               {form.videoUrl && (
                 <button
@@ -224,7 +240,7 @@ export const AdminNewStorePanel: React.FC<AdminNewStorePanelProps> = ({
             <input
               ref={videoInputRef}
               type="file"
-              accept="video/mp4,video/webm"
+              accept="video/mp4,video/quicktime,video/x-m4v,video/webm,video/x-matroska,video/3gpp,.mp4,.mov,.m4v,.webm,.mkv,.3gp"
               onChange={handleVideoFileChange}
               className="hidden"
             />
@@ -254,10 +270,10 @@ export const AdminNewStorePanel: React.FC<AdminNewStorePanelProps> = ({
                   <video
                     src={form.videoUrl}
                     muted
-                    autoPlay
                     loop
                     playsInline
                     controls
+                    preload="metadata"
                     className="w-full h-full object-cover"
                   />
                 )

@@ -34,7 +34,9 @@ export const NewStoreBannerSection: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  const [isNearView, setIsNearView] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [isVideoReady, setIsVideoReady] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const isMutedRef = useRef(isMuted);
   isMutedRef.current = isMuted;
@@ -60,8 +62,23 @@ export const NewStoreBannerSection: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    setIsVideoReady(false);
+  }, [rawUrl]);
+
+  useEffect(() => {
     const el = sectionRef.current;
     if (!el || !hasPlayableVideo) return;
+
+    const preloadObs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setIsNearView(true);
+          preloadObs.disconnect();
+        }
+      },
+      { rootMargin: '320px 0px', threshold: 0.01 }
+    );
+    preloadObs.observe(el);
 
     const obs = new IntersectionObserver(
       (entries) => {
@@ -71,20 +88,25 @@ export const NewStoreBannerSection: React.FC = () => {
       { threshold: 0.2 }
     );
     obs.observe(el);
-    return () => obs.disconnect();
+    return () => {
+      preloadObs.disconnect();
+      obs.disconnect();
+    };
   }, [hasPlayableVideo]);
 
   useEffect(() => {
-    if (!hasPlayableVideo || isTikTok || !videoRef.current) return;
+    if (!hasPlayableVideo || isTikTok || !videoRef.current || !isNearView) return;
     const v = videoRef.current;
     if (isVisible) {
       v.defaultMuted = true;
       v.muted = isMutedRef.current;
-      v.play().catch(() => {
-        v.muted = true;
-        setIsMuted(true);
-        v.play().catch(() => {});
-      });
+      if (v.paused) {
+        v.play().catch(() => {
+          v.muted = true;
+          setIsMuted(true);
+          v.play().catch(() => {});
+        });
+      }
     } else {
       if (!isMutedRef.current) {
         v.muted = true;
@@ -92,18 +114,21 @@ export const NewStoreBannerSection: React.FC = () => {
       }
       if (!v.paused) v.pause();
     }
-  }, [isVisible, hasPlayableVideo, isTikTok]);
+  }, [isVisible, isNearView, hasPlayableVideo, isTikTok]);
 
   useEffect(() => {
-    if (!hasPlayableVideo || !isTikTok) return;
+    if (!hasPlayableVideo || !isTikTok || !isNearView) return;
     if (isVisible) {
       if (isMutedRef.current) postTikTokCommand('mute');
       postTikTokCommand('play');
-    } else if (!isMutedRef.current) {
-      setIsMuted(true);
+    } else {
+      if (!isMutedRef.current) {
+        setIsMuted(true);
+      }
       postTikTokCommand('mute');
+      postTikTokCommand('pause');
     }
-  }, [isVisible, hasPlayableVideo, isTikTok, postTikTokCommand]);
+  }, [isVisible, isNearView, hasPlayableVideo, isTikTok, postTikTokCommand]);
 
   useEffect(() => {
     if (!hasPlayableVideo || !isTikTok) return;
@@ -238,24 +263,36 @@ export const NewStoreBannerSection: React.FC = () => {
                 {hasPlayableVideo ? (
                   <>
                     {isTikTok && tikTokId ? (
-                      <iframe
-                        ref={iframeRef}
-                        src={buildChromelessTikTokUrl(tikTokId)}
-                        title={newStoreTeaser.title}
-                        className="w-full h-full border-0"
-                        allow="autoplay; encrypted-media; picture-in-picture"
-                        referrerPolicy="strict-origin-when-cross-origin"
-                      />
+                      isNearView ? (
+                        <iframe
+                          ref={iframeRef}
+                          src={buildChromelessTikTokUrl(tikTokId)}
+                          title={newStoreTeaser.title}
+                          className="w-full h-full border-0"
+                          loading="lazy"
+                          allow="autoplay; encrypted-media; picture-in-picture"
+                          referrerPolicy="strict-origin-when-cross-origin"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-slate-900" />
+                      )
                     ) : (
                       <video
                         ref={videoRef}
-                        src={safeDirectVideoUrl}
-                        autoPlay
+                        src={isNearView ? safeDirectVideoUrl : undefined}
+                        autoPlay={isVisible}
                         loop
                         muted={isMuted}
                         playsInline
-                        preload="metadata"
-                        className="w-full h-full object-cover"
+                        preload={isNearView ? (isVisible ? 'auto' : 'metadata') : 'none'}
+                        disablePictureInPicture
+                        disableRemotePlayback
+                        onLoadedData={() => setIsVideoReady(true)}
+                        onCanPlay={() => setIsVideoReady(true)}
+                        onPlaying={() => setIsVideoReady(true)}
+                        className={`w-full h-full object-cover transform-gpu transition-opacity duration-300 ${
+                          isVideoReady ? 'opacity-100' : 'opacity-0'
+                        }`}
                       />
                     )}
 

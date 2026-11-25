@@ -327,7 +327,7 @@ function StoreApp() {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'oumar_store_products') {
         setProducts(loadProducts());
-      } else if (e.key === 'oumar_store_videos') {
+      } else if (e.key === 'oumar_videos_data') {
         setVideos(loadVideos());
       } else if (e.key === CART_STORAGE_KEY) {
         setCartItems(loadPersistedCart(loadProducts()));

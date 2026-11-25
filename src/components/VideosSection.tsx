@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { VideoItem } from '../types';
 import { Volume2, VolumeX, RefreshCw } from 'lucide-react';
 import { extractSafeTikTokId, isSafeMediaUrl, isSafeTikTokUrl } from '../utils/security';
@@ -11,6 +11,13 @@ interface VideosSectionProps {
 }
 
 const UNMUTE_SYNC_EVENT = 'omr_video_unmute_sync';
+
+interface VisibilityEntry {
+  visible: boolean;
+  ratio: number;
+  order: number;
+  unmuted: boolean;
+}
 
 /**
  * Extrait proprement l'identifiant numérique unique d'une vidéo TikTok après validation stricte du domaine.
@@ -43,14 +50,26 @@ const buildChromelessTikTokUrl = (tikTokId: string): string => {
   return `https://www.tiktok.com/player/v1/${tikTokId}?${params.toString()}`;
 };
 
+interface VideoWallItemProps {
+  video: VideoItem;
+  index: number;
+  shouldPlay: boolean;
+  onVisibilityReport: (id: string, entry: VisibilityEntry) => void;
+}
+
 /**
  * Carte vidéo épurée (HTML5 & TikTok sans habillage) :
- * - Lecture automatique et boucle continue sans clic requis
- * - Aucun bouton like / commentaire / partage / pause / rechargement
+ * - Lecture automatique coordonnée (évite la saturation réseau/décodeur et supprime les saccades)
+ * - Boucle matérielle native sans `timeupdate` seek ni coupure
+ * - Préchargement progressif (`metadata` par défaut, `auto` uniquement pour les lecteurs actifs)
  * - Un seul bouton discret : Couper / Activer le son (44×44 px)
- * - Un seul son actif à la fois sur toute la grille (coupe automatiquement les autres vidéos)
  */
-const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, index }) => {
+const VideoWallItem: React.FC<VideoWallItemProps> = React.memo(({
+  video,
+  index,
+  shouldPlay,
+  onVisibilityReport
+}) => {
   const perf = useDevicePerformance();
   const mediaStyle = useMediaStyle();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -58,6 +77,7 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const [isNearView, setIsNearView] = useState(false);
+  const [srcReady, setSrcReady] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -66,6 +86,9 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
 
   const isMutedRef = useRef(isMuted);
   isMutedRef.current = isMuted;
+
+  const shouldPlayRef = useRef(shouldPlay);
+  shouldPlayRef.current = shouldPlay;
 
   const isVisibleRef = useRef(isVisible);
   isVisibleRef.current = isVisible;
@@ -89,7 +112,7 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
     }
   }, []);
 
-  // 1a. Chargement prédictif à l'approche du viewport (rapide sur mobile sans bloquer la Hero)
+  // 1a. Chargement prédictif doux à l'approche du viewport (sans bloquer Hero/catalogue)
   useEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
@@ -102,7 +125,7 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
         }
       },
       {
-        rootMargin: perf.isMobile ? '260px 0px' : '420px 0px',
+        rootMargin: perf.isMobile ? '180px 0px' : '280px 0px',
         threshold: 0.01
       }
     );
@@ -111,7 +134,19 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
     return () => preloadObserver.disconnect();
   }, [perf.isMobile]);
 
-  // 1b. Suivi visibilité réelle : lecture automatique à l'écran + coupure du son hors-écran
+  // Décalage progressif (stagger) des requêtes réseau pour ne pas saturer le navigateur d'un coup
+  useEffect(() => {
+    if (!isNearView) return;
+    if (isVisible || index < 2) {
+      setSrcReady(true);
+      return;
+    }
+    const delayMs = Math.min(index, 6) * 85;
+    const timer = window.setTimeout(() => setSrcReady(true), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [isNearView, isVisible, index]);
+
+  // 1b. Suivi visibilité réelle & ratio d'apparition pour l'ordonnanceur de lecture
   useEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
@@ -120,14 +155,39 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
       (entries) => {
         const entry = entries[0];
         if (!entry) return;
-        setIsVisible(entry.isIntersecting);
+        const visibleNow = entry.isIntersecting && entry.intersectionRatio >= 0.18;
+        setIsVisible(visibleNow);
+        onVisibilityReport(video.id, {
+          visible: visibleNow,
+          ratio: Math.round(entry.intersectionRatio * 10) / 10,
+          order: index,
+          unmuted: !isMutedRef.current
+        });
       },
-      { threshold: 0.2 }
+      { threshold: [0, 0.18, 0.45, 0.75] }
     );
 
     visibilityObserver.observe(el);
-    return () => visibilityObserver.disconnect();
-  }, []);
+    return () => {
+      visibilityObserver.disconnect();
+      onVisibilityReport(video.id, {
+        visible: false,
+        ratio: 0,
+        order: index,
+        unmuted: false
+      });
+    };
+  }, [video.id, index, onVisibilityReport]);
+
+  // Signaler le changement d'état sonore à l'ordonnanceur
+  useEffect(() => {
+    onVisibilityReport(video.id, {
+      visible: isVisibleRef.current,
+      ratio: isVisibleRef.current ? 0.8 : 0,
+      order: index,
+      unmuted: !isMuted
+    });
+  }, [isMuted, video.id, index, onVisibilityReport]);
 
   // 2. Coordination audio globale : quand une autre vidéo active le son, celle-ci repasse en muet
   useEffect(() => {
@@ -150,25 +210,40 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
     return () => window.removeEventListener(UNMUTE_SYNC_EVENT, handleOtherUnmuted);
   }, [video.id, isTikTok, postTikTokCommand]);
 
-  // 3. Pilotage automatique HTML5 (autoplay continu à l'écran, pause + muet hors-écran)
+  // Réinitialiser proprement l'état lors du remplacement de la source vidéo
   useEffect(() => {
-    if (isTikTok || !videoRef.current) return;
+    setHasError(false);
+    setIsLoaded(false);
+  }, [safeDirectVideoUrl, tikTokId]);
+
+  // Vérifier si la première image vidéo est déjà prête en cache
+  useEffect(() => {
+    if (!isTikTok && videoRef.current && videoRef.current.readyState >= 2) {
+      setIsLoaded(true);
+    }
+  }, [srcReady, isTikTok, safeDirectVideoUrl]);
+
+  // 3. Pilotage automatique HTML5 coordonné (uniquement les lecteurs actifs jouent)
+  useEffect(() => {
+    if (isTikTok || !videoRef.current || !srcReady) return;
     const v = videoRef.current;
 
-    if (isVisible && isNearView) {
+    if (shouldPlay && isVisible) {
       v.defaultMuted = true;
       v.muted = isMutedRef.current;
-      const playPromise = v.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          v.muted = true;
-          v.defaultMuted = true;
-          setIsMuted(true);
-          v.play().catch(() => {});
-        });
+      if (v.paused) {
+        const playPromise = v.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            v.muted = true;
+            v.defaultMuted = true;
+            setIsMuted(true);
+            v.play().catch(() => {});
+          });
+        }
       }
-    } else if (!isVisible) {
-      if (!isMutedRef.current) {
+    } else {
+      if (!isVisible && !isMutedRef.current) {
         v.muted = true;
         v.defaultMuted = true;
         setIsMuted(true);
@@ -177,44 +252,45 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
         v.pause();
       }
     }
-  }, [isVisible, isNearView, isTikTok]);
+  }, [shouldPlay, isVisible, srcReady, isTikTok]);
 
-  // 4. Pilotage automatique TikTok selon la visibilité (reprise auto à l'écran, muet hors-écran)
+  // 4. Pilotage automatique TikTok coordonné selon visibilité & budget actif
   useEffect(() => {
-    if (!isTikTok || !isNearView) return;
+    if (!isTikTok || !srcReady) return;
 
-    if (isVisible) {
+    if (shouldPlay && isVisible) {
       if (isMutedRef.current) {
         postTikTokCommand('mute');
       }
       postTikTokCommand('play');
     } else {
-      // Couper le son si l'utilisateur a défilé loin de la vidéo
-      if (!isMutedRef.current) {
+      if (!isVisible && !isMutedRef.current) {
         setIsMuted(true);
-        postTikTokCommand('mute');
       }
+      postTikTokCommand('mute');
+      postTikTokCommand('pause');
     }
-  }, [isVisible, isNearView, isTikTok, postTikTokCommand]);
+  }, [shouldPlay, isVisible, srcReady, isTikTok, postTikTokCommand]);
 
-  // 5. Reprise automatique lors du retour sur l'onglet
+  // 5. Reprise automatique propre lors du retour sur l'onglet
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         if (isTikTok) {
           postTikTokCommand('mute');
-        } else if (videoRef.current) {
+          postTikTokCommand('pause');
+        } else if (videoRef.current && !videoRef.current.paused) {
           videoRef.current.pause();
         }
         return;
       }
 
-      if (!isVisibleRef.current) return;
+      if (!isVisibleRef.current || !shouldPlayRef.current) return;
 
       if (isTikTok) {
         if (isMutedRef.current) postTikTokCommand('mute');
         postTikTokCommand('play');
-      } else if (videoRef.current) {
+      } else if (videoRef.current && videoRef.current.paused) {
         videoRef.current.play().catch(() => {});
       }
     };
@@ -223,13 +299,12 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [isTikTok, postTikTokCommand]);
 
-  // 6. Écoute sécurisée et ciblée des événements TikTok Player v1 (boucle fluide sans écran noir)
+  // 6. Écoute sécurisée et ciblée des événements TikTok Player v1
   useEffect(() => {
-    if (!isTikTok || !isNearView) return;
+    if (!isTikTok || !srcReady) return;
 
     const handleMessage = (e: MessageEvent) => {
       if (e.origin !== 'https://www.tiktok.com' && e.origin !== 'https://tiktok.com') return;
-      // Filtrer strictement les messages provenant de CETTE iframe uniquement
       if (iframeRef.current?.contentWindow && e.source !== iframeRef.current.contentWindow) {
         return;
       }
@@ -238,7 +313,6 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
         const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
         if (!data || typeof data !== 'object') return;
 
-        // Événements officiels x-tiktok-player
         if (data['x-tiktok-player'] === true) {
           const { type, value } = data;
 
@@ -246,24 +320,26 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
             setIsLoaded(true);
             postTikTokCommand('mute');
             setIsMuted(true);
-            postTikTokCommand('play');
+            if (shouldPlayRef.current && isVisibleRef.current) {
+              postTikTokCommand('play');
+            } else {
+              postTikTokCommand('pause');
+            }
           } else if (type === 'onStateChange') {
             if (value === 1) {
-              // En cours de lecture
               setIsLoaded(true);
             } else if (value === 0) {
-              // Fin de vidéo : boucle immédiate sans recharger l'iframe
-              postTikTokCommand('seekTo', 0);
-              postTikTokCommand('play');
-            } else if (value === 2 && isVisibleRef.current) {
-              // Empêche la vidéo de rester figée en pause
+              if (shouldPlayRef.current && isVisibleRef.current) {
+                postTikTokCommand('seekTo', 0);
+                postTikTokCommand('play');
+              }
+            } else if (value === 2 && shouldPlayRef.current && isVisibleRef.current) {
               postTikTokCommand('play');
             }
           } else if (type === 'onCurrentTime' && value && typeof value === 'object') {
             const currentTime = Number(value.currentTime || 0);
             const duration = Number(value.duration || 0);
-            // Anticipation de fin pour éliminer tout écran de fin ou recommandation TikTok
-            if (duration > 0.5 && currentTime >= duration - 0.18) {
+            if (duration > 0.5 && currentTime >= duration - 0.18 && shouldPlayRef.current) {
               postTikTokCommand('seekTo', 0);
               postTikTokCommand('play');
             }
@@ -273,15 +349,16 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
           return;
         }
 
-        // Compatibilité descendante si un événement de fin alternatif est émis
         if (
           data.type === 'ended' ||
           (data.event === 'onPlayerStateChange' && data.info === 0) ||
           data.status === 'ended' ||
           data.eventName === 'video_ended'
         ) {
-          postTikTokCommand('seekTo', 0);
-          postTikTokCommand('play');
+          if (shouldPlayRef.current) {
+            postTikTokCommand('seekTo', 0);
+            postTikTokCommand('play');
+          }
         }
       } catch {
         // Ignorer silencieusement les messages non JSON
@@ -290,28 +367,19 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [isTikTok, isNearView, postTikTokCommand]);
+  }, [isTikTok, srcReady, postTikTokCommand]);
 
-  // 7. Boucle HTML5 continue sans micro-coupure
-  const handleHtml5TimeUpdate = useCallback(() => {
+  // 7. Secours uniquement si un navigateur ne boucle pas l'attribut natif `loop`
+  const handleHtml5Ended = useCallback(() => {
     const v = videoRef.current;
-    if (!v) return;
-    if (v.duration > 0 && v.currentTime >= v.duration - 0.12) {
-      v.currentTime = 0;
-      if (isVisibleRef.current) {
-        v.play().catch(() => {});
-      }
+    if (!v || v.loop) return;
+    v.currentTime = 0;
+    if (shouldPlayRef.current && isVisibleRef.current) {
+      v.play().catch(() => {});
     }
   }, []);
 
-  const handleHtml5Ended = useCallback(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.currentTime = 0;
-    v.play().catch(() => {});
-  }, []);
-
-  // 8. Unique action interactive : Bascule Muet / Son (sans jamais mettre en pause)
+  // 8. Unique action interactive : Bascule Muet / Son
   const handleToggleMute = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -319,7 +387,6 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
       setIsMuted(nextMuted);
 
       if (!nextMuted) {
-        // Couper le son de toutes les autres vidéos de la section
         window.dispatchEvent(new CustomEvent(UNMUTE_SYNC_EVENT, { detail: { id: video.id } }));
       }
 
@@ -351,18 +418,17 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
   };
 
   // =========================================================================
-  // 1. RENDU VIDÉO TIKTOK EN MODE ÉPURÉ (SANS LIKES, COMMENTAIRES, PARTAGE)
+  // 1. RENDU VIDÉO TIKTOK EN MODE ÉPURÉ
   // =========================================================================
   if (isTikTok) {
     return (
       <div
         ref={containerRef}
         onClick={handleToggleMute}
-        className="relative w-full aspect-[9/16] overflow-hidden bg-[#090d16] shadow-md sm:shadow-lg border border-slate-200/60 dark:border-slate-800/80 cursor-pointer select-none transition-transform duration-300 md:hover:scale-[1.015]"
+        className="relative w-full aspect-[9/16] overflow-hidden bg-[#090d16] shadow-md sm:shadow-lg border border-slate-200/60 dark:border-slate-800/80 cursor-pointer select-none transition-shadow duration-300"
         style={{ borderRadius: `${mediaStyle.videoRadius}px` }}
       >
-        {/* Squelette Shimmer fluide avant le démarrage de la lecture */}
-        {!isLoaded && !hasError && (
+        {!isLoaded && !hasError && srcReady && (
           <div className="absolute inset-0 shimmer-surface z-10 pointer-events-none" />
         )}
 
@@ -382,31 +448,29 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
           </div>
         ) : (
           <>
-            {isNearView && (
+            {srcReady && (
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <iframe
                   ref={iframeRef}
                   key={`tiktok-clean-${tikTokId}-${reloadNonce}`}
                   src={buildChromelessTikTokUrl(tikTokId)}
                   title={video.title || `Présentation produit OUMAR IPHONE ${index + 1}`}
-                  className={`w-full h-full border-0 outline-none block scale-[1.04] transition-opacity duration-400 ${
+                  className={`w-full h-full border-0 outline-none block scale-[1.04] transition-opacity duration-300 ${
                     isLoaded ? 'opacity-100' : 'opacity-0'
                   }`}
                   allow="autoplay; encrypted-media; picture-in-picture"
                   referrerPolicy="strict-origin-when-cross-origin"
-                  loading="eager"
+                  loading="lazy"
                   onLoad={() => {
-                    // Forcer la lecture muette automatique dès le chargement du lecteur
                     window.setTimeout(() => {
                       postTikTokCommand('mute');
-                      postTikTokCommand('play');
+                      if (shouldPlayRef.current && isVisibleRef.current) {
+                        postTikTokCommand('play');
+                      } else {
+                        postTikTokCommand('pause');
+                      }
                       setIsLoaded(true);
                     }, 180);
-                    window.setTimeout(() => {
-                      if (isVisibleRef.current) {
-                        postTikTokCommand('play');
-                      }
-                    }, 750);
                   }}
                   onError={() => {
                     setHasError(true);
@@ -415,10 +479,8 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
               </div>
             )}
 
-            {/* Voile transparent anti-survol : empêche l'apparition des boutons TikTok au survol ou au clic */}
             <div className="absolute inset-0 z-20" aria-hidden="true" />
 
-            {/* UNIQUE BOUTON : Couper / Activer le son (44×44 px) */}
             <button
               type="button"
               onClick={handleToggleMute}
@@ -440,20 +502,25 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
   }
 
   // =========================================================================
-  // 2. RENDU VIDÉO DIRECTE HTML5 (MP4 / WebM) — AUTOPLAY BOUCLE + BOUTON SON UNIQUE
+  // 2. RENDU VIDÉO DIRECTE HTML5 (MP4 / MOV / WebM)
+  // - `preload="auto"` uniquement quand la carte est active/visible ; `metadata` sinon
+  // - Aucune boucle JS artificielle sur `timeupdate` (boucle matérielle native `loop`)
   // =========================================================================
-  const preloadMode = perf.isSlowConnection || perf.tier === 'low' ? 'metadata' : 'auto';
+  const preloadMode: 'none' | 'metadata' | 'auto' = !srcReady
+    ? 'none'
+    : shouldPlay && !perf.isSlowConnection && perf.tier !== 'low'
+    ? 'auto'
+    : 'metadata';
 
   return (
     <div
       ref={containerRef}
       onClick={handleToggleMute}
-      className="relative w-full aspect-[9/16] overflow-hidden bg-[#090d16] shadow-md sm:shadow-lg border border-slate-200/60 dark:border-slate-800/80 cursor-pointer select-none transition-transform duration-300 md:hover:scale-[1.015]"
+      className="relative w-full aspect-[9/16] overflow-hidden bg-[#090d16] shadow-md sm:shadow-lg border border-slate-200/60 dark:border-slate-800/80 cursor-pointer select-none transition-shadow duration-300"
       style={{ borderRadius: `${mediaStyle.videoRadius}px` }}
     >
-      {/* Squelette Shimmer fluide avant la première image vidéo */}
-      {!isLoaded && !hasError && (
-        <div className="absolute inset-0 shimmer-surface z-10 pointer-events-none transition-opacity duration-300" />
+      {!isLoaded && !hasError && srcReady && (
+        <div className="absolute inset-0 shimmer-surface z-10 pointer-events-none" />
       )}
 
       {hasError ? (
@@ -471,36 +538,34 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
       ) : (
         <video
           ref={videoRef}
-          src={isNearView ? safeDirectVideoUrl : undefined}
-          autoPlay
+          src={srcReady ? safeDirectVideoUrl : undefined}
+          autoPlay={shouldPlay}
           muted={isMuted}
           loop
           playsInline
-          webkit-playsinline="true"
-          preload={isNearView ? preloadMode : 'none'}
+          preload={preloadMode}
           disablePictureInPicture
+          disableRemotePlayback
           onLoadedData={() => setIsLoaded(true)}
           onCanPlay={() => {
             setIsLoaded(true);
-            if (isVisibleRef.current && videoRef.current) {
+            if (shouldPlayRef.current && isVisibleRef.current && videoRef.current?.paused) {
               videoRef.current.play().catch(() => {});
             }
           }}
           onPlaying={() => setIsLoaded(true)}
-          onTimeUpdate={handleHtml5TimeUpdate}
           onEnded={handleHtml5Ended}
           onError={() => setHasError(true)}
           onVolumeChange={() => {
             if (videoRef.current) setIsMuted(videoRef.current.muted);
           }}
-          className={`w-full h-full object-cover block border-0 outline-none transition-opacity duration-300 ${
+          className={`w-full h-full object-cover block border-0 outline-none transform-gpu transition-opacity duration-300 ${
             isLoaded ? 'opacity-100' : 'opacity-0'
           }`}
           style={{ borderRadius: `${mediaStyle.videoRadius}px` }}
         />
       )}
 
-      {/* UNIQUE BOUTON : Couper / Activer le son (44×44 px) */}
       {!hasError && (
         <button
           type="button"
@@ -519,16 +584,65 @@ const VideoWallItem: React.FC<{ video: VideoItem; index: number }> = ({ video, i
       )}
     </div>
   );
-};
+});
+
+VideoWallItem.displayName = 'VideoWallItem';
 
 /**
- * Mur de vidéos immersif 100 % épuré : lecture automatique, boucle continue, seul bouton Muet / Son.
+ * Mur de vidéos immersif 100 % épuré :
+ * - Ordonnanceur intelligent limitant la lecture/buffering simultanés aux cartes réellement à l'écran
+ * - Fluidité optimale sur iPhone, Android et Desktop sans ralentir le reste du site
  */
 export const VideosSection: React.FC<VideosSectionProps> = ({
   id = 'videos',
   videos
 }) => {
-  const publishedVideos = videos.filter((v) => v.published !== false);
+  const perf = useDevicePerformance();
+  const publishedVideos = useMemo(
+    () => videos.filter((v) => v.published !== false),
+    [videos]
+  );
+
+  const [visibilityMap, setVisibilityMap] = useState<Record<string, VisibilityEntry>>({});
+
+  const handleVisibilityReport = useCallback((vidId: string, entry: VisibilityEntry) => {
+    setVisibilityMap((prev) => {
+      const existing = prev[vidId];
+      if (
+        existing &&
+        existing.visible === entry.visible &&
+        existing.ratio === entry.ratio &&
+        existing.order === entry.order &&
+        existing.unmuted === entry.unmuted
+      ) {
+        return prev;
+      }
+      return { ...prev, [vidId]: entry };
+    });
+  }, []);
+
+  // Budget matériel sûr : évite de décoder et télécharger 8 vidéos en parallèle
+  const maxConcurrentPlayers = useMemo(() => {
+    if (perf.isSlowConnection || perf.tier === 'low') return 1;
+    if (perf.isMobile) return 2;
+    return perf.tier === 'medium' ? 3 : 4;
+  }, [perf.isSlowConnection, perf.tier, perf.isMobile]);
+
+  const activePlayIds = useMemo(() => {
+    const candidates = publishedVideos
+      .map((v, idx) => {
+        const meta = visibilityMap[v.id];
+        return meta?.visible ? { id: v.id, ...meta, fallbackOrder: idx } : null;
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .sort((a, b) => {
+        if (a.unmuted !== b.unmuted) return a.unmuted ? -1 : 1;
+        if (b.ratio !== a.ratio) return b.ratio - a.ratio;
+        return a.order - b.order;
+      });
+
+    return new Set(candidates.slice(0, maxConcurrentPlayers).map((c) => c.id));
+  }, [publishedVideos, visibilityMap, maxConcurrentPlayers]);
 
   if (publishedVideos.length === 0) return null;
 
@@ -538,7 +652,6 @@ export const VideosSection: React.FC<VideosSectionProps> = ({
       className="perf-section w-full py-10 sm:py-16 px-4 sm:px-6 lg:px-8 scroll-mt-20 relative z-10 overflow-hidden"
     >
       <div className="w-full max-w-7xl mx-auto">
-        {/* En-tête éditorial sobre et natif boutique (sans mention TikTok) */}
         <div className="mb-6 sm:mb-9">
           <div className="text-[11px] font-bold tracking-[0.18em] uppercase text-slate-500 dark:text-slate-400 mb-1.5">
             EN DIRECT DE LA BOUTIQUE · ABIDJAN
@@ -548,10 +661,15 @@ export const VideosSection: React.FC<VideosSectionProps> = ({
           </h2>
         </div>
 
-        {/* Grille adaptative 2 colonnes mobile -> 4 colonnes desktop */}
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 lg:gap-6 w-full justify-items-center">
           {publishedVideos.map((video, idx) => (
-            <VideoWallItem key={video.id} video={video} index={idx} />
+            <VideoWallItem
+              key={video.id}
+              video={video}
+              index={idx}
+              shouldPlay={activePlayIds.has(video.id)}
+              onVisibilityReport={handleVisibilityReport}
+            />
           ))}
         </div>
       </div>

@@ -3048,6 +3048,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           loop
                           playsInline
                           controls
+                          preload="metadata"
                           className="w-full h-full object-cover"
                         />
                       )}
