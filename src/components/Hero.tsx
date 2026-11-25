@@ -7,7 +7,7 @@ import { getHeroCustomPhoto, getHeroSettings, HeroSettings } from '../data/store
 import { Product } from '../types';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { LiquidGlassIcon } from './LiquidGlassIcon';
-import { AppleLogo, WhatsAppLogo, IPhoneIcon } from './BrandIcons';
+import { WhatsAppLogo, IPhoneIcon } from './BrandIcons';
 import { useDevicePerformance } from '../utils/devicePerformance';
 import { useMediaStyle } from '../hooks/useMediaStyle';
 import heroTitaniumSample from '../assets/images/hero_iphone_titanium_1792367905192.jpg';
@@ -184,7 +184,7 @@ export const Hero: React.FC<HeroProps> = () => {
       if (isLightweight) {
         // Entrée mobile ultra-rapide et légère (zéro ScrollTrigger bloquant le scroll tactile)
         tl.fromTo(
-          '.hero-kicker, .hero-masked-line, .hero-desc, .hero-actions, .hero-portrait-stage',
+          '.hero-masked-line, .hero-desc, .hero-actions, .hero-portrait-stage',
           { y: 14, opacity: 0 },
           { y: 0, opacity: 1, duration: 0.45, stagger: 0.05, clearProps: 'transform' }
         );
@@ -212,16 +212,10 @@ export const Hero: React.FC<HeroProps> = () => {
       );
 
       tl.fromTo(
-        '.hero-kicker',
-        { x: -20, opacity: 0 },
-        { x: 0, opacity: 1, duration: 0.55, ease: 'power3.out' },
-        '-=0.55'
-      )
-      .fromTo(
         '.hero-masked-line',
         { yPercent: 115, opacity: 0 },
         { yPercent: 0, opacity: 1, duration: 0.85, stagger: 0.12, ease: 'power4.out' },
-        '-=0.4'
+        '-=0.5'
       )
       .fromTo(
         '.hero-desc',
@@ -358,16 +352,6 @@ export const Hero: React.FC<HeroProps> = () => {
           ref={contentRef}
           className="hero__content hero-copy-column w-full flex flex-col justify-start text-left min-w-0"
         >
-
-          {/* Identity Kicker */}
-          <div className="hero-kicker flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] sm:text-xs font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase mb-4 sm:mb-5">
-            <span className="inline-flex items-center gap-1.5 font-['Outfit'] tracking-[0.2em] text-slate-900 dark:text-white font-bold">
-              <AppleLogo className="w-3.5 h-3.5 -mt-0.5 shrink-0 text-slate-900 dark:text-white" />
-              <span>{heroContent.kickerBrand || 'OUMAR IPHONE'}</span>
-            </span>
-            <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">/</span>
-            <span>{heroContent.kickerLocation || 'BOUTIQUE OFFICIELLE · ABIDJAN'}</span>
-          </div>
 
           {/* Main Headline */}
           <h1 className="text-3xl sm:text-5xl lg:text-[3.75rem] font-bold tracking-tight text-slate-950 dark:text-white font-['Outfit'] leading-[1.1] sm:leading-[1.08] mb-5 sm:mb-6 [text-wrap:balance] break-words">
